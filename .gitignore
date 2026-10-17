@@ -117,3 +117,4 @@ platforms/linux/ime/.engine/
 # Pinned translation interpreter and Linux resource imports
 /platforms/windows/translation/translate.py
 /platforms/linux/translation/
+/platforms/linux/ai/

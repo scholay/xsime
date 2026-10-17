@@ -53,6 +53,12 @@ int main() {
         Reject([&] { (void)store.Package(id); });
         store.Enable(id, true, view.grant);
         const auto enabled_grant = store.Inspect(id).grant;
+        int writes=0;
+        store.WithEnabledGrants({{id,enabled_grant},{id,enabled_grant}},[&]{++writes;});
+        Check(writes==1,"multiple grants did not publish once");
+        Reject([&]{store.WithEnabledGrants({{id,enabled_grant},{id,"stale"}},[&]{++writes;});});
+        Check(writes==1,"stale secondary grant published");
+        {auto lock=PrivateDirectory(root/"plugins").Lock();Reject([&]{store.WithEnabledGrant(id,enabled_grant,[]{},false);});}
         Check(store.Package(id).at("contribution").at("options").at("channel") == "openai-compatible", "installed contribution missing");
         store.Enable(id, true, enabled_grant);
         Check(store.Inspect(id).grant == enabled_grant, "unchanged setting revoked jobs");

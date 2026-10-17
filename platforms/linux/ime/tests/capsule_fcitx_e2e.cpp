@@ -1,3 +1,11 @@
+#include "capsule_history.hpp"
+#include "capsule_capture.hpp"
+#include "capsule_password.hpp"
+#include "capsule_rich_text.hpp"
+#include "capsule_protocol.hpp"
+#include "capsule_store.hpp"
+#include "capsule_transport.hpp"
+#include "official_catalog.hpp"
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -6,8 +14,11 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #include <fcitx-utils/capabilityflags.h>
@@ -27,6 +38,7 @@
 namespace {
 
 int g_exit_status = EXIT_SUCCESS;
+std::unique_ptr<fcitx::EventSourceTime> resume_timer;
 
 struct TestFailed : std::runtime_error {
     explicit TestFailed(const std::string& message) : std::runtime_error(message) {}
@@ -124,6 +136,593 @@ void ExpectNoZwsp(fcitx::InputContext* ic, const char* where) {
     }
 }
 
+std::unique_ptr<fcitx::EventSourceTime> password_timer;
+void RunPasswordSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, fcitx::ICUUID uuid,
+                      fcitx::InputContext* ic,const std::string& dump_path) {
+    using namespace rimes::capsule;
+    struct State {int fd=-1,phase=0; PasswordSummary record;std::uint64_t copies=0,restores=0;~State(){if(fd>=0)close(fd);}};
+    auto state=std::make_shared<State>();PasswordRecord record;record.title="Host vault";record.summary="Public metadata";record.category="login";record.body="- 密码：host-private-fixture-secret\n- TOTP：JBSWY3DPEHPK3PXP";
+    state->record=PasswordStore(ContentStore::DefaultRoot()).Put(record,"");
+    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit});SendKey(frontend,uuid,"Control+Shift+V");
+    state->fd=socket(AF_UNIX,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,0);sockaddr_un address{};address.sun_family=AF_UNIX;std::strncpy(address.sun_path,std::getenv("RIMES_CAPSULE_SOCKET"),sizeof(address.sun_path)-1);
+    if(state->fd<0||connect(state->fd,reinterpret_cast<sockaddr*>(&address),sizeof(address)))Die("vault socket");
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+    password_timer=instance.eventLoop().addTimeEvent(CLOCK_MONOTONIC,fcitx::now(CLOCK_MONOTONIC)+20000,20000,[&,frontend,uuid,ic,dump_path,state,deadline](fcitx::EventSourceTime* timer,uint64_t){
+        try {
+            if(std::chrono::steady_clock::now()>deadline)Die("vault host timeout phase "+std::to_string(state->phase));
+            char buffer[65536];while(recv(state->fd,buffer,sizeof(buffer),MSG_DONTWAIT)>0){}
+            auto send=[&](nlohmann::json command){command["v"]=1;std::string frame;EncodeFrame(command.dump(),&frame);if(::send(state->fd,frame.data(),frame.size(),MSG_NOSIGNAL)!=static_cast<ssize_t>(frame.size()))Die("vault socket send");};
+            const auto snapshot=nlohmann::json::parse(ReadDump(dump_path));
+            // The explicit search term is public input; inspect every returned field instead.
+            auto returned=snapshot;returned.erase("query");const auto raw=returned.dump();
+            if(raw.find("host-private-fixture-secret")!=raw.npos||raw.find("JBSWY3DPEHPK3PXP")!=raw.npos)Die("vault secret leaked into IPC snapshot");
+            switch(state->phase){
+            case 0:send({{"op","module"},{"text","passwords"}});state->phase=1;break;
+            case 1:
+                if(snapshot.at("module")!="passwords"||snapshot.at("loading").get<bool>())break;
+                if(snapshot.at("count")!=1||snapshot.at("selected_id")!=state->record.id)Die("vault metadata missing");
+                send({{"op","search"},{"text","host-private-fixture-secret"}});state->phase=2;break;
+            case 2:
+                if(snapshot.at("query")!="host-private-fixture-secret")break;
+                if(snapshot.at("count")!=0)Die("secret body was searchable");
+                send({{"op","search"},{"text","Public metadata"}});state->phase=3;break;
+            case 3:
+                if(snapshot.at("query")!="Public metadata")break;
+                if(snapshot.at("count")!=0)Die("vault search must match titles only");
+                send({{"op","search"},{"text","Host vault"}});state->phase=8;break;
+            case 8:
+                if(snapshot.at("query")!="Host vault"||snapshot.at("count")!=1)break;
+                if(snapshot.at("cards").at(0).at("preview")!="Public metadata")Die("vault public summary missing");
+                state->copies=snapshot.at("copy_seq");state->restores=snapshot.at("restore_seq");
+                send({{"op","copy"},{"id",state->record.id},{"revision",state->record.revision}});
+                send({{"op","row-insert"},{"id",state->record.id},{"revision",state->record.revision},{"index",0}});
+                send({{"op","search"},{"text","host vault"}});state->phase=4;break;
+            case 4:
+                if(snapshot.at("query")!="host vault")break;
+                if(snapshot.at("copy_seq")!=state->copies||snapshot.at("restore_seq")!=state->restores)Die("generic action bypassed vault verification");
+                if(!snapshot.at("armed").get<bool>())Die("vault hotkey lost input target");
+                SendKey(frontend,uuid,"Return");state->phase=6;break;
+            case 6:
+                if(!snapshot.at("managing").get<bool>()||snapshot.at("loading").get<bool>())break;
+                if(snapshot.at("copy_seq")!=state->copies)Die("Return inserted vault content");
+                ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit}|fcitx::CapabilityFlag::Password);state->phase=7;break;
+            case 7:
+                if(!snapshot.at("password_field").get<bool>())break;
+                if(!snapshot.at("cards").empty()||snapshot.at("visible").get<bool>())Die("protected host retained vault metadata");
+                std::cout<<"ok: Fcitx vault title-only search, generic-action rejection, Return opens verification and protected conceal passed\n";instance.exit();return true;
+            }
+            timer->setTime(fcitx::now(CLOCK_MONOTONIC)+20000);timer->setOneShot();return true;
+        }catch(const std::exception& e){std::cerr<<e.what()<<'\n';g_exit_status=EXIT_FAILURE;instance.exit();return true;}
+    });
+}
+std::unique_ptr<fcitx::EventSourceTime> capture_timer;
+void RunCaptureSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, fcitx::ICUUID uuid,
+                     fcitx::InputContext* ic, const std::string& dump_path) {
+    using namespace rimes::capsule;
+    struct State {
+        int fd=-1, phase=0; CaptureRecord image, other; std::uint64_t sequence=0;
+        ~State() {if(fd>=0) close(fd);}
+    };
+    auto state=std::make_shared<State>();CaptureStore archive(CaptureStore::DefaultRoot());
+    const auto file=archive.root().parent_path()/"fixture.png";
+    const auto bytes=Base64Decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+    std::ofstream(file,std::ios::binary)<<*bytes;
+    CaptureRecord record;record.title="Host capture";record.source="捕获来源";record.width=1;record.height=1;
+    std::atomic<bool> cancelled{false};state->image=archive.Import(file,record,cancelled);
+    record.title="Temporary capture";state->other=archive.Import(file,record,cancelled);
+    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit});
+    SendKey(frontend,uuid,"Control+Shift+V");
+    state->fd=socket(AF_UNIX,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,0);
+    sockaddr_un address{};address.sun_family=AF_UNIX;
+    std::strncpy(address.sun_path,std::getenv("RIMES_CAPSULE_SOCKET"),sizeof(address.sun_path)-1);
+    if(state->fd<0 || connect(state->fd,reinterpret_cast<sockaddr*>(&address),sizeof(address))) Die("capture socket");
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+    capture_timer=instance.eventLoop().addTimeEvent(CLOCK_MONOTONIC,fcitx::now(CLOCK_MONOTONIC)+20000,20000,
+        [&,frontend,uuid,ic,dump_path,state,deadline](fcitx::EventSourceTime* timer,uint64_t) {
+            try {
+                if(std::chrono::steady_clock::now()>deadline) Die("capture timeout phase "+std::to_string(state->phase));
+                char buffer[65536];while(recv(state->fd,buffer,sizeof(buffer),MSG_DONTWAIT)>0) {}
+                auto send=[&](nlohmann::json command) {
+                    command["v"]=1;std::string frame;EncodeFrame(command.dump(),&frame);
+                    if(::send(state->fd,frame.data(),frame.size(),MSG_NOSIGNAL)!=static_cast<ssize_t>(frame.size())) Die("capture socket send");
+                };
+                const auto snapshot=nlohmann::json::parse(ReadDump(dump_path));
+                switch(state->phase) {
+                case 0: send({{"op","module"},{"text","capture"}});state->phase=1;break;
+                case 1:
+                    if(snapshot.at("module")!="capture" || snapshot.at("loading").get<bool>() || snapshot.at("count")!=2) break;
+                    send({{"op","search"},{"text","Host 捕获来源"}});state->phase=2;break;
+                case 2:
+                    if(snapshot.at("query")!="Host 捕获来源") break;
+                    if(snapshot.at("count")!=1 || snapshot.at("selected_id")!=state->image.id) Die("capture source/title search failed");
+                    send({{"op","copy"},{"id",state->image.id},{"revision",state->image.revision}});state->phase=3;break;
+                case 3:
+                    if(snapshot.at("restore_id")!=state->image.id) break;
+                    if(snapshot.at("restore_revision")!=state->image.revision || !snapshot.at("last_copied").get<std::string>().empty()) Die("capture copied text instead of media intent");
+                    SendKey(frontend,uuid,"Return");state->phase=4;break;
+                case 4:
+                    if(!snapshot.at("managing").get<bool>() || snapshot.at("loading").get<bool>()) break;
+                    send({{"op","favorite"},{"id",state->image.id},{"revision",state->image.revision}});state->phase=5;break;
+                case 5: {
+                    if(snapshot.at("loading").get<bool>() || snapshot.at("cards").empty() || !snapshot.at("cards").at(0).at("favorite").get<bool>()) break;
+                    CaptureStore archive(CaptureStore::DefaultRoot());state->image=*archive.Get(state->image.id);
+                    ContentStore library(ContentStore::DefaultRoot());Record saved;std::string error;
+                    if(library.Get(state->image.id,&saved,&error)!=StoreStatus::Ok || saved.content!=archive.File(state->image)) Die("capture favorite missing permanent entry");
+                    send({{"op","remove"},{"id",state->image.id},{"revision",state->image.revision}});state->phase=6;break;
+                }
+                case 6:
+                    if(snapshot.at("hint").get<std::string>().find("已收藏")==std::string::npos) break;
+                    send({{"op","search"},{"text","Temporary"}});state->phase=7;break;
+                case 7:
+                    if(snapshot.at("selected_id")!=state->other.id || snapshot.at("loading").get<bool>()) break;
+                    send({{"op","remove"},{"id",state->other.id},{"revision",state->other.revision}});state->phase=8;break;
+                case 8:
+                    if(snapshot.at("loading").get<bool>() || snapshot.at("count")!=0) break;
+                    if(CaptureStore(CaptureStore::DefaultRoot()).Get(state->other.id)) Die("capture temporary media not removed");
+                    send({{"op","search"},{"text","Host"}});state->phase=9;break;
+                case 9:
+                    if(snapshot.at("selected_id")!=state->image.id) break;
+                    state->sequence=snapshot.at("restore_seq");
+                    send({{"op","copy"},{"id",state->image.id},{"revision",std::string(64,'b')}});
+                    send({{"op","search"},{"text","Host capture"}});state->phase=10;break;
+                case 10:
+                    if(snapshot.at("query")!="Host capture") break;
+                    if(snapshot.at("restore_seq")!=state->sequence) Die("stale capture revision restored");
+                    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit}|fcitx::CapabilityFlag::Password);state->phase=11;break;
+                case 11:
+                    if(!snapshot.at("password_field").get<bool>()) break;
+                    if(!snapshot.at("cards").empty() || !snapshot.at("restore_id").get<std::string>().empty()) Die("protected capture exposed metadata");
+                    std::cout<<"ok: Fcitx capture search, media-copy identity, Return preview, permanent favorite, temporary removal, stale revisions and protection passed\n";
+                    timer->setEnabled(false);RunPasswordSuite(instance,frontend,uuid,ic,dump_path);return true;
+                }
+                timer->setTime(fcitx::now(CLOCK_MONOTONIC)+20000);timer->setOneShot();return true;
+            } catch(const std::exception& error) {std::cerr<<error.what()<<'\n';g_exit_status=EXIT_FAILURE;instance.exit();return true;}
+        });
+}
+
+std::unique_ptr<fcitx::EventSourceTime> resource_timer;
+void RunResourceSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, fcitx::ICUUID uuid,
+                      fcitx::InputContext* ic, const std::string& dump_path) {
+    using namespace rimes::capsule;
+    struct State {
+        int fd=-1, phase=0; Record record; std::uint64_t sequence=0;
+        ~State() {if(fd>=0) close(fd);}
+    };
+    auto state=std::make_shared<State>(); ContentStore store(ContentStore::DefaultRoot()); std::string error;
+    const auto file=store.root().parent_path()/"reference.pdf"; std::ofstream(file)<<"%PDF-1.4\n";
+    state->record.kind=Kind::Pdf; state->record.title="Host reference"; state->record.content=file.string();
+    state->record.reference.fields={{"authors","资源作者"},{"year","2024"},{"publisher","本地出版社"}};
+    if(store.Put(state->record,"",&state->record,&error)!=StoreStatus::Ok) Die("resource fixture save");
+    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit});
+    SendKey(frontend,uuid,"Control+Shift+V");
+    state->fd=socket(AF_UNIX,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,0);
+    sockaddr_un address{};address.sun_family=AF_UNIX;
+    std::strncpy(address.sun_path,std::getenv("RIMES_CAPSULE_SOCKET"),sizeof(address.sun_path)-1);
+    if(state->fd<0 || connect(state->fd,reinterpret_cast<sockaddr*>(&address),sizeof(address))) Die("resource socket");
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+    resource_timer=instance.eventLoop().addTimeEvent(CLOCK_MONOTONIC,fcitx::now(CLOCK_MONOTONIC)+20000,20000,
+        [&,frontend,uuid,ic,dump_path,state,deadline](fcitx::EventSourceTime* timer,uint64_t) {
+            try {
+                if(std::chrono::steady_clock::now()>deadline) Die("resource timeout phase "+std::to_string(state->phase));
+                char buffer[65536];while(recv(state->fd,buffer,sizeof(buffer),MSG_DONTWAIT)>0) {}
+                auto send=[&](nlohmann::json command) {
+                    command["v"]=1;std::string frame;EncodeFrame(command.dump(),&frame);
+                    if(::send(state->fd,frame.data(),frame.size(),MSG_NOSIGNAL)!=static_cast<ssize_t>(frame.size())) Die("resource socket send");
+                };
+                const auto snapshot=nlohmann::json::parse(ReadDump(dump_path));
+                switch(state->phase) {
+                case 0: send({{"op","module"},{"text","resources"}}); state->phase=1; break;
+                case 1:
+                    if(snapshot.at("module")!="resources" || snapshot.at("loading").get<bool>() || snapshot.at("count")!=1) break;
+                    send({{"op","search"},{"text","资源作者"}}); state->phase=2; break;
+                case 2:
+                    if(snapshot.at("query")!="资源作者") break;
+                    if(snapshot.at("count")!=1 || snapshot.at("selected_id")!=state->record.id) Die("resource metadata search lost record");
+                    send({{"op","copy"},{"id",state->record.id},{"revision",state->record.revision}}); state->phase=3; break;
+                case 3:
+                    if(snapshot.at("restore_id")!=state->record.id) break;
+                    if(snapshot.at("restore_revision")!=state->record.revision || snapshot.at("restore_close").get<bool>() || !snapshot.at("last_copied").get<std::string>().empty()) Die("resource copy lost file semantics");
+                    state->sequence=snapshot.at("restore_seq"); SendKey(frontend,uuid,"Return"); state->phase=4; break;
+                case 4:
+                    if(snapshot.at("restore_seq")==state->sequence) break;
+                    if(!snapshot.at("restore_close").get<bool>() || !snapshot.at("visible").get<bool>()) Die("resource activation closed before clipboard acknowledgement");
+                    send({{"op","detail"},{"id",state->record.id},{"revision",state->record.revision}}); state->phase=5; break;
+                case 5:
+                    if(!snapshot.at("managing").get<bool>() || snapshot.at("loading").get<bool>()) break;
+                    state->sequence=snapshot.at("restore_seq");
+                    send({{"op","copy"},{"id",state->record.id},{"revision",std::string(64,'b')}});
+                    // A rejected command does not change model generation. Use a subsequent
+                    // command on this socket as an ordered barrier before checking the intent.
+                    send({{"op","search"},{"text","Host reference"}}); state->phase=6; break;
+                case 6:
+                    if(snapshot.at("query")!="Host reference") break;
+                    if(snapshot.at("restore_seq")!=state->sequence) Die("stale resource copy accepted");
+                    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit}|fcitx::CapabilityFlag::Password); state->phase=7; break;
+                case 7:
+                    if(!snapshot.at("password_field").get<bool>()) break;
+                    if(!snapshot.at("cards").empty() || !snapshot.at("restore_id").get<std::string>().empty()) Die("resource protection exposed path or restore intent");
+                    std::cout<<"ok: Fcitx resource metadata search, file-copy identity, activation acknowledgment, management, stale revisions and protection passed\n";
+                    RunCaptureSuite(instance,frontend,uuid,ic,dump_path);return true;
+                }
+                timer->setTime(fcitx::now(CLOCK_MONOTONIC)+20000);timer->setOneShot();return true;
+            } catch(const std::exception& error) {std::cerr<<error.what()<<'\n';g_exit_status=EXIT_FAILURE;instance.exit();return true;}
+        });
+}
+
+std::unique_ptr<fcitx::EventSourceTime> history_timer;
+void RunHistorySuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, fcitx::ICUUID uuid,
+                     fcitx::InputContext* ic, const std::string& dump_path) {
+    using namespace rimes::capsule;
+    SendKey(frontend, uuid, "Escape");
+    SendKey(frontend, uuid, "Control+Shift+V");
+    struct State {
+        int fd = -1, phase = 0;
+        ClipboardEntry text, image;
+        ~State() {
+            if (fd >= 0)
+                close(fd);
+        }
+    };
+    auto state = std::make_shared<State>();
+    ClipboardHistoryStore store(ClipboardHistoryStore::DefaultRoot());
+    state->image = store.Capture(ClipboardArchive{{{"image/png", "binary fixture"}}},
+                                 {"x11", "Fixture", "image"});
+    state->text =
+        store.Capture(ClipboardArchive{{{"text/plain;charset=utf-8", "全文中文\nsecond line"}}},
+                      {"x11", "Fixture", "text"});
+    state->fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    std::strncpy(address.sun_path, std::getenv("RIMES_CAPSULE_SOCKET"),
+                 sizeof(address.sun_path) - 1);
+    if (state->fd < 0 || connect(state->fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)))
+        Die("history socket");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    history_timer = instance.eventLoop().addTimeEvent(
+        CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + 20000, 20000,
+        [&, frontend, uuid, ic, dump_path, state, deadline](fcitx::EventSourceTime* timer,
+                                                            uint64_t) {
+            try {
+                if (std::chrono::steady_clock::now() > deadline)
+                    Die("history timeout phase " + std::to_string(state->phase));
+                char buffer[65536];
+                while (recv(state->fd, buffer, sizeof(buffer), MSG_DONTWAIT) > 0) {
+                }
+                auto send = [&](nlohmann::json command) {
+                    command["v"] = 1;
+                    std::string frame;
+                    EncodeFrame(command.dump(), &frame);
+                    if (::send(state->fd, frame.data(), frame.size(), MSG_NOSIGNAL) !=
+                        static_cast<ssize_t>(frame.size()))
+                        Die("history send phase " + std::to_string(state->phase) + " errno " +
+                            std::to_string(errno));
+                };
+                const auto snapshot = nlohmann::json::parse(ReadDump(dump_path));
+                auto loaded = [&] {
+                    return snapshot.at("module") == "temporary" &&
+                           !snapshot.at("loading").get<bool>() && snapshot.at("count") == 2;
+                };
+                switch (state->phase) {
+                case 0:
+                    send({{"op", "module"}, {"text", "temporary"}});
+                    state->phase = 1;
+                    break;
+                case 1:
+                    if (!loaded())
+                        break;
+                    send({{"op", "select"}, {"id", state->text.id}});
+                    state->phase = 2;
+                    break;
+                case 2:
+                    if (snapshot.at("selected_id") != state->text.id)
+                        break;
+                    frontend->call<fcitx::ITestFrontend::pushCommitExpectation>(
+                        "全文中文\nsecond line");
+                    SendKey(frontend, uuid, "Return");
+                    state->phase = 3;
+                    break;
+                case 3:
+                    if (snapshot.at("visible").get<bool>())
+                        break;
+                    SendKey(frontend, uuid, "Control+Shift+V");
+                    state->phase = 4;
+                    break;
+                case 4:
+                    if (!loaded())
+                        break;
+                    send({{"op", "activate"},
+                          {"id", state->image.id},
+                          {"revision", state->image.revision}});
+                    state->phase = 5;
+                    break;
+                case 5:
+                    if (snapshot.at("restore_id") != state->image.id)
+                        break;
+                    if (!snapshot.at("restore_close").get<bool>() ||
+                        !snapshot.at("visible").get<bool>())
+                        Die("rich activation did not await clipboard acknowledgment");
+                    send({{"op", "favorite"},
+                          {"id", state->image.id},
+                          {"revision", state->image.revision}});
+                    state->phase = 6;
+                    break;
+                case 6: {
+                    ClipboardHistoryStore history(ClipboardHistoryStore::DefaultRoot());
+                    auto current = history.Get(state->image.id);
+                    if (!current || !current->favorite || !loaded())
+                        break;
+                    send({{"op", "remove"},
+                          {"id", state->image.id},
+                          {"revision", state->image.revision}}); // stale CAS must not remove
+                    state->image = *current;
+                    state->phase = 7;
+                    break;
+                }
+                case 7:
+                    if (!loaded() || snapshot.at("cards")
+                                             .at(snapshot.at("selected").get<int>())
+                                             .at("revision") != state->image.revision)
+                        break;
+                    send({{"op", "search"}, {"text", "second line"}});
+                    state->phase = 8;
+                    break;
+                case 8:
+                    if (snapshot.at("loading").get<bool>() || snapshot.at("count") != 1)
+                        break;
+                    if (snapshot.at("cards")[0].at("id") != state->text.id)
+                        Die("history full text search");
+                    SendKey(frontend, uuid, "Escape");
+                    state->phase = 9;
+                    break;
+                case 9:
+                    if (!loaded())
+                        break;
+                    if (!snapshot.at("visible").get<bool>() || snapshot.at("query") != "")
+                        Die("Escape must clear search before closing");
+                    SendKey(frontend, uuid, "Down");
+                    state->phase = 10;
+                    break;
+                case 10:
+                    if (snapshot.at("loading").get<bool>() || snapshot.at("filter") != "text")
+                        break;
+                    if (snapshot.at("count") != 1 || snapshot.at("selected_id") != state->text.id)
+                        Die("keyboard clipboard filter");
+                    SendKey(frontend, uuid, "Up");
+                    state->phase = 11;
+                    break;
+                case 11:
+                    if (!loaded())
+                        break;
+                    send({{"op", "select"}, {"id", state->text.id}});
+                    state->phase = 12;
+                    break;
+                case 12:
+                    if (snapshot.at("selected_id") != state->text.id)
+                        break;
+                    SendKey(frontend, uuid, "Delete");
+                    state->phase = 13;
+                    break;
+                case 13:
+                    if (snapshot.at("loading").get<bool>() || snapshot.at("count") != 1)
+                        break;
+                    if (snapshot.at("cards")[0].at("id") != state->image.id)
+                        Die("Delete removed the wrong history item");
+                    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit} |
+                                           fcitx::CapabilityFlag::Password);
+                    send({{"op", "copy"},
+                          {"id", state->image.id},
+                          {"revision", state->image.revision}});
+                    state->phase = 14;
+                    break;
+                case 14:
+                    if (!snapshot.at("password_field").get<bool>())
+                        break;
+                    if (!snapshot.at("cards").empty() ||
+                        !snapshot.at("restore_id").get<std::string>().empty() ||
+                        snapshot.at("clipboard_capture").get<bool>())
+                        Die("protected history/action exposure");
+                    std::cout << "ok: Fcitx history text commits, rich explicit restore, favorite "
+                                 "CAS, full-text search and protection passed\n";
+                    RunResourceSuite(instance, frontend, uuid, ic, dump_path);
+                    return true;
+                }
+                timer->setTime(fcitx::now(CLOCK_MONOTONIC) + 20000);
+                timer->setOneShot();
+                return true;
+            } catch (const std::exception& error) {
+                std::cerr << error.what() << '\n';
+                g_exit_status = EXIT_FAILURE;
+                instance.exit();
+                return true;
+            }
+        });
+}
+
+std::unique_ptr<fcitx::EventSourceTime> detail_timer;
+void RunDetailSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, fcitx::ICUUID uuid,
+                    fcitx::InputContext* ic, const std::string& dump_path) {
+    using namespace rimes::capsule;
+    struct State {
+        int fd = -1, phase = 0;
+        Record note;
+        std::string incoming, large;
+        Snapshot wire;
+        ~State() {
+            if (fd >= 0)
+                close(fd);
+        }
+    };
+    auto state = std::make_shared<State>();
+    state->fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    std::strncpy(address.sun_path, std::getenv("RIMES_CAPSULE_SOCKET"),
+                 sizeof(address.sun_path) - 1);
+    if (state->fd < 0 || connect(state->fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)))
+        Die("detail socket connection");
+    ContentStore store(ContentStore::DefaultRoot());
+    std::string error;
+    if (store.Get(kDefaultEntryId, &state->note, &error) != StoreStatus::Ok)
+        Die("detail fixture missing");
+    state->note.content = "# Login\n- 账号: user@example.com\n- 代码: "
+                          "αβ\n```\nline one\nline two\n```";
+    if (store.Put(state->note, state->note.revision, &state->note, &error) != StoreStatus::Ok)
+        Die("detail fixture update");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    detail_timer = instance.eventLoop().addTimeEvent(
+        CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + 20000, 20000,
+        [&, frontend, uuid, ic, dump_path, state, deadline](fcitx::EventSourceTime* timer,
+                                                            uint64_t) {
+            try {
+                if (std::chrono::steady_clock::now() > deadline)
+                    Die("detail integration timed out at phase " + std::to_string(state->phase));
+                char chunk[65536];
+                for (;;) {
+                    const auto size = recv(state->fd, chunk, sizeof(chunk), MSG_DONTWAIT);
+                    if (size < 0 && errno == EINTR)
+                        continue;
+                    if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                        break;
+                    if (size <= 0)
+                        Die("detail socket disconnected");
+                    state->incoming.append(chunk, size);
+                }
+                while (state->incoming.size() >= 4) {
+                    std::uint32_t size = 0;
+                    if (!DecodeFrameHeader(state->incoming.data(), &size))
+                        Die("detail frame header");
+                    if (state->incoming.size() < size + 4)
+                        break;
+                    Snapshot snapshot;
+                    if (DecodeSnapshot(std::string_view(state->incoming).substr(4, size),
+                                       &snapshot))
+                        state->wire = std::move(snapshot);
+                    state->incoming.erase(0, size + 4);
+                }
+                auto send = [&](const std::string& op, int index = -1,
+                                const std::string& revision = "") {
+                    std::string frame;
+                    const auto raw = nlohmann::json{
+                        {"v", 1},
+                        {"op", op},
+                        {"id", state->note.id},
+                        {"revision", revision},
+                        {"index", index}}.dump();
+                    if (!EncodeFrame(raw, &frame) ||
+                        ::send(state->fd, frame.data(), frame.size(), MSG_NOSIGNAL) !=
+                            static_cast<ssize_t>(frame.size()))
+                        Die("detail command send");
+                };
+                const auto snapshot = nlohmann::json::parse(ReadDump(dump_path));
+                auto loaded = [&] {
+                    return !snapshot.at("loading").get<bool>() && !snapshot.at("cards").empty() &&
+                           snapshot.at("cards")[0].at("revision") == state->note.revision;
+                };
+                switch (state->phase) {
+                case 0:
+                    if (!loaded())
+                        break;
+                    send("detail");
+                    state->phase = 1;
+                    break;
+                case 1:
+                    if (!snapshot.at("detail").get<bool>())
+                        break;
+                    if (snapshot.at("detail_selected") != 0 || snapshot.at("detail_count") != 3)
+                        Die("native detail rows/selection differ");
+                    frontend->call<fcitx::ITestFrontend::pushCommitExpectation>("user@example.com");
+                    SendKey(frontend, uuid, "Return");
+                    ExpectContains(ReadDump(dump_path), "\"visible\":true",
+                                   "row insertion closed the rail");
+                    SendKey(frontend, uuid, "Control+c");
+                    frontend->call<fcitx::ITestFrontend::pushCommitExpectation>("αβ");
+                    send("row-insert", 1, state->note.revision);
+                    state->phase = 2;
+                    break;
+                case 2:
+                    if (snapshot.at("detail_selected") != 1)
+                        break;
+                    if (snapshot.at("last_copied") != "user@example.com")
+                        Die("row copy included its label");
+                    {
+                        ContentStore storage(ContentStore::DefaultRoot());
+                        std::string err;
+                        const auto stale = state->note.revision;
+                        state->note.content = "- 账号: external edit";
+                        if (storage.Put(state->note, stale, &state->note, &err) != StoreStatus::Ok)
+                            Die("external edit failed");
+                        send("row-insert", 1, stale); // Must not insert an obsolete row
+                                                      // even before inotify reload.
+                    }
+                    state->phase = 3;
+                    break;
+                case 3:
+                    if (!loaded() || snapshot.at("detail").get<bool>())
+                        break;
+                    send("detail");
+                    state->phase = 4;
+                    break;
+                case 4:
+                    if (!snapshot.at("detail").get<bool>())
+                        break;
+                    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit} |
+                                           fcitx::CapabilityFlag::Password);
+                    {
+                        const auto hidden = nlohmann::json::parse(ReadDump(dump_path));
+                        if (hidden.at("detail").get<bool>() || !hidden.at("detail_rows").empty() ||
+                            hidden.at("visible").get<bool>())
+                            Die("protected detail remained exposed");
+                    }
+                    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit} |
+                                           fcitx::CapabilityFlag::ClientUnfocusCommit);
+                    instance.setCurrentInputMethod(ic, "rimes", true);
+                    ic->focusIn();
+                    SendKey(frontend, uuid, "Control+Shift+V");
+                    for (int i = 0; i < 180000; ++i)
+                        state->large += "👩🏽‍💻";
+                    state->note.content = state->large;
+                    {
+                        ContentStore storage(ContentStore::DefaultRoot());
+                        std::string err;
+                        if (storage.Put(state->note, state->note.revision, &state->note, &err) !=
+                            StoreStatus::Ok)
+                            Die("large Unicode fixture failed");
+                    }
+                    state->phase = 5;
+                    break;
+                case 5:
+                    if (!loaded())
+                        break;
+                    SendKey(frontend, uuid, "Control+c");
+                    state->phase = 6;
+                    break;
+                case 6:
+                    if (state->wire.last_copied != state->large)
+                        break;
+                    std::cout << "ok: real Fcitx details insert exact row values, "
+                                 "reject stale revisions, conceal on protected input "
+                                 "and copy 2.7 MiB Unicode over fragmented IPC\n";
+                    SendKey(frontend, uuid, "Control+Shift+B");
+                    SendKey(frontend, uuid, "Return");
+                    ExpectContains(ReadDump(dump_path), "\"visible\":true",
+                                   "Buffer Return must not close Capsule");
+                    std::cout << "ok: Buffer capturing keeps Capsule from consuming Return\n";
+                    SendKey(frontend, uuid, "Control+Shift+B");
+                    RunHistorySuite(instance, frontend, uuid, ic, dump_path);
+                    return true;
+                }
+                timer->setTime(fcitx::now(CLOCK_MONOTONIC) + 20000);
+                timer->setOneShot();
+                return true;
+            } catch (const std::exception& error) {
+                std::cerr << error.what() << '\n';
+                g_exit_status = EXIT_FAILURE;
+                instance.exit();
+                return true;
+            }
+        });
+}
+
 void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
                      const fcitx::ICUUID& uuid, fcitx::InputContext* ic,
                      const std::string& dump_path) {
@@ -131,6 +730,7 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
                            fcitx::CapabilityFlag::ClientUnfocusCommit);
 
     SendKey(frontend, uuid, "Control+Shift+V");
+    for (int i=0;i<5 && ReadDump(dump_path).find("\"module\":\"notes\"")==std::string::npos;++i) SendKey(frontend,uuid,"Tab");
     auto snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"visible\":true", "Ctrl+Shift+V did not show the rail");
     ExpectContains(snapshot, "\"armed\":true", "Ctrl+Shift+V did not arm the session");
@@ -163,7 +763,11 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
 
     SendKey(frontend, uuid, "Escape");
     snapshot = ReadDump(dump_path);
-    ExpectContains(snapshot, "\"visible\":false", "Escape did not hide");
+    ExpectContains(snapshot, "\"visible\":true", "first Escape must leave the rail open");
+    ExpectContains(snapshot, "\"query\":\"\"", "first Escape must clear the search");
+    SendKey(frontend, uuid, "Escape");
+    snapshot = ReadDump(dump_path);
+    ExpectContains(snapshot, "\"visible\":false", "second Escape did not hide");
     frontend->call<fcitx::ITestFrontend::pushCommitExpectation>("你好");
     Type(frontend, uuid, "nihao");
     SendKey(frontend, uuid, "space");
@@ -218,6 +822,7 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"visible\":false", "password capability must hide the rail");
     ExpectContains(snapshot, "\"password_field\":true", "password flag missing");
+    ExpectContains(snapshot, "\"session_protected\":false", "password input incorrectly revoked a copied vault secret");
     SendKey(frontend, uuid, "Control+Shift+V");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"visible\":false", "password field must refuse the rail");
@@ -256,42 +861,69 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
 
     auto* engine = instance.inputMethodEngine(ic);
     if (!engine || !engine->getConfig()) Die("missing plugin host configuration");
-    fcitx::RawConfig original;
-    engine->getConfig()->save(original);
-    fcitx::RawConfig disabled = original;
-    disabled.setValueByPath("CapsuleNotes", "False");
-    engine->setConfig(disabled);
-    snapshot = ReadDump(dump_path);
-    ExpectContains(snapshot, "\"visible\":false", "plugin disable must hide existing rail");
-    ExpectContains(snapshot, "\"armed\":false", "plugin disable must revoke insertion");
-    ExpectContains(snapshot, "\"last_copied\":\"\"", "plugin disable must clear clipboard intent");
-    engine->reloadConfig();
-    SendKey(frontend, uuid, "Control+Shift+V");
-    ExpectContains(ReadDump(dump_path), "\"visible\":false", "disabled plugin reopened after config reload");
+    rimes::plugins::PackageStore packages(rimes::runtime::UserRoot()/"plugins",rimes::plugins::OfficialCatalog(),
+        rimes::plugins::BundledPackages(),rimes::plugins::CompiledAdapters(),RIMES_PRODUCT_VERSION);
+    const auto notes=packages.Inspect("builtin.capsule.notes");
+    packages.Enable(notes.id,false,notes.grant); engine->reloadConfig();
+    snapshot=ReadDump(dump_path);
+    ExpectContains(snapshot,"\"armed\":false","plugin disable must revoke insertion");
+    ExpectContains(snapshot,"\"last_copied\":\"\"","plugin disable must clear clipboard intent");
+    ExpectMissing(snapshot,"RIMES 默认词条","disabled notes still exposed");
     frontend->call<fcitx::ITestFrontend::pushCommitExpectation>("你好");
-    Type(frontend, uuid, "nihao");
-    SendKey(frontend, uuid, "space");
-    engine->setConfig(original);
-    SendKey(frontend, uuid, "Control+Shift+V");
-    snapshot = ReadDump(dump_path);
-    ExpectContains(snapshot, "\"armed\":true", "re-enabled plugin did not regain explicit capture");
-    ExpectContains(snapshot, "RIMES 默认词条", "disabling plugin deleted its persisted notes");
-    std::cout << "ok: plugin disable revokes the live rail, survives reload, preserves data and ordinary typing\n";
-
-    SendKey(frontend, uuid, "Control+Shift+B");
-    SendKey(frontend, uuid, "Return");
-    snapshot = ReadDump(dump_path);
-    ExpectContains(snapshot, "\"visible\":true", "Buffer Return must not close Capsule");
-    std::cout << "ok: Buffer capturing keeps Capsule from consuming Return\n";
-
-    instance.exit();
+    Type(frontend,uuid,"nihao"); SendKey(frontend,uuid,"space");
+    rimes::capsule::ContentStore content(rimes::capsule::ContentStore::DefaultRoot());
+    rimes::capsule::Record saved; std::string error;
+    if(content.Get(rimes::capsule::kDefaultEntryId,&saved,&error)!=rimes::capsule::StoreStatus::Ok) Die("disabled plugin lost its data");
+    const auto disabled=packages.Inspect(notes.id);
+    packages.Enable(notes.id,true,disabled.grant); engine->reloadConfig();
+    const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(8);
+    resume_timer = instance.eventLoop().addTimeEvent(
+        CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + 50000, 50000,
+        [&, frontend, uuid, ic, dump_path, until, opened = false](fcitx::EventSourceTime* timer,
+                                                                  uint64_t) mutable {
+            try {
+                if(ReadDump(dump_path).find("\"loading\":true")!=std::string::npos) {
+                    if(std::chrono::steady_clock::now()>until)
+                        Die("Capsule reload timed out");
+                    timer->setTime(fcitx::now(CLOCK_MONOTONIC)+50000);
+                    timer->setOneShot();
+                    return true;
+                }
+                if (!opened) {
+                    SendKey(frontend, uuid, "Control+Shift+V");
+                    for (int i = 0; i < 5 && ReadDump(dump_path).find("\"module\":\"notes\"") ==
+                                                 std::string::npos;
+                         ++i)
+                        SendKey(frontend, uuid, "Tab");
+                    opened = true;
+                }
+                const auto restored=ReadDump(dump_path);
+                if (restored.find("\"loading\":true") != std::string::npos) {
+                    if (std::chrono::steady_clock::now() > until)
+                        Die("re-enabled notes reload timed out");
+                    timer->setTime(fcitx::now(CLOCK_MONOTONIC) + 20000);
+                    timer->setOneShot();
+                    return true;
+                }
+                ExpectContains(restored,"\"armed\":true","re-enabled plugin needs explicit target capture");
+                ExpectContains(restored,"RIMES 默认词条","re-enabled module failed to reload data");
+                std::cout<< "ok: package disable revokes capture, preserves data "
+                             "and ordinary typing; re-enable reloads notes\n";
+                RunDetailSuite(instance, frontend, uuid, ic, dump_path);
+                return true;
+            } catch(const TestFailed&) {
+            }
+            instance.exit();
+            return true;
+        });
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc < 4) {
-        std::cerr << "Usage: rimes-capsule-fcitx-e2e <build-dir> <addon-rel-dir> <data-rel-dir>\n";
+        std::cerr << "Usage: rimes-capsule-fcitx-e2e <build-dir> <addon-rel-dir> "
+                     "<data-rel-dir>\n";
         return EXIT_FAILURE;
     }
 
@@ -367,6 +999,9 @@ int main(int argc, char** argv) {
                         source->setTime(fcitx::now(CLOCK_MONOTONIC) + 200000);
                         source->setOneShot();
                         return true;
+                    }
+                    if (ReadDump(dump_path).find("\"loading\":true")!=std::string::npos) {
+                        source->setTime(fcitx::now(CLOCK_MONOTONIC)+50000);source->setOneShot();return true;
                     }
                     if (suite_started) {
                         return true;

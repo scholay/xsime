@@ -1,4 +1,6 @@
 #include "capsule_model.hpp"
+#include "capsule_structure.hpp"
+#include "capsule_text.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -10,14 +12,8 @@ bool MatchesQuery(const Card& card, std::string_view query) {
     if (query.empty()) {
         return true;
     }
-    std::string haystack = card.title + "\n" + card.payload;
-    std::string needle(query);
-    for (char& ch : haystack) {
-        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    }
-    for (char& ch : needle) {
-        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    }
+    const auto haystack = LowerText(card.module == Module::Passwords ? card.title : card.title + "\n" + card.payload + "\n" + card.source + "\n" + card.preview);
+    const auto needle = OneLine(LowerText(query));
     std::size_t start = 0;
     while (start < needle.size()) {
         while (start < needle.size() &&
@@ -85,14 +81,64 @@ void CapsuleModel::set_password_field(bool value) {
     Touch();
 }
 
-void CapsuleModel::set_tab(Tab tab) {
-    if (tab_ == tab) {
-        return;
+void CapsuleModel::set_module(Module module) {
+    if (!ModuleEnabled(module) || module_ == module) return;
+    module_ = module; filter_ = "all"; query_.clear(); last_copied_.clear(); selected_ = 0;
+    switch (module) {
+    case Module::Temporary: tab_ = Tab::Recent; break;
+    case Module::Capture: tab_ = Tab::Captures; break;
+    case Module::Notes: tab_ = Tab::Note; break;
+    case Module::Resources: tab_ = Tab::Pdf; break;
+    case Module::Passwords: tab_ = Tab::Password; break;
     }
-    tab_ = tab;
-    selected_ = 0;
-    ApplyFilter();
-    Touch();
+    ApplyFilter(); Touch();
+}
+void CapsuleModel::set_filter(std::string filter) {
+    if (!ValidFilter(module_, filter) || filter_ == filter) return;
+    filter_ = std::move(filter); selected_ = 0; ApplyFilter(); Touch();
+}
+void CapsuleModel::EnableModule(Module module, bool enabled) {
+    if (enabled) {
+        enabled_modules_.insert(module);
+        if (!ModuleEnabled(module_)) set_module(module);
+    }
+    else {
+        enabled_modules_.erase(module);
+        // Stop exposing disabled plaintext; persistent stores remain untouched.
+        all_.erase(std::remove_if(all_.begin(), all_.end(), [module](const auto& card) { return card.module == module; }), all_.end());
+        if (module_ == module) {
+            Disarm("module-disabled"); query_.clear(); last_copied_.clear(); filter_ = "all";
+            if (!enabled_modules_.empty()) set_module(*enabled_modules_.begin());
+        }
+    }
+    ApplyFilter(); Touch();
+}
+void CapsuleModel::CycleModule(int offset) {
+    if (enabled_modules_.empty()) return;
+    std::vector<Module> modules(enabled_modules_.begin(), enabled_modules_.end());
+    const auto found = std::find(modules.begin(), modules.end(), module_);
+    const int current = found == modules.end() ? 0 : static_cast<int>(found - modules.begin());
+    const int count = static_cast<int>(modules.size());
+    set_module(modules[(current + offset % count + count) % count]);
+}
+void CapsuleModel::set_managing(bool value) {
+    if (managing_ == value) return;
+    managing_ = value;
+    Disarm("view-change"); Touch();
+}
+void CapsuleModel::set_tab(Tab tab) {
+    // Older clients keep their type tabs; current UI uses five modules.
+    switch (tab) {
+    case Tab::Recent: set_module(Module::Temporary); break;
+    case Tab::Captures: set_module(Module::Capture); break;
+    case Tab::Note: set_module(Module::Notes); break;
+    case Tab::Image: set_module(Module::Capture); set_filter("image"); break;
+    case Tab::Video: set_module(Module::Capture); set_filter("video"); break;
+    case Tab::Pdf: set_module(Module::Resources); set_filter("reference"); break;
+    case Tab::Skill: set_module(Module::Resources); set_filter("skills"); break;
+    case Tab::Resource: set_module(Module::Resources); break;
+    case Tab::Password: set_module(Module::Passwords); break;
+    }
 }
 
 void CapsuleModel::set_query(std::string query) {
@@ -119,25 +165,56 @@ void CapsuleModel::backspace_query() {
     if (query_.empty()) {
         return;
     }
-    query_.pop_back();
+    auto end = query_.size() - 1;
+    while (end && (static_cast<unsigned char>(query_[end]) & 0xc0) == 0x80) --end;
+    query_.erase(end);
     selected_ = 0;
     ApplyFilter();
     Touch();
 }
 
 void CapsuleModel::LoadCards(const std::vector<Record>& records) {
-    all_.clear();
-    all_.reserve(records.size());
+    const std::string selected_id = Selected() ? Selected()->id : "";
+    // Clipboard/password backends supply metadata through LoadModuleCards.
+    all_.erase(std::remove_if(all_.begin(), all_.end(), [](const auto& card) {
+        return card.module != Module::Temporary && card.module != Module::Passwords;
+    }), all_.end());
     for (const auto& record : records) {
+        const auto module = RecordModule(record);
+        if (!ModuleEnabled(module) || record.kind == Kind::Password) continue;
         Card card;
-        card.id = record.id;
-        card.kind = record.kind;
-        card.title = record.title;
-        card.payload = record.content;
-        card.preview = PreviewOf(record.content);
+        card.id = record.id; card.kind = record.kind; card.title = record.title;
+        card.payload = record.content + (record.kind == Kind::Pdf ? record.reference.SearchText() : ""); card.module = module; card.filter = RecordFilter(record);
+        card.revision = record.revision; card.attachment = record.attachment;
+        card.preview = record.summary.empty() ? NoteSummary(record.content) : record.summary;
+        if (record.kind == Kind::Pdf && record.summary.empty()) {
+            const auto& reference = record.reference;
+            bool empty = true; for (const auto* key : kReferenceFields) if (!TrimText(reference.Get(key)).empty()) empty = false;
+            if (empty) card.preview = "待补书目信息 · " + std::filesystem::path(record.content).filename().string();
+            else {
+                card.preview.clear();
+                const auto kind = reference.kind == "book" ? "图书" : reference.kind == "journalArticle" ? "期刊论文" : reference.kind == "conferencePaper" ? "会议论文" : "报告";
+                for (const auto& part : {reference.Get("authors"), reference.Get("year"), std::string(kind)}) if (!part.empty()) {if(!card.preview.empty()) card.preview += " · "; card.preview += part;}
+            }
+        } else if (record.kind == Kind::Resource && record.summary.empty()) card.preview = "本机资源 · " + std::filesystem::path(record.content).filename().string();
         all_.push_back(std::move(card));
     }
     ApplyFilter();
+    const auto selected = std::find_if(cards_.begin(), cards_.end(), [&](const auto& card) { return card.id == selected_id; });
+    if (selected != cards_.end()) selected_ = static_cast<int>(selected - cards_.begin());
+    Touch();
+}
+void CapsuleModel::LoadModuleCards(Module module, std::vector<Card> cards) {
+    const std::string selected_id = Selected() ? Selected()->id : "";
+    all_.erase(std::remove_if(all_.begin(), all_.end(), [module](const auto& card) { return card.module == module; }), all_.end());
+    if (ModuleEnabled(module)) for (auto& card : cards) {
+        card.module = module;
+        if (module == Module::Passwords) { card.payload.clear(); if (card.preview.empty()) card.preview = "••••••••"; }
+        all_.push_back(std::move(card));
+    }
+    ApplyFilter();
+    const auto selected = std::find_if(cards_.begin(), cards_.end(), [&](const auto& card) { return card.id == selected_id; });
+    if (selected != cards_.end()) selected_ = static_cast<int>(selected - cards_.begin());
     Touch();
 }
 
@@ -199,13 +276,22 @@ void CapsuleModel::Hide() {
 
 void CapsuleModel::ApplyFilter() {
     cards_.clear();
-    if (!TabIsPorted(tab_)) {
+    if (!ModuleEnabled(module_)) {
         selected_ = 0;
         return;
     }
     for (const auto& card : all_) {
-        if (card.kind == KindForTab(tab_) && MatchesQuery(card, query_)) {
-            cards_.push_back(card);
+        if (card.module == module_ && (filter_ == "all" || card.filter == filter_) &&
+            (card.external_search || MatchesQuery(card, query_))) {
+            // Filtered cards are projections. Full bodies stay in the search
+            // index and are re-read by revision before explicit delivery.
+            Card projected;
+            projected.id=card.id; projected.kind=card.kind; projected.title=card.title; projected.preview=card.preview;
+            projected.module=card.module; projected.filter=card.filter; projected.revision=card.revision; projected.attachment=card.attachment;
+            projected.external_search = card.external_search;
+            projected.favorite = card.favorite;
+            projected.source = card.source;
+            cards_.push_back(std::move(projected));
         }
     }
     if (selected_ >= static_cast<int>(cards_.size())) {
@@ -218,19 +304,21 @@ void CapsuleModel::RefreshHint() {
         hint_ = "Protected — Capsule will not insert here";
         return;
     }
-    if (!TabIsPorted(tab_)) {
-        hint_ = "This tab is not ported on Linux yet";
+    if (!ModuleEnabled(module_)) {
+        hint_ = "请在插件管理中启用 Capsule 模块";
         return;
     }
+    if (loading_) { hint_ = "正在读取 Capsule…"; return; }
+    if (managing_) { hint_ = module_==Module::Capture ? "管理捕获 · Esc 返回底栏" : "Ctrl+S SAVE   ESC BACK TO RAIL"; return; }
     if (!armed_) {
         hint_ = "Disarmed — Ctrl+Shift+V on this field re-arms; press again to close";
         return;
     }
     if (cards_.empty()) {
-        hint_ = query_.empty() ? "No notes" : "No matching notes";
+        hint_ = query_.empty() ? "暂无" + ModuleDefinition(module_).at("title").get<std::string>() + "条目" : "没有匹配的条目";
         return;
     }
-    hint_ = "Return inserts the selected note · Esc closes";
+    hint_ = Selected() && Selected()->kind == Kind::Note ? "Return 插入 · Ctrl+C 复制 · Esc 关闭" : (module_ == Module::Resources ? "Return 复制文件 · 双击管理 · Esc 关闭" : "当前条目不支持文本插入 · Esc 关闭");
 }
 
 }  // namespace rimes::capsule

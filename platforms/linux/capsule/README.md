@@ -1,47 +1,113 @@
-# XSIME Capsule (Linux)
+# XSIME Capsule（Linux）
 
-Note library and bottom rail for the Fcitx5 XSIME addon. Behavior and the
-deliberate macOS gaps are in [SPEC.md](SPEC.md). Real-desktop checks are in
-[MANUAL-TEST.md](MANUAL-TEST.md).
+Capsule 与 Buffer 共用 Fcitx 输入宿主。五个模块（临时、捕获、笔记、资源、密码）的稳定身份、顺序和过滤项由 macOS `CapsuleModules.swift` 提取，分别在插件管理中启停。管理页、底栏与快捷入口共用这份导航状态。
 
-## Layout
+`ui/` 是 GTK 3 管理页和不抢焦点的底栏；`core/` 提供 Markdown、原子附件、过滤、快照和授权边界。单条文本插入只使用原输入框的 Fcitx `commitString`，复制只改剪贴板。管理页编辑不会获得输入目标；返回底栏后需显式重新唤起以绑定目标。
 
-- `core/` — Markdown store, rail model, JSON snapshot. Shared by the addon,
-  `rimes-capsule`, `rimes-capsule-ctl`, and tests. New C++ of the macOS
-  contract, not a rewrite of the Swift sources.
-- `ui/` — GTK 3 rail. X11: keep-above, bottom-centered. wlroots Wayland:
-  `gtk-layer-shell` overlay stretched with a 940×208 size request.
-- `ctl/` — `rimes-capsule-ctl` talks to the IME socket without a display.
-- Built from `platforms/linux/ime/CMakeLists.txt` and shipped in the same
-  `fcitx5-rimes` `.deb`.
+当前已支持普通、Bullet、富文本笔记，以及带分组的逐行详情。笔记标题、摘要、外部 Markdown 和富文本资产均可保存；临时剪贴板历史支持 X11 / Wayland 多格式收录与恢复；资源已支持路径分类、文献元数据、引用、文件复制和预览；截图、静音录屏及捕获归档已接入；密码库继续由 #167 实现。像素对齐仍在验收，见 [验证记录](HOST-VALIDATION.md) 和 [行为合同](SPEC.md)。
 
-## How it is wired
+## 构建与使用
 
-`CapsuleService` lives next to `BufferService`. Toggle is
-`Ctrl+Shift+V` / `Super+Shift+V` while XSIME is current. While the rail is
-armed on an input context, navigation and Return are consumed before
-Rime. A selected note is inserted with `InputContext::commitString` after
-the same-IC recheck. The GTK process is a renderer. It does not run
-librime.
-
-## Build
-
-```bash
+```sh
 platforms/linux/ime/scripts/deps.sh --install
 platforms/linux/ime/scripts/build.sh
 ctest --test-dir platforms/linux/ime/build --output-on-failure
 platforms/linux/ime/tests/e2e/e2e.sh --build-dir platforms/linux/ime/build
 ```
 
-## Runtime
+推荐安装随项目 `v*` Release 发布的 `fcitx5-rimes` deb。Capsule 随完整版安装；普通升级、停用模块、卸载程序均保留用户词库、学习记录和 Capsule 数据。
 
-| Item | Value |
+| 操作 | 行为 |
 |---|---|
-| Toggle | `Ctrl+Shift+V` or `Super+Shift+V` **only while XSIME is current**. A visible but disarmed rail re-arms on the first press. |
-| Close | same hotkey while armed, Escape on the armed field, close button, or a successful insert |
-| Insert selected note | Return, `Ctrl+1`–`Ctrl+9`, or double-click (second press on the same card within 400 ms). The rail closes. |
-| `ctl status` | Reloads the note store, even while the rail is closed |
-| Copy selected note | `Ctrl+C` once per press (`copy_seq`). Search, hide, and UI respawn do not rewrite the clipboard. Wayland prefers `wl-copy`; install `wl-clipboard`. |
-| Socket | `$XDG_RUNTIME_DIR/rimes-capsule.sock` |
-| Store | `$XDG_DATA_HOME/rimes/capsule` |
-| UI binary | `/usr/libexec/rimes/rimes-capsule` and `/usr/bin/rimes-capsule` |
+| Ctrl+Shift+V | 默认全局 Capsule 快捷键（可在设置调整）；X11/Wayland 支持条件见 runtime/SHORTCUTS-VALIDATION.md |
+| 底栏齿轮 | 打开 940×660 管理页，最小 620×430；撤销原输入目标 |
+| 管理页 Ctrl+S / Esc | 保存 / 确认未保存修改后返回底栏 |
+| 底栏 Return | 向仍绑定且聚焦的输入框插入整条笔记正文，成功后关闭 |
+| 双击笔记卡片 | 打开分组详情，默认选中第一行；↑/↓ 选择、Return/双击插入值，Ctrl+C 复制值，Esc 返回 |
+| Ctrl+C | 显式复制；快照、重启或搜索不会重放复制 |
+| Tab / Shift+Tab | 按 macOS 顺序切换已启用模块 |
+| 停用模块 | 清除可见投递数据并撤权，磁盘内容保留 |
+
+数据默认为 `$XDG_DATA_HOME/rimes/capsule`（或 `~/.local/share/rimes/capsule`）；测试可用 `RIMES_USER_DIR`/`RIMES_CAPSULE_ROOT` 隔离。IPC 默认为 `$XDG_RUNTIME_DIR/rimes-capsule.sock`。
+
+```sh
+rimes-capsule-ctl manage
+rimes-capsule-ctl module notes
+rimes-capsule-ctl filter bullet
+rimes-capsule-ctl search '项目'
+rimes-capsule-ctl rail
+```
+
+## 笔记编辑
+
+管理页选择「其他」「Bullet」或「富文本」。Bullet 支持复选框、添加条目、Tab 缩进和 Shift+Tab 反缩进；富文本支持粗体、斜体、链接、插入图片以及 Ctrl+Z / Ctrl+Shift+Z 撤销重做。图片保留原始字节，编辑器只缩放预览；单张图片上限 3 MiB / 1600 万像素，富文本资产上限 4 MiB。
+
+正文中 `## 标题` 分组，`- 标签：值` 显示为字段。详情复制和插入只使用值；代码块作为一整行操作。未知 front matter 会保留。外部修改或同时编辑造成修订冲突时，保存不会覆盖磁盘内容。
+
+富文本同时保存 macOS 兼容 RTFD 资产和可读 Markdown 副本。外部改动 Markdown 后，要在管理页明确选择「导入 Markdown 修改」才会替换富文本；未选择前保留原资产。复杂表格或不支持的 RTF 格式以只读正文保留，仍可编辑标题和摘要。单条文件格式损坏时显示原文和整理提示，其他笔记照常使用。
+
+测试与限制见 [结构化笔记验证](NOTES-VALIDATION.md)。
+
+## 临时剪贴板历史
+
+在设置的 Capsule 页面开启「允许收录剪贴板内容」，并保持「临时」模块启用。默认关闭收录。启动、重新开启及解除保护时只建立当前剪贴板基线，随后新复制的内容才进入历史。底栏关闭后仍可收录；停止 XSIME 或停用模块会停止收录。
+
+文本、链接、图片和文件保留原始 MIME 字节，存在 `capsule/clipboard/history-v1.sqlite3`。X11 尽可能记录应用来源；Wayland 数据控制协议不提供应用身份，因此显示 Wayland，不推测来源。搜索覆盖完整可搜索文本及来源，而不只检索卡片摘要。超过 200 条仍可通过导航和搜索访问。
+
+- 左右键选择，↑/↓ 切换筛选，Tab 切换模块。Esc 先清空搜索，再关闭底栏。
+- Return / 双击使用当前条目。普通文本经原输入框的 Fcitx 提交；图片、文件等恢复到剪贴板后再由用户粘贴。焦点已失效时只恢复剪贴板。
+- Ctrl+C、悬停复制按钮和菜单复制均按当前条目修订恢复原始格式，不模拟粘贴。管理页提供只读预览及复制。
+- 无搜索词时 Delete / Backspace 删除当前条目；有搜索词时先编辑搜索。菜单支持收藏、取消收藏和删除。
+- 连续点击两次「清空」会删除未收藏历史；4 秒内未确认、隐藏、切换模块或进入保护态会取消确认。收藏保留到用户显式删除。
+
+X11 使用 XFixes / selection（含 INCR）；Wayland 优先 ext-data-control，兼容 wlr-data-control。不提供这些协议的桌面会提示历史接口不可用，不通过 XWayland 假装能观察全部 Wayland 应用。密码框、锁屏、休眠及机密/临时标记内容不收录，恢复不会补录保护期间的内容。图片解码仅用于有界预览，原始数据不变。
+
+单格式上限 128 MiB、每条原始数据 192 MiB、本地库最多 100,000 条 / 64 GiB；到达上限时淘汰最早未收藏条目。全部为收藏时拒绝新收录并提示。卸载 deb 或源码安装均保留这个库；要清空内容请使用 Capsule 中的删除/清空操作。验证和未完成的桌面/视觉验收见 [剪贴板验证](CLIPBOARD-VALIDATION.md)。
+
+## 资源与文献
+
+管理页选择「资源」，再选择文献、文档、项目、Skills 或其他分类后新建。文献选择 PDF；其他资源保存本机绝对路径，项目和 Skill 文件夹不会被递归复制。拒绝路径中的符号链接、父目录回退和 FIFO 等特殊文件。已丢失的旧文件仍保留条目与元数据，重新选择路径后可继续使用。
+
+文献字段和单条引用沿用 macOS 的图书、期刊论文、会议论文及报告模型；提供 GB/T 7714、APA 7、MLA 9、Chicago A-D、Vancouver、IEEE 六种简化格式。缺少作者、年份或出版来源时会提示补齐，旧 PDF 不会自动编造元数据；这不是全文 CSL 引文处理器。搜索包含作者、年份、DOI 等元数据。
+
+点击「预览文件」可刷新预览。图片最大 32 MiB、PDF 最大 256 MiB 且只渲染首页，位图最长边 1600 px；UTF-8 文本最多读取 1 MiB、显示前 16000 字。Skill 文件夹仅预览顶层 `SKILL.md`。解码在独立程序中限制内存和时间，切换、保护或关闭取消旧结果。无法预览的文件仍可显式复制。
+
+管理页的「复制文件/文件夹」以及底栏 Ctrl+C 将实际文件 URL 放到剪贴板，供目标应用粘贴；不会把路径当正文插入。底栏 Return 在桌面确认复制成功后关闭，双击进入管理详情。「复制参考文献」只复制当前表单生成的引用文字。
+
+默认仅保存路径。需要离线副本时，勾选表单下方「保存附件副本」再保存；最多 256 MiB，保留原始字节。副本存在 `capsule/assets`，显式预览/复制时在 `capsule/files` 生成同名文件。备份整个 `capsule` 目录即可保留条目、引用格式偏好和已导入附件；未导入的本机路径需要自行备份原文件。删除条目不删除附件副本，源码卸载、deb 升级/卸载也保留这些数据。
+
+功能和像素对照状态见 [资源验证](RESOURCES-VALIDATION.md)。
+
+## 截图、录屏与捕获历史
+
+启用「捕获」模块后，点击底栏相机或管理页「新建」，再明确选择截图或录屏。X11 捕获整个屏幕；Wayland 通过桌面 Screenshot / ScreenCast portal 让用户选择或批准来源。拒绝授权、取消和编码失败会显示失败，不产生可用历史条目。需要系统已安装与当前桌面匹配的 portal 后端；GNOME、KDE 和 wlroots 的授权界面由桌面提供。
+
+截图保存 PNG；录屏保存 VP8 WebM，当前无系统声音或麦克风，最长 10 分钟、单文件最多 1 GiB。点击「停止并保存」完成编码后入库；「取消」、关闭窗口、锁屏、休眠、保护态或停用模块会丢弃在途捕获。X11 录屏会包含重新显示的控制窗口；多模式取景、标注编辑、音频及与 macOS 捕获工具栏的像素对齐仍待完善。
+
+底栏可按图片/视频及标题/来源搜索，Return 或双击打开管理预览；视频目前展示首帧。Ctrl+C 或复制按钮将 PNG 或视频文件 URL 放到系统剪贴板，不模拟粘贴。「收藏到 Capsule」建立永久条目；已收藏内容不会被捕获历史的删除或自动清理移除。临时历史超过 30 天或累计 10 GiB 时从最早内容清理，正在预览或由剪贴板持有的文件会跳过。
+
+数据在 `capsule/captures/<UUID>/`，含原始媒体及 `record.json`；私有目录 0700、文件 0600。整个 `capsule` 目录备份可恢复本平台历史；收藏使用稳定 ID 保留，不依赖备份前的绝对路径来决定是否永久保存。此 JSON 索引是 Linux schema-v1，不能直接替换 macOS 的 SQLite/日期编码，也不提供跨设备同步。源码卸载、deb 升级和卸载均保留捕获及收藏。
+
+能力与验证边界见 [捕获验证](CAPTURE-VALIDATION.md)，实际双端卡片见 [四主题对照](../../../validation/linux-capsule-capture-20261018/README.md)。
+
+## 密码库与动态验证码
+
+启用「密码」后，底栏仅按标题搜索；卡片显示公开标题和摘要。Return 或双击打开管理页，正文只有验证查看口令后才解密。默认口令依次为 `RH`、`WO`、`CVN`、`QU` 四组物理字母键，每组同时按下并全部松开；不是逐字输入。管理页底部「查看口令…」可验证当前口令后更改或恢复默认，新口令需输入两次。
+
+已有详情授权 60 秒，单字段眼睛或空格显示 15 秒，明文编辑 15 秒后隐藏；失焦、关闭、切换记录、锁屏/休眠、插件停用、口令或记录发生外部变化立即撤销授权。新建记录直接编辑，保存时加密；离开窗口会丢弃尚未保存的机密正文。正文使用本地直接输入，中文等内容可粘贴，标题和摘要仍支持输入法。选中文字不会放入 PRIMARY；Ctrl+C / 剪切及字段点击均走敏感剪贴板。
+
+「- 标签：值」定义字段，「## 标题」定义分组。敏感字段默认固定长度遮蔽，TOTP 种子不出现在详情；识别 `otpauth://totp/…` 或 TOTP 标签下的 Base32 种子，与当前 macOS 一样支持 SHA-1、6–8 位和 10–120 秒周期。点字段或 Return 明确复制，不把密码自动提交到外部输入框。复制附带机密/临时标记，60 秒后仅释放本次仍持有的内容，不覆盖后来复制的内容；本应用的历史忽略这些标记。其他程序是否保留已读取内容不由本应用控制。
+
+当前复制实现支持 X11 及提供 ext-data-control / wlr-data-control 的 Wayland。未提供这些协议的桌面会明确提示复制失败；GNOME 等桌面的受焦点剪贴板路径仍在 #167/#179 中跟踪，不能视为完整桌面已验收。
+
+笔记先保存，再使用「移入密码库…」。验证口令后先加密写入，再按原修订删除原笔记；若原笔记已被修改则回滚新密码条目，保留原文。迁移会移除公开摘要，避免原笔记摘要暴露机密；既有备份和外部副本不会因此删除。
+
+### 数据、备份与 macOS 迁移
+
+Linux 默认根目录为 `~/.local/share/rimes/capsule/`（可由 `RIMES_USER_DIR` / XDG 数据目录覆盖）。密码文档在 `passwords/<UUID>.md`，32 字节本机加密密钥为 `master-key`，自定义查看口令摘要为 `reveal-credential-v1`。目录 0700、文件 0600。升级、源码 `uninstall.sh` 和 deb 卸载均保留这些文件及词库、学习记录；备份密码必须同时保留文档和主密钥。
+
+文档使用与 macOS 相同的 ChaCha20-Poly1305 密文和认证元数据，可读取 v1 旧字段及 v2 正文，保存为 v2。已验证两个方向的实际读写。macOS 默认目录为 `~/Library/RIMES/capsule/`。手动迁移须先退出双方组件并备份，在**尚无密码数据的目标目录**成组复制 `master-key` 与 `passwords/`，再设置目标平台当前用户的目录/文件权限；不要覆盖已有主密钥或把两个不同密钥的目录直接合并。其他 Capsule 模块不因此获得目录直拷兼容。
+
+查看口令用于界面验证，与主密钥分开；更改口令不重新加密文档，不能替代操作系统账户和磁盘保护。macOS 将同一格式的口令摘要放在偏好 `capsule.passwordRevealPasscode.credential.v1`，Linux 放在上述私有文件。迁移文档不会自动迁移偏好：目标若没有凭据则使用默认四组口令，可在目标界面重新设置。不会自动上传、同步或把机密正文发送给 AI。
+
+功能、兼容及尚未完成的视觉/桌面验收见 [密码库验证](PASSWORD-VALIDATION.md)。

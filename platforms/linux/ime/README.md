@@ -48,18 +48,65 @@ Mailbox is still later. Buffer and Capsule behavior are specified in
   exiting. The lock file remains on disk; the OS releases ownership on exit.
 - Isolated user directory: `$XDG_DATA_HOME/rimes` (not `…/fcitx5/rime`)
 - Shared data: `$prefix/share/rimes/data` (policy-staged 57-file closure)
-- Default Buffer workbench (`Ctrl+Shift+B` / `Super+Shift+B`): Rime commits
+- Default Buffer workbench (configurable, default `Ctrl+Shift+B`): Rime commits
   stage as blocks, Return tap/hold and the paper plane send through the same
   `commitText` → `commitString` path
-- Capsule rail (`Ctrl+Shift+V` / `Super+Shift+V`): local Markdown notes,
-  seed card `RIMES 默认词条`, Return inserts the selected note through
-  `commitString` after an armed-IC recheck
+- Capsule rail (configurable, default `Ctrl+Shift+V`): structured/Bullet/rich
+  notes, grouped detail rows and opt-in clipboard history. Text uses native
+  `commitString` after an armed-IC recheck; rich clipboard items restore original
+  MIME formats for explicit paste. The GTK manager exposes read-only history
+  previews, copy, favorite and delete. Resources add reference metadata, file/PDF
+  previews and explicit attachment copies. Capture adds PNG screenshots and silent
+  VP8 WebM recording through X11 or desktop portals, with a private archive.
+  See [Capsule usage](../capsule/README.md).
 
 macOS-only behaviour that is **not** reproduced here: custom candidate chrome,
-Mailbox, Capsule clipboard history / iCloud / password vault / media kinds,
-Buffer plugins (AI / translation / stream / music), cross-batch chord pairing,
+Mailbox, Capsule iCloud / password vault, advanced capture editing and audio,
+Buffer stream/music plugins, cross-batch chord pairing,
 IMK `Delivery.insert`. See [`../buffer/SPEC.md`](../buffer/SPEC.md) and
 [`../capsule/SPEC.md`](../capsule/SPEC.md) for the explicit gap lists.
+Local Chinese/English translation, incremental units and OpenAI-compatible
+streaming requests are implemented; their desktop and visual acceptance is
+tracked separately in the parity plan.
+
+## Desktop launch and global shortcuts
+
+Use **XSIME Buffer**, **XSIME Capsule** or **XSIME Settings** from the application
+menu, even when another input method is selected. `rimes-launch buffer`,
+`rimes-launch capsule` and `rimes-launch settings` provide the same entry points
+for system custom shortcuts. They start Fcitx5 if necessary; add XSIME to its
+input-method group first. A workspace launch selects XSIME for the focused
+input context, waits for activation and then captures it. Changing focus or
+switching input methods in that interval cancels capture. Closing the workspace
+keeps the selected input method. With no focused input context, the workspace
+opens without a delivery target.
+
+In **Settings → Buffer → 快捷键**, click a recorder and press a combination.
+Escape cancels; unmodified Delete restores that action's default. Duplicate
+bindings and Ctrl/Super+A/V are rejected. The defaults and action titles are
+imported from macOS `ShortcutPreferences.swift`, mapping Command to Ctrl:
+Buffer `Ctrl+Shift+B`, Capsule `Ctrl+Shift+V`, settings `Ctrl+Shift+S`.
+Mailbox `Ctrl+Shift+M` is reserved in preferences and remains unavailable until
+the Mailbox host is installed. Super can be selected explicitly in the recorder.
+Global grabs pause during recording and resume on completion, cancellation,
+settings-process exit or a two-minute timeout.
+
+On X11, checked key grabs report conflicts; choose another combination or
+release the conflicting application's shortcut and click **重新绑定全局快捷键**.
+Caps Lock and Num Lock do not change a binding. On Wayland, the desktop's
+**GlobalShortcuts portal** asks for permission and controls the actual binding.
+The recorder displays that binding after authorization. Unsupported or declined
+portals remain visibly unavailable; use the desktop entries or bind the
+`rimes-launch` commands in the desktop's own custom-shortcut settings.
+There is no XWayland grab fallback. Turning off **在其他输入法中使用全局快捷键**
+retains shortcuts while XSIME itself is selected. Preferences survive restart
+and removal of the application.
+
+`rimes-launch --status` reports bindings and the most recent launch result;
+`rimes-launch --retry` retries registration. The launcher accepts fixed action
+names only. Source uninstall and deb removal include the new launcher and menu
+entries while preserving user preferences, dictionaries and learning data.
+See [shortcut validation and desktop limits](../runtime/SHORTCUTS-VALIDATION.md).
 
 ## Importing source schemes
 
@@ -155,7 +202,8 @@ fcitx5 -r
 ```
 
 Remove XSIME from the Fcitx5 input-method list as well. User dictionaries,
-learning records, imported schemes and Capsule notes remain in
+learning records, imported schemes, Capsule notes and original-format clipboard
+history/favorites remain in
 `${XDG_DATA_HOME:-$HOME/.local/share}/rimes`. Do not delete this directory
 when removing the application. If a source installation already exists,
 uninstall it with the instructions below before switching to the deb.
@@ -206,6 +254,7 @@ whose SHA-256 still matches, and then empty directories. If a managed file
 was edited or replaced by a symlink, it stops before deleting anything;
 move or restore that file and retry. Unrecorded files are preserved, including
 user dictionaries (`*.userdb`), `schemes/learning`, imported schemes, notes,
+`capsule/clipboard/history-v1.sqlite3` (history and favorites),
 runtime configuration and logs. It never recursively removes `share/rimes`
 or `~/.local`, and it does not remove the private engine or restart Fcitx5.
 `DESTDIR` is supported for staged installs and uninstalls.
@@ -235,6 +284,22 @@ Environment overrides used by tests and unusual layouts:
 | `RIMES_USER_DIR` | Isolated user dir (must not be the stock fcitx5-rime path) |
 | `RIMES_LOG_DIR` | librime log directory |
 
+## Desktop windows
+
+Buffer's empty toolbar folds/unfolds its content; drag it to move the panel.
+The function menu restores its position or moves it to a selected display.
+The number button cycles automatic delivery and the adjacent switch controls
+closing after the last delivered block. Both share the settings configuration.
+Repeated settings launches activate the existing settings window.
+
+X11 and Wayland layer-shell panels keep a fixed logical width and preserve
+their bottom edge when the second rail opens. Positions live in the private
+user-data `windows/` directory and survive upgrades and uninstall. A compositor
+without layer-shell uses XWayland when available. Without either placement
+backend, the compositor controls the window; return to the input field and
+reopen Buffer to capture it. See [window validation](../runtime/WINDOWS-VALIDATION.md)
+for tested environments and outstanding desktop/pixel comparisons.
+
 ## Packaging
 
 ```bash
@@ -244,9 +309,13 @@ platforms/linux/ime/scripts/package-deb.sh /tmp/rimes-deb
 
 writes `fcitx5-rimes_<version>_<arch>.deb` and its `.sha256` (addon + `rimes-buffer` +
 `rimes-buffer-ctl` + `rimes-capsule` + `rimes-capsule-ctl` + `rimes-schemes` + private Rime/Lua + reviewed data).
-The release package targets Ubuntu 24.04 amd64; install with `sudo apt install ./fcitx5-rimes_1.1.3_amd64.deb`. The package manager removes application files while user dictionaries remain in the user data directory.
-The package `Recommends: libgtk-layer-shell0, wl-clipboard` so a wlroots
-session can keep the rail overlay and copy notes without a GTK serial.
+The release package targets Ubuntu 24.04 amd64; install with `sudo apt install ./fcitx5-rimes_1.1.5_amd64.deb`. The package manager removes application files while user dictionaries remain in the user data directory.
+The package recommends `libgtk-layer-shell0`, `wl-clipboard` and the Inter/Noto
+fonts (including emoji). GStreamer base/good/PipeWire plugins and
+`xdg-desktop-portal` are runtime dependencies for capture. Install the portal
+backend appropriate to the desktop; GTK alone does not provide screen recording.
+A wlroots session can use `xdg-desktop-portal-wlr`. See
+[capture validation](../capsule/CAPTURE-VALIDATION.md) for tested paths and limits.
 Flatpak notes are in
 `packaging/flatpak/README.md`. The data preview tarball is a separate artifact
 and stays data-only.

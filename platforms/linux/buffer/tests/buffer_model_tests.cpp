@@ -19,6 +19,17 @@ void Expect(bool condition, const char* message) {
 }  // namespace
 
 int main() {
+    {
+        rimes::buffer::BufferModel source;
+        source.append("甲乙丙丁");
+        const auto id = source.blocks().front().id;
+        const auto original = source.staged_text();
+        Expect(!source.consume_source({{id, "乙", 4}}) && source.staged_text() == original, "partial UTF-8 range rejected without mutation");
+        Expect(!source.consume_source({{id, "乙丙", 3}, {id, "丙", 6}}), "overlapping ranges rejected atomically");
+        Expect(!source.consume_source({{id, "乙丙", 3}, {"missing", "值", 0}}) && source.staged_text() == original, "invalid second range cannot partially retire first");
+        Expect(source.consume_source({{id, "乙丙", 3}}) && source.staged_text() == "甲丁" && source.blocks().front().id == id, "exact source consumption preserves surrounding text and identity");
+        Expect(!source.consume_source({{id, "乙丙", 3}}), "source cannot be consumed twice");
+    }
     for (const auto* program : {"rimes-settings", "/usr/bin/rimes-settings", "org.scholay.rimes.settings", "org.scholay.rimes.settings.desktop", "/usr/libexec/rimes/rimes-buffer", "rimes-schemes"})
         Expect(rimes::buffer::IsCompanionApplication(program), "companion identity must preserve staging");
     for (const auto* program : {"", "editor", "rimes-settings-other", "org.scholay.rimes.settings.other", "/rimes-settings/editor"})

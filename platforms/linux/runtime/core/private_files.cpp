@@ -161,12 +161,12 @@ void PrivateDirectory::Remove(std::string_view name) const {
     if (unlinkat(fd_, filename.c_str(), 0) || fsync(fd_)) throw std::runtime_error("Cannot remove private file");
 }
 
-FileLock PrivateDirectory::Lock() const {
+FileLock PrivateDirectory::Lock(bool wait) const {
     Verify();
     FD file(openat(fd_, ".lock", O_RDWR | O_CREAT | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC, 0600));
     if (file.value < 0) throw std::runtime_error("Cannot open private lock");
     SafeFile(file.value);
-    while (flock(file.value, LOCK_EX)) { if (errno != EINTR) throw std::runtime_error("Cannot lock private storage"); }
+    while (flock(file.value, LOCK_EX | (wait ? 0 : LOCK_NB))) { if (errno != EINTR) throw std::runtime_error("Cannot lock private storage"); }
     const auto fd = file.value; file.value = -1;
     return FileLock(fd);
 }

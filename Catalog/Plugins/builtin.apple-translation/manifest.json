@@ -34,6 +34,10 @@
       "distribution": "bundled",
       "legacyID": "apple.translation"
     },
+    "linux": {
+      "distribution": "bundled",
+      "legacyID": "builtin.apple-translation"
+    },
     "macos": {
       "distribution": "bundled",
       "legacyID": "builtin.apple-translation"
@@ -48,5 +52,5 @@
   "sdkVersion": 1,
   "summaryEN": "Translation official plugin; user data remains owned by the RIMES host.",
   "summaryZH": "实时翻译官方插件；用户数据由 RIMES 宿主管理。",
-  "version": "2.2.0"
+  "version": "2.3.0"
 }

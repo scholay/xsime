@@ -9,6 +9,7 @@
 - `Sources/RimeBuffer/RimeUI.swift`：实际语义色、尺寸、字号、交互密度。
 - `SettingsWindow.swift`、`SettingsRouting.swift`：980×680 设置窗口，160 侧栏及同序路由、子页面、三列插件卡、两列主题卡。
 - `BufferWindowController.swift`、`BufferInlineView.swift`、`WorkbenchBarView.swift`：760 标准宽度、30 工具栏与 1 分隔线、2 外边距、73/105 高度、520–1100 宽度范围、源轨/结果轨、块下划线、状态与投递按钮。
+- `RimeFixedAccentSwitch.swift`：Buffer 紧凑开关的 26×15 轨道、28×17 控件、旋钮、颜色与按下状态；折叠内容后保留 35 高的工具栏。
 - `CapsuleWindowController.swift`、`CapsuleRailDetailView.swift`：五模块管理页、详情和底栏。
 - `Mailbox/`：收件、对话、终端、会话和附件预览。
 

@@ -27,7 +27,7 @@ public:
     double progress(std::chrono::steady_clock::time_point now) const;
 
     Action on_press(bool composing, bool is_repeat,
-                    std::chrono::steady_clock::time_point now);
+                    std::chrono::steady_clock::time_point now, bool send_on_press = false);
     Action on_release(std::chrono::steady_clock::time_point now);
     Action on_tick(std::chrono::steady_clock::time_point now);
     void cancel();
@@ -36,6 +36,7 @@ private:
     bool pending_ = false;
     bool settle_only_ = false;
     bool sent_all_ = false;
+    bool sent_next_ = false;
     std::chrono::steady_clock::time_point down_at_{};
 };
 

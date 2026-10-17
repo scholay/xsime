@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=XSIME Buffer
+Name[zh_CN]=XSIME 缓冲区
+Comment=Open the XSIME text workbench
+Exec=rimes-launch --dialog buffer
+Icon=rimes
+Terminal=false
+Type=Application
+Categories=Utility;
+StartupNotify=false

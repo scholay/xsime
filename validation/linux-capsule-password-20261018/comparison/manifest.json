@@ -1,0 +1,54 @@
+[
+  {
+    "page": "day-locked",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1880,
+      1320
+    ],
+    "changed_pixel_fraction": 0.15017045454545455,
+    "mean_absolute_channel_error": 4.553541935310553,
+    "pair": "day-locked-pair.png",
+    "difference_4x": "day-locked-diff.png"
+  },
+  {
+    "page": "night-locked",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1880,
+      1320
+    ],
+    "changed_pixel_fraction": 0.9952067214700193,
+    "mean_absolute_channel_error": 5.150517945411562,
+    "pair": "night-locked-pair.png",
+    "difference_4x": "night-locked-diff.png"
+  },
+  {
+    "page": "quiet-locked",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1880,
+      1320
+    ],
+    "changed_pixel_fraction": 0.6913781431334622,
+    "mean_absolute_channel_error": 5.7315584031807445,
+    "pair": "quiet-locked-pair.png",
+    "difference_4x": "quiet-locked-diff.png"
+  },
+  {
+    "page": "rasta-locked",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1880,
+      1320
+    ],
+    "changed_pixel_fraction": 0.9781536105738233,
+    "mean_absolute_channel_error": 5.084720341715022,
+    "pair": "rasta-locked-pair.png",
+    "difference_4x": "rasta-locked-diff.png"
+  }
+]

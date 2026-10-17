@@ -1,6 +1,9 @@
 #include "candidate_matrix_window.hpp"
+#include "session/protected_input.hpp"
 #include <algorithm>
+#include <cmath>
 #include <gtk/gtk.h>
+#include <gdk/gdkx.h>
 #include <gdk/gdkwayland.h>
 #ifdef HAVE_GTK_LAYER_SHELL
 #include <gtk-layer-shell.h>
@@ -34,6 +37,12 @@ public:
             if (!xdisplay) return false;
         }
         window = gtk_window_new(layer ? GTK_WINDOW_TOPLEVEL : GTK_WINDOW_POPUP);
+        g_signal_connect(window, "destroy", G_CALLBACK(+[](GtkWidget*, gpointer data) {
+            auto* self = static_cast<Impl*>(data);
+            self->window = nullptr; self->box = nullptr;
+            self->queuedSelection.reset(); self->queuedMove = 0; self->numbers.clear();
+            if (self->timer) self->timer->setEnabled(false);
+        }), this);
         if (xdisplay) gtk_window_set_screen(GTK_WINDOW(window), gdk_display_get_default_screen(xdisplay));
         gtk_window_set_accept_focus(GTK_WINDOW(window), FALSE);
         gtk_window_set_focus_on_map(GTK_WINDOW(window), FALSE);
@@ -104,7 +113,7 @@ std::optional<std::size_t> CandidateMatrixWindow::digit(std::size_t index) const
 }
 bool CandidateMatrixWindow::show(InputContext* ic, const CandidateNavigation& nav,
     std::function<void(std::size_t)> select, std::function<void(int)> move) {
-    if (!ic || !ic->hasFocus() || ic->capabilityFlags().test(CapabilityFlag::Password) || !impl_->ensure()) { hide(); return false; }
+    if (!ic || !ic->hasFocus() || ProtectedInput(ic->capabilityFlags()) || !impl_->ensure()) { hide(); return false; }
     impl_->timer->setTime(now(CLOCK_MONOTONIC) + 16000); impl_->timer->setOneShot();
     impl_->queuedSelection.reset(); impl_->queuedMove = 0;
     impl_->select = std::move(select); impl_->move = std::move(move); impl_->numbers.clear();
@@ -113,8 +122,20 @@ bool CandidateMatrixWindow::show(InputContext* ic, const CandidateNavigation& na
     g_list_free(old);
     GdkRectangle work{0, 0, 1024, 768};
     auto* display = gtk_widget_get_display(impl_->window);
-    const auto caret = ic->cursorRect();
-    auto* monitor = gdk_display_get_monitor_at_point(display, caret.left(), caret.top());
+    const auto raw = ic->cursorRect();
+    auto* monitor = gdk_display_get_primary_monitor(display);
+    if (!monitor && gdk_display_get_n_monitors(display)) monitor = gdk_display_get_monitor(display, 0);
+    const int scale = monitor ? std::max(1, gdk_monitor_get_scale_factor(monitor)) : 1;
+    const bool global = GDK_IS_X11_DISPLAY(display) && ic->display().rfind("x11:", 0) == 0 &&
+        !ic->capabilityFlags().test(CapabilityFlag::RelativeRect) &&
+        std::abs(static_cast<std::int64_t>(raw.left())) < 1000000 && std::abs(static_cast<std::int64_t>(raw.top())) < 1000000 &&
+        raw.width() >= 0 && raw.width() < 100000 && raw.height() >= 0 && raw.height() < 100000 &&
+        (raw.left() || raw.top() || raw.width() || raw.height());
+    GdkRectangle caret{static_cast<int>(std::floor(raw.left() / static_cast<double>(scale))),
+        static_cast<int>(std::floor(raw.top() / static_cast<double>(scale))),
+        static_cast<int>(std::ceil(raw.width() / static_cast<double>(scale))),
+        static_cast<int>(std::ceil(raw.height() / static_cast<double>(scale)))};
+    if (global) monitor = gdk_display_get_monitor_at_point(display, caret.x, caret.y);
     if (monitor) gdk_monitor_get_workarea(monitor, &work);
     const int available = std::max(80, std::min(640, work.width - 24));
     std::size_t flat = 0;
@@ -169,11 +190,16 @@ bool CandidateMatrixWindow::show(InputContext* ic, const CandidateNavigation& na
     }
     gtk_widget_show_all(impl_->window);
     GtkRequisition size{}; gtk_widget_get_preferred_size(impl_->window, nullptr, &size);
-    int x = std::clamp(caret.left(), work.x, std::max(work.x, work.x + work.width - size.width));
-    int y = caret.bottom() + 6;
-    if (y + size.height > work.y + work.height) y = caret.top() - size.height - 6;
+    int x = std::clamp(global ? caret.x : work.x + (work.width - size.width) / 2,
+                       work.x, std::max(work.x, work.x + work.width - size.width));
+    int y = global ? caret.y + caret.height + 6 : work.y + work.height - size.height - 48;
+    if (global && y + size.height > work.y + work.height) y = caret.y - size.height - 6;
     y = std::clamp(y, work.y, std::max(work.y, work.y + work.height - size.height));
-    gtk_window_move(GTK_WINDOW(impl_->window), x, y);
+    if (GDK_IS_X11_DISPLAY(display)) gtk_window_move(GTK_WINDOW(impl_->window), x, y);
+#ifdef HAVE_GTK_LAYER_SHELL
+    else if (gtk_layer_is_layer_window(GTK_WINDOW(impl_->window)) && monitor)
+        gtk_layer_set_monitor(GTK_WINDOW(impl_->window), monitor);
+#endif
     return true;
 }
 }

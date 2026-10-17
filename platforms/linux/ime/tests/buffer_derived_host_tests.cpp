@@ -1,5 +1,6 @@
 #include "buffer/buffer_service.hpp"
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <unistd.h>
@@ -12,6 +13,8 @@ int main() {
     const auto root = std::filesystem::path(path);
     setenv("RIMES_BUFFER_SOCKET", (root / "buffer.sock").c_str(), 1);
     setenv("RIMES_BUFFER_HEADLESS", "1", 1);
+    const auto dump_path = root / "snapshot.json";
+    setenv("RIMES_BUFFER_DUMP", dump_path.c_str(), 1);
     std::vector<std::function<void()>> posted;
     auto drain = [&] { while (!posted.empty()) { auto action = std::move(posted.front()); posted.erase(posted.begin()); action(); } };
     fcitx::BufferService::ResultFn late;
@@ -49,16 +52,26 @@ int main() {
             };
             prepare();
             Check(frozen.text == "原文🙂", "source not frozen");
-            late(0, "Translated", false, true); drain();
+            late({0, "Translated", false, true}); drain();
             Check(host.derived().Phase() == DerivedPhase::Running && host.derived().CopyText().empty(), "stream became sendable");
-            late(1, "Alternative", false, true); drain();
-            late(0, "Translated🙂", true, true); drain();
+            late({1, "Alternative", false, true}); drain();
+            late({0, "Translated🙂", true, true}); drain();
             Check(host.derived().CopyText() == "Translated🙂" && host.derived().Results().size() == 2, "results not retained");
             Check(host.model().staged_text() == "原文🙂", "generation consumed source");
             unavailable_configuration = true;
             Check(!host.Generate(), "invalid retry started");
             Check(host.derived().CopyText() == "Translated🙂", "failed retry erased ready results");
             unavailable_configuration = false;
+            prepare();
+            late({0, "private preview", false, true}); drain();
+            plugins.ApplyState("builtin.fixture", true, false);
+            // No intervening Publish: rejection itself must clear the UI.
+            late({0, "revoked preview", true, true}); drain();
+            std::ifstream snapshot_file(dump_path);
+            const std::string published((std::istreambuf_iterator<char>(snapshot_file)), std::istreambuf_iterator<char>());
+            Snapshot snapshot;
+            Check(ParseSnapshot(published, &snapshot) && snapshot.results.empty() && snapshot.result_blocks.empty() &&
+                  snapshot.phase != DerivedPhase::Running, "revoked AI preview remained in emitted UI snapshot");
             for (int scenario = 0; scenario < 7; ++scenario) {
                 prepare();
                 const auto previous = late;
@@ -72,20 +85,35 @@ int main() {
                 host.Publish();
                 if (scenario == 5) Check(host.model().visible(), "protected workbench lost its visible chrome");
                 Check(cancelled->load(), "worker was not cancelled");
-                previous(0, "late", true, true); drain();
+                previous({0, "late", true, true}); drain();
                 Check(host.derived().Results().empty(), "late result regained authority");
             }
             prepare();
-            late(0, "partial", false, true); drain();
-            late(0, "", true, false); drain();
+            late({0, "partial", false, true}); drain();
+            late({0, "", true, false}); drain();
             Check(host.derived().Phase() == DerivedPhase::Failed && host.derived().Results().empty(), "failed worker result survived");
             prepare();
-            late(0, "partial", false, true); drain();
-            late(0, "\xED\xA0\x80", true, true); drain();
+            late({0, "partial", false, true}); drain();
+            late({0, "\xED\xA0\x80", true, true}); drain();
             Check(host.derived().Phase() == DerivedPhase::Failed, "malformed output published partial success");
-            prepare(); // callback after host destruction must be harmless
+            prepare();
+            const auto before_lock = late;
+            host.OnSessionProtection(true);
+            Check(cancelled->load() && host.model().secure() && !host.model().visible(), "lock did not cancel/hide");
+            Check(!host.model().staged_text().empty(), "lock erased source");
+            host.OnPasswordField(nullptr, false);
+            Check(host.model().secure(), "field update overrode session protection");
+            before_lock({0, "late under lock", true, true}); drain();
+            Check(host.derived().Results().empty(), "lock accepted late output");
+            host.OnSessionProtection(false);
+            Check(host.model().visible() && !host.model().capture_enabled() && !host.Generate(), "unlock reused processing/target");
+            before_lock({0, "late after unlock", true, true}); drain();
+            Check(host.derived().Results().empty(), "unlock accepted pre-lock output");
+            host.ShowAndCapture(nullptr);
+            Check(host.Generate(), "explicit fresh detached request was unavailable");
+            // callback after host destruction must be harmless
         }
-        late(0, "after shutdown", true, true); drain();
+        late({0, "after shutdown", true, true}); drain();
         std::cout << "Derived host: frozen configuration/source, alternatives, revocation, failures and shutdown passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

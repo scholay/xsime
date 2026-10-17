@@ -86,7 +86,7 @@ does nothing under another IM (including stock `fcitx5-rime`). The
     session disarms. Insert via ctl / Return must not write into a
     different window.
 15. **Empty tabs.** 临时 / 捕获 / 图库 / 影集 / PDF / 技能 / 密码 show
-    the “not ported” hint. Switching tabs with Tab must not type a Tab
+    its module-specific empty state. Dedicated backends are tracked in #163–#167. Switching tabs with Tab must not type a Tab
     into the host.
 16. **Clipboard is edge-triggered.** Open Capsule, `Ctrl+C` so the
     clipboard is the selected note. In another app copy a sentinel
@@ -120,3 +120,12 @@ does nothing under another IM (including stock `fcitx5-rime`). The
 
 Mailbox, iCloud, clipboard-history capture, password chords, Capture,
 Image/PDF/Skill file paste, IBus, and a custom candidate window.
+
+## 五模块管理页补充验收
+
+- 在插件页逐个停用五模块，确认导航移除、在途操作失效、目录内容仍在；重新启用后恢复。
+- 从底栏进入管理页，编辑标题、摘要、类型和内容；Ctrl+S 保存，Esc 返回底栏且不保留输入目标。
+- 修改尚未保存时分别切换条目、模块、关闭窗口，确认取消后草稿不丢失；搜索不覆盖草稿。
+- 用外部编辑器修改同一 UUID 后保存旧草稿，应提示冲突并保留双方内容。
+- 锁屏/保护态隐藏编辑内容，恢复时保留进程内草稿，不自动保存或投递。
+- 测试 940×660、620×430、放大窗口及不同缩放；同一内容与 macOS 对照四主题。检查字体、图标、侧栏、编辑表单与焦点/选中态，不以窗口尺寸相同代替像素验收。

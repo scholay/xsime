@@ -39,6 +39,10 @@ struct Block {
     Origin origin = Origin::Rime;
     std::int64_t created_at_ms = 0;
 };
+struct SourceRange {
+    std::string block_id, text;
+    std::size_t offset = 0;
+};
 
 struct CaretRect {
     int x = 0;
@@ -109,6 +113,8 @@ public:
     bool select_all();
     void clear_selection();
     void consume_delivered(const std::vector<std::string>& ids);
+    bool matches_source(const std::vector<SourceRange>& ranges) const;
+    bool consume_source(const std::vector<SourceRange>& ranges);
 
     const Block* block(std::string_view id) const;
     std::vector<std::string> SplitSegments(std::string_view text) const;

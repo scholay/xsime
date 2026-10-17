@@ -462,6 +462,36 @@ void BufferModel::clear_selection() {
     Notify();
 }
 
+bool BufferModel::matches_source(const std::vector<SourceRange>& ranges) const {
+    if (ranges.empty()) return false;
+    for (std::size_t index = 0; index < ranges.size(); ++index) {
+        const auto& range = ranges[index];
+        const auto* source = block(range.block_id);
+        if (!source || range.text.empty() || range.offset > source->text.size() || range.text.size() > source->text.size() - range.offset ||
+            source->text.compare(range.offset, range.text.size(), range.text) != 0) return false;
+        const auto boundary = [&](std::size_t offset) { return offset == source->text.size() || (static_cast<unsigned char>(source->text[offset]) & 0xC0) != 0x80; };
+        if (!boundary(range.offset) || !boundary(range.offset + range.text.size())) return false;
+        for (std::size_t other = 0; other < index; ++other) {
+            const auto& previous = ranges[other];
+            if (previous.block_id == range.block_id && range.offset < previous.offset + previous.text.size() && previous.offset < range.offset + range.text.size()) return false;
+        }
+    }
+    return true;
+}
+bool BufferModel::consume_source(const std::vector<SourceRange>& ranges) {
+    if (!matches_source(ranges)) return false;
+    auto ordered = ranges;
+    std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) { return a.offset > b.offset; });
+    for (const auto& range : ordered)
+        for (auto& source : blocks_) if (source.id == range.block_id) { source.text.erase(range.offset, range.text.size()); break; }
+    finish_direct_run();
+    std::vector<std::string> empty;
+    for (const auto& source : blocks_) if (source.text.empty()) empty.push_back(source.id);
+    if (empty.empty()) Notify(MutationReason::Delivery);
+    else consume_delivered(empty);
+    return true;
+}
+
 void BufferModel::consume_delivered(const std::vector<std::string>& ids) {
     if (ids.empty()) {
         return;

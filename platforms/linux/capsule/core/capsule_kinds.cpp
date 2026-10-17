@@ -28,6 +28,7 @@ const char* KindRaw(Kind kind) {
             return "video";
         case Kind::Skill:
             return "skill";
+        case Kind::Resource: return "resource";
         case Kind::Password:
             return "password";
         case Kind::Retired:
@@ -48,6 +49,7 @@ const char* KindLabel(Kind kind) {
             return "影集";
         case Kind::Skill:
             return "技能";
+        case Kind::Resource: return "资源";
         case Kind::Password:
             return "密码";
         case Kind::Retired:
@@ -73,6 +75,7 @@ Kind KindFromRaw(std::string_view raw) {
     if (value == "skill") {
         return Kind::Skill;
     }
+    if (value == "resource") return Kind::Resource;
     if (value == "password") {
         return Kind::Password;
     }
@@ -95,6 +98,7 @@ const char* TabRaw(Tab tab) {
             return "pdf";
         case Tab::Skill:
             return "skill";
+        case Tab::Resource: return "resource";
         case Tab::Password:
             return "password";
     }
@@ -117,6 +121,7 @@ const char* TabLabel(Tab tab) {
             return KindLabel(Kind::Pdf);
         case Tab::Skill:
             return KindLabel(Kind::Skill);
+        case Tab::Resource: return KindLabel(Kind::Resource);
         case Tab::Password:
             return KindLabel(Kind::Password);
     }
@@ -146,6 +151,7 @@ Tab TabFromRaw(std::string_view raw) {
     if (value == "skill" || value == "技能") {
         return Tab::Skill;
     }
+    if (value == "resource") return Tab::Resource;
     if (value == "password" || value == "密码") {
         return Tab::Password;
     }
@@ -180,6 +186,7 @@ Kind KindForTab(Tab tab) {
             return Kind::Pdf;
         case Tab::Skill:
             return Kind::Skill;
+        case Tab::Resource: return Kind::Resource;
         case Tab::Password:
             return Kind::Password;
         case Tab::Recent:
@@ -205,6 +212,9 @@ std::string PreviewOf(std::string_view text) {
         if (static_cast<int>(out.size()) >= kPreviewLimit) {
             break;
         }
+    }
+    if (out.size() < text.size()) {
+        while (!out.empty() && (static_cast<unsigned char>(text[out.size()]) & 0xc0) == 0x80) out.pop_back();
     }
     return out;
 }

@@ -98,6 +98,11 @@ if [[ ! -x "$BUILD_DIR/rimes-buffer-fcitx-e2e" ]]; then
 fi
 echo "==> in-process Fcitx5 Buffer (stage / send / Return / hold / focus / destroy)"
 "$BUILD_DIR/rimes-buffer-fcitx-e2e" "$BUILD_DIR" "." "test-data"
+RIMES_TEST_AUTO_SEND=1 "$BUILD_DIR/rimes-buffer-fcitx-e2e" "$BUILD_DIR" "." "test-data"
+RIMES_TEST_SESSION_PROTECTION=1 RIMES_PRIVATE_SESSION_TEST=1 dbus-run-session -- \
+    "$BUILD_DIR/rimes-buffer-fcitx-e2e" "$BUILD_DIR" "." "test-data"
+RIMES_TEST_LAUNCHER=1 dbus-run-session -- \
+    "$BUILD_DIR/rimes-buffer-fcitx-e2e" "$BUILD_DIR" "." "test-data"
 
 if [[ ! -x "$BUILD_DIR/rimes-buffer-respawn-e2e" || ! -x "$BUILD_DIR/rimes-buffer-ui-stub" ]]; then
     echo "error: missing rimes-buffer-respawn-e2e or rimes-buffer-ui-stub" >&2

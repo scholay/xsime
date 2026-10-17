@@ -1,0 +1,47 @@
+{
+  "purpose": "public-parity-fixture",
+  "logical_size": [
+    940,
+    660
+  ],
+  "scale": 2,
+  "themes": [
+    "night",
+    "day",
+    "quiet",
+    "rasta"
+  ],
+  "state": "locked manager",
+  "status": "requires_review",
+  "native_command": ".build/out/Products/Debug/RimeBuffer capsule-password-visual-fixtures validation/linux-capsule-password-20261018/native",
+  "linux_command": "GDK_SCALE=2 GDK_DPI_SCALE=0.5 xvfb-run -a rimes-capsule --password-preview --theme THEME --render THEME-locked.png",
+  "native_focus": "offscreen; key-window interaction could not be acquired",
+  "linux_focus": "Xvfb render; interaction separately verified under Xfwm4",
+  "sources": {
+    "Sources/RimeBuffer/CapsulePasswordStore.swift": "a3e40fa5c43160cd3505d57aefb841a5d7bee435cea1e012f3a11ad1b551c02d",
+    "Sources/RimeBuffer/CapsuleRevealPasscode.swift": "c9a50fdb023109463faeb75bd5374f7a28fdc0f0c32f71f08f280a9900db2759",
+    "Sources/RimeBuffer/CapsuleWindowController.swift": "141d3924c225440e3692295885b620948793222d6b01c67fb14091ffe04f048d",
+    "Sources/RimeBuffer/CapsulePasswordVisualFixtures.swift": "d437940c1a3413458143e10c4896e3207f87aa4dd5a9793bff01afd3e19fc956",
+    "platforms/linux/capsule/ui/capsule_password_view.cpp": "4865d0ababfd65e243d35812bc277db1cc965d264c5bdafd508da48829b834ee",
+    "platforms/linux/capsule/ui/capsule_manager.cpp": "6dac4922144fb9b86041906672eb5a1a52dcfa3f4e923631d2b939511d87142b",
+    "platforms/linux/capsule/ui/rimes_capsule_app.cpp": "0be41fc199771eb5352d1365a7eeec2ba6c3a4900dc4a20aa84b21770aadb811"
+  },
+  "images": {
+    "comparison/day-locked-diff.png": "bafaebbd9424853e46c4502186c238150ef184504910dfd842df1646abfbad2b",
+    "comparison/day-locked-pair.png": "ec017af8d653a2a3c75ed8af59e34b0c2e1b2d4a9661e01203d65c895496508d",
+    "comparison/night-locked-diff.png": "b5f8e5f29a4fd5ef0eb67eb7075d7a64b57f3089ee9acbea0074c4f9e54914ab",
+    "comparison/night-locked-pair.png": "ec4df4339d2d89dfb70852de77f55b51cec5b3b8dd73d02ba76ab5a09676ba5d",
+    "comparison/quiet-locked-diff.png": "d6b8e0daeb1d538ebd9c000001b6c53a22ce3b3bd0a5cffd27908522249f93f8",
+    "comparison/quiet-locked-pair.png": "080ec3b471f75505b087a478371b678f6a16a97f2f3ad8c19fcc19aa95b8577a",
+    "comparison/rasta-locked-diff.png": "ca1ab825e9bbca6f9bc3b7c87e2c4252330f01d461bb2f5b6701f62ae8dcd425",
+    "comparison/rasta-locked-pair.png": "f2928458df9a5e7d8bf9072fd122a68b89982ca0fc067429cea498b0b8024c75",
+    "linux/day-locked.png": "131321bbe2b71ba1b5faba2d67f30fb43edccfa1fb99a6c99c31f1eb1d47749f",
+    "linux/night-locked.png": "4a108b0807c60a20114fbbd660a6da6c43bef2b34f4668814103c7de0772cd8d",
+    "linux/quiet-locked.png": "51c626e446aa90672e607d0125dfd7e069b5fd41340aa26fa90843fdc9d14f5e",
+    "linux/rasta-locked.png": "ac8a9363643bc9f6a3d0bf54f1ae9f429f0a66e5d70869edc3e0c02a8e25dd9d",
+    "native/day-locked.png": "9ed1a7854637d31ec7bfef00121b5bf50dabd19198a556ca35e3025757e605ec",
+    "native/night-locked.png": "b06a1e6e148e9c9f046c4c1e4fbfd1d71cac45df7806a012a772a31d4e5d5e6e",
+    "native/quiet-locked.png": "4ada07f1e4973e35ce6c439a008e733c91a1ac58c60ab684c2dec05dc6058e78",
+    "native/rasta-locked.png": "36f0be9be73c182654af217ace5fdf45c24b0730103cc28cf25ad2732b36f82b"
+  }
+}

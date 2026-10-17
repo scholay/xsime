@@ -10,12 +10,13 @@ import re
 ROOT = Path(__file__).resolve().parents[3]
 SOURCES = ["Sources/RimeBuffer/RimeUI.swift", "Sources/RimeBuffer/SettingsWindow.swift",
            "Sources/RimeBuffer/SettingsRouting.swift", "Sources/RimeBuffer/BufferWindowController.swift",
-           "Sources/RimeBuffer/BufferInlineView.swift"]
+           "Sources/RimeBuffer/BufferInlineView.swift", "Sources/RimeBuffer/ShortcutPreferences.swift",
+           "Sources/RimeBuffer/RimeFixedAccentSwitch.swift"]
 CATALOG = "Catalog/buffer-plugins.json"
 
 
 def extract():
-    ui, settings, routing, buffer, inline = [(ROOT / name).read_text() for name in SOURCES]
+    ui, settings, routing, buffer, inline, shortcuts, switches = [(ROOT / name).read_text() for name in SOURCES]
     native_fields = set(re.findall(r"let (\w+): UInt32", ui.split("struct RimeThemePalette")[1].split("enum RimeThemePalettes")[0]))
     palettes = {}
     for name in ("night", "day", "quiet", "rasta"):
@@ -24,6 +25,16 @@ def extract():
         palettes[name] = {key: "#" + (value[2:] if value != "productGreen" else "22C55E") for key, value in pairs}
         if set(palettes[name]) != native_fields:
             raise ValueError(f"Native palette contract changed: {name}; review before import")
+        # RimeThemePalette.accentText uses WCAG luminance, not a fixed green.
+        def luminance(hex_color):
+            rgb = [int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            linear = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
+            return sum(v * weight for v, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+        if ") >= 4.5 ? accentGreen : selectedCandidateBackground" not in ui:
+            raise ValueError("Review native accent text contrast policy")
+        palette = palettes[name]
+        lo, hi = sorted((luminance(palette["accentGreen"]), luminance(palette["surfaceSecondary"])))
+        palette["accentText"] = palette["accentGreen" if (hi + 0.05) / (lo + 0.05) >= 4.5 else "selectedCandidateBackground"]
     core = routing.split("enum SettingsCoreRoute:")[1].split("enum PluginManagementSubpage:")[0]
     ids = re.findall(r'case (\w+) = "([^"]+)"', core)
     titles = dict(re.findall(r'case \.(\w+): return "([^"]+)"', core.split("var symbolName")[0]))
@@ -55,13 +66,32 @@ def extract():
         "controlSize": number(r"enum BufferWorkbenchMetrics.*?controlSize: CGFloat = (\d+)", buffer.replace("\n", " ")),
     }
     for name, field in (("bufferMinimumWidth", "standardMinimumWidth"), ("bufferMaximumWidth", "standardMaximumWidth"),
-                        ("bufferHeight", "expandedHeight"), ("bufferDerivedHeight", "translationExpandedHeight")):
+                        ("bufferHeight", "expandedHeight"), ("bufferDerivedHeight", "translationExpandedHeight"),
+                        ("bufferToolbarOnlyHeight", "toolbarOnlyHeight")):
         metrics[name] = number(r"static let " + field + r": CGFloat = (\d+)", buffer)
+    metrics["compactSwitchTrackWidth"] = number(r"isCompact \? NSSize\(width: (\d+)", switches)
+    metrics["compactSwitchTrackHeight"] = number(r"isCompact \? NSSize\(width: \d+, height: (\d+)", switches)
+    metrics["switchControlInset"] = number(r"NSSize\(width: trackSize.width \+ (\d+)", switches)
+    metrics["switchKnobInset"] = number(r"let inset: CGFloat = (\d+)", switches)
     for field in ("controlSize", "chromeInset", "mainHorizontalInset", "shelfHorizontalInset"):
         metrics[field] = number(r"static let " + field + r": CGFloat = (\d+)", buffer)
     for field in ("blockSpacing", "railHorizontalInset", "itemHeight", "blockUnderlineWidth", "selectedBlockUnderlineWidth"):
         metrics[field] = number(r"static let " + field + r": CGFloat = (\d+)", inline)
     chrome = settings.split("private enum SettingsVisualStyle")[1].split("private enum SettingsPluginSwitchMode")[0]
+    shortcut_rows = settings.split("private func shortcutSettingsView()", 1)[1].split("private func candidateMetricRow", 1)[0]
+    for name, pattern in {
+        "shortcutTitleFont": r"titleLabel.font = .systemFont\(ofSize: (\d+)",
+        "shortcutTitleMaxWidth": r"titleLabel.widthAnchor.constraint\(lessThanOrEqualToConstant: (\d+)",
+        "shortcutRowWidth": r"row.widthAnchor.constraint\(equalToConstant: (\d+)",
+        "shortcutControlSpacing": r"row.spacing = (\d+)",
+        "shortcutInsetVertical": r"NSEdgeInsets\(top: (\d+)",
+        "shortcutInsetHorizontal": r"NSEdgeInsets\(top: \d+, left: (\d+)",
+        "shortcutRowSpacing": r"stack.spacing = (\d+)",
+    }.items(): metrics[name] = number(pattern, shortcut_rows)
+    metrics["shortcutRecorderFont"] = number(r"font = .monospacedSystemFont\(ofSize: (\d+)", shortcuts)
+    metrics["shortcutRecorderMinWidth"] = number(r"widthAnchor.constraint\(greaterThanOrEqualToConstant: (\d+)", shortcuts)
+    metrics["settingsCardRadius"] = number(r"cardRadius: CGFloat \{ RimeUI.isLiquidGlass \? \d+ : (\d+)", chrome)
+    metrics["settingsGlassCardRadius"] = number(r"cardRadius: CGFloat \{ RimeUI.isLiquidGlass \? (\d+)", chrome)
     for name, palette in palettes.items():
         for key, field in (("settingsBackground", "background"), ("settingsSeparator", "separator")):
             match = re.search(r"static var " + field + r".*?RimeUI.isDark \? (0x[0-9A-Fa-f]+) : (0x[0-9A-Fa-f]+)", chrome, re.S)

@@ -1,4 +1,5 @@
 import Cocoa
+import CryptoKit
 import Carbon.HIToolbox
 
 private final class ClipboardUnreadableDataProvider: NSObject,
@@ -19,6 +20,75 @@ private final class ClipboardUnreadableDataProvider: NSObject,
 /// the user's NSPasteboard or registers the global shortcut.
 @MainActor
 enum ClipboardHistorySmoke {
+    /// Export behavior from the production model using an isolated pasteboard
+    /// double. Linux consumes these semantic fixtures through native MIME names.
+    static func exportLinuxParityFixtures(to path: String) -> Bool {
+        struct Sample {
+            let name: String
+            let native: [[String: String]]
+            let linux: [(String, String)]
+        }
+        let samples: [Sample] = [
+            .init(name: "plain", native: [["public.utf8-plain-text": "中文\n第二行"]],
+                  linux: [("text/plain", "中文\n第二行")]),
+            .init(name: "plain-url", native: [["public.utf8-plain-text": "https://example.com"]],
+                  linux: [("text/plain", "https://example.com")]),
+            .init(name: "url", native: [["public.url": "https://example.com/path"]],
+                  linux: [("text/uri-list", "https://example.com/path\r\n")]),
+            .init(name: "image-with-caption", native: [["public.png": "image bytes", "public.utf8-plain-text": "caption"]],
+                  linux: [("image/png", "image bytes"), ("text/plain", "caption")]),
+            .init(name: "single-image-file", native: [["public.file-url": "file:///tmp/a%20b.PNG"]],
+                  linux: [("text/uri-list", "file:///tmp/a%20b.PNG\r\n")]),
+            .init(name: "multiple-files", native: [["public.file-url": "file:///tmp/a.png"], ["public.file-url": "file:///tmp/b.pdf"]],
+                  linux: [("text/uri-list", "file:///tmp/a.png\r\nfile:///tmp/b.pdf\r\n")]),
+            .init(name: "opaque", native: [["application/x-fixture": "opaque bytes"]],
+                  linux: [("application/x-fixture", "opaque bytes")]),
+        ]
+        do {
+            var rows: [[String: Any]] = []
+            for sample in samples {
+                let board = ClipboardHistoryPasteboardDouble()
+                board.usesAsynchronousArchive = true
+                let model = ClipboardHistoryModel(configuration: .init(), pasteboard: board,
+                    sourceApplicationName: { "Fixture" }, schedulesAutomaticPolling: false)
+                model.start()
+                model.update(windowVisible: true, captureEnabled: true, protection: [])
+                _ = model.pollNow()
+                board.stubArchive = try ClipboardPasteboardArchive(items: sample.native.map { item in
+                    .init(types: item.keys.sorted(), dataByType: item.mapValues { Data($0.utf8) })
+                })
+                board.stubChangeCount += 1
+                _ = model.pollNow()
+                board.completeAsynchronousRead()
+                let deadline = Date(timeIntervalSinceNow: 3)
+                while model.items.isEmpty, Date() < deadline {
+                    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+                }
+                guard let item = model.items.first else { return false }
+                rows.append([
+                    "name": sample.name,
+                    "representations": sample.linux.map { ["type": $0.0, "base64": Data($0.1.utf8).base64EncodedString()] },
+                    "kind": item.kind.rawValue,
+                    "text": item.canonicalText ?? "",
+                    "filter": CapsuleModuleClassification.clipboard(item).rawValue,
+                ])
+                model.stop()
+            }
+            let paths = ["Sources/RimeBuffer/ClipboardHistoryModel.swift",
+                         "Sources/RimeBuffer/ClipboardPasteboardArchive.swift",
+                         "Sources/RimeBuffer/ClipboardHistorySmoke.swift",
+                         "OfficialPlugins/native/macos/CapsuleModules.swift"]
+            let sources = try Dictionary(uniqueKeysWithValues: paths.map { source in
+                (source, SHA256.hash(data: try Data(contentsOf: URL(fileURLWithPath: source)))
+                    .map { String(format: "%02x", $0) }.joined())
+            })
+            let data = try JSONSerialization.data(withJSONObject: ["sources": sources, "cases": rows],
+                                                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            return true
+        } catch { return false }
+    }
+
     static func renderPreview(to path: String) -> Bool {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "rimes-clipboard-preview-\(UUID().uuidString)",

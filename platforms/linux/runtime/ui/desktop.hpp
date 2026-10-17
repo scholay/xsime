@@ -6,7 +6,7 @@
 namespace rimes::desktop {
 using Json = runtime::Json;
 const Json &Visuals();
-void Theme(const std::string &name);
+void Theme(const std::string &name, GdkScreen *screen = nullptr);
 GtkWidget *Class(GtkWidget *widget, const char *name);
 GtkWidget *Label(const std::string &text, const char *style = nullptr);
 GtkWidget *Button(const std::string &title, std::function<void()> clicked,
@@ -14,6 +14,7 @@ GtkWidget *Button(const std::string &title, std::function<void()> clicked,
 GtkWidget *Icon(const std::string &name, int size = 20);
 GtkWidget *IconButton(const std::string &icon, const std::string &label,
                       std::function<void()> clicked);
+GtkWidget *CompactSwitch(const std::string &label, std::function<void()> clicked);
 GtkWidget *ThemeCard(const std::string &theme, const std::string &title,
                      bool selected, std::function<void()> clicked);
 GtkWidget *Column(int spacing = 8);

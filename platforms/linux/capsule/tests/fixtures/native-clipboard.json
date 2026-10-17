@@ -1,0 +1,98 @@
+{
+  "cases" : [
+    {
+      "filter" : "text",
+      "kind" : "text",
+      "name" : "plain",
+      "representations" : [
+        {
+          "base64" : "5Lit5paHCuesrOS6jOihjA==",
+          "type" : "text/plain"
+        }
+      ],
+      "text" : "中文\n第二行"
+    },
+    {
+      "filter" : "text",
+      "kind" : "text",
+      "name" : "plain-url",
+      "representations" : [
+        {
+          "base64" : "aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+          "type" : "text/plain"
+        }
+      ],
+      "text" : "https://example.com"
+    },
+    {
+      "filter" : "text",
+      "kind" : "link",
+      "name" : "url",
+      "representations" : [
+        {
+          "base64" : "aHR0cHM6Ly9leGFtcGxlLmNvbS9wYXRoDQo=",
+          "type" : "text/uri-list"
+        }
+      ],
+      "text" : "https://example.com/path"
+    },
+    {
+      "filter" : "image",
+      "kind" : "image",
+      "name" : "image-with-caption",
+      "representations" : [
+        {
+          "base64" : "aW1hZ2UgYnl0ZXM=",
+          "type" : "image/png"
+        },
+        {
+          "base64" : "Y2FwdGlvbg==",
+          "type" : "text/plain"
+        }
+      ],
+      "text" : ""
+    },
+    {
+      "filter" : "image",
+      "kind" : "files",
+      "name" : "single-image-file",
+      "representations" : [
+        {
+          "base64" : "ZmlsZTovLy90bXAvYSUyMGIuUE5HDQo=",
+          "type" : "text/uri-list"
+        }
+      ],
+      "text" : "file:///tmp/a%20b.PNG"
+    },
+    {
+      "filter" : "other",
+      "kind" : "files",
+      "name" : "multiple-files",
+      "representations" : [
+        {
+          "base64" : "ZmlsZTovLy90bXAvYS5wbmcNCmZpbGU6Ly8vdG1wL2IucGRmDQo=",
+          "type" : "text/uri-list"
+        }
+      ],
+      "text" : "file:///tmp/a.png\nfile:///tmp/b.pdf"
+    },
+    {
+      "filter" : "other",
+      "kind" : "unknown",
+      "name" : "opaque",
+      "representations" : [
+        {
+          "base64" : "b3BhcXVlIGJ5dGVz",
+          "type" : "application/x-fixture"
+        }
+      ],
+      "text" : ""
+    }
+  ],
+  "sources" : {
+    "OfficialPlugins/native/macos/CapsuleModules.swift" : "d78809394546e6ea3daa863eed25f29dd0824435cc68311f60ec62ac9661038e",
+    "Sources/RimeBuffer/ClipboardHistoryModel.swift" : "af436199957efe7c8f3aff9ba81446f30b2c45c596f32d4f231aff8011790cf0",
+    "Sources/RimeBuffer/ClipboardHistorySmoke.swift" : "70aa71f434626c44d4a0db476689d942197e9863d4582b9a1ca7d110dce148a9",
+    "Sources/RimeBuffer/ClipboardPasteboardArchive.swift" : "39118d473cdd5b8c98a04a5fb6556479573d01d5c7b921c28529872fee6c6229"
+  }
+}

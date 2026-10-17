@@ -75,17 +75,31 @@ int main() {
     dual.phase = rimes::buffer::DerivedPhase::Ready;
     dual.results = {{"result", "Result includes ],{ and 中文🙂", 0, true}};
     dual.selected_result = "result";
+    dual.result_blocks = {{"child-1", "Result includes ", rimes::buffer::Origin::Local, 0},
+                          {"child-2", "],{ and 中文🙂", rimes::buffer::Origin::Local, 0}};
     rimes::buffer::Snapshot decoded;
     Expect(rimes::buffer::ParseSnapshot(rimes::buffer::EncodeSnapshot(dual), &decoded), "dual snapshot round trip");
     Expect(decoded.results.size() == 1 && decoded.results.front().text == dual.results.front().text &&
            decoded.blocks.front().text == snapshot.blocks.front().text, "nested arrays and Unicode remain distinct");
+    Expect(decoded.result_blocks.size() == 2 && decoded.result_blocks.back().text == "],{ and 中文🙂",
+           "derived segment ranges preserve Unicode text without duplicate transport");
+    auto invalid_parts = dual;
+    invalid_parts.result_blocks[0].text += "x";
+    Expect(!rimes::buffer::ParseSnapshot(rimes::buffer::EncodeSnapshot(invalid_parts), &decoded), "invalid result segment lengths rejected");
     Expect(!rimes::buffer::ParseSnapshot(R"({"type":"snapshot","visible":"true"})", &decoded), "wrong snapshot types rejected");
     dual.secure = true;
+    dual.target = "private-target"; dual.caret = {123, 456, 20, 30, true};
+    dual.target = "private-target-name";
     const auto protected_dual = rimes::buffer::EncodeSnapshot(dual);
     Expect(protected_dual.find("Result includes") == std::string::npos && protected_dual.find("你好") == std::string::npos,
            "protected snapshot scrubs both rails");
-    Expect(rimes::buffer::ParseSnapshot(protected_dual, &decoded) && decoded.results.empty() && decoded.blocks.empty(),
+    Expect(protected_dual.find("private-target-name") == std::string::npos, "protected IPC scrubs target identity before rendering");
+    Expect(rimes::buffer::ParseSnapshot(protected_dual, &decoded) && decoded.results.empty() && decoded.blocks.empty() && decoded.result_blocks.empty(),
            "protected renderer has no plaintext");
+    Expect(decoded.target.empty() && !decoded.caret.valid && protected_dual.find("private-target") == std::string::npos,
+           "protected target/caret leaked");
+    dual.secure = false; dual.password_field = true;
+    Expect(rimes::buffer::EncodeSnapshot(dual).find("private-target") == std::string::npos, "password-only target leaked");
     std::string unescaped;
     Expect(rimes::buffer::JsonUnescape(R"(\u4f60\u597d\ud83d\ude42)", &unescaped) && unescaped == "你好🙂",
            "Capsule shared unescape preserves Unicode");

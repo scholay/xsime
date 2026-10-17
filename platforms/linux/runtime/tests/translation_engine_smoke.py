@@ -16,6 +16,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("binary", type=Path)
     parser.add_argument("--cache", type=Path)
+    parser.add_argument("--fcitx-build", type=Path)
+    parser.add_argument("--shared-data", type=Path)
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="xsime-translation-engine-") as directory:
         root = Path(directory)
@@ -57,6 +59,11 @@ def main():
         assert invoke({"op": "install"}, offline=True)["state"] == "ready", "Verified archive repair must work offline"
         assert not list(translation.glob(".staging-*"))
         print("Real pinned engine: bilingual inference, restart, unsupported language, damage refusal and offline repair passed")
+        if args.fcitx_build:
+            assert args.shared_data and args.shared_data.is_dir(), "Fcitx test requires staged Rime data"
+            build = args.fcitx_build.resolve()
+            environment = dict(env, RIMES_SHARED_DIR=str(args.shared_data.resolve()), RIMES_TEST_TRANSLATION_RESOURCES=str(translation))
+            subprocess.run([str(build / "rimes-buffer-fcitx-e2e"), str(build), ".", "test-data"], env=environment, timeout=210, check=True)
 
 
 if __name__ == "__main__":

@@ -614,6 +614,60 @@ if CommandLine.arguments.contains("buffer-smoke") {
 if CommandLine.arguments.contains("buffer-window-smoke") {
     exit(runBufferWindowSmokeTest() ? 0 : 1)
 }
+if let index = CommandLine.arguments.firstIndex(where: { $0 == "capsule-password-linux-fixtures" || $0 == "capsule-password-linux-verify" }),
+   CommandLine.arguments.indices.contains(index + 1) {
+    do {
+        try MainActor.assumeIsolated {
+            let target = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+            if CommandLine.arguments[index] == "capsule-password-linux-fixtures" { try CapsulePasswordLinuxFixtures.export(to: target) }
+            else { try CapsulePasswordLinuxFixtures.verifyLinux(at: target) }
+        }
+        exit(0)
+    } catch { fputs("Public password fixture operation failed\n", stderr); exit(1) }
+}
+
+if let index = CommandLine.arguments.firstIndex(of: "capsule-password-visual-fixtures"),
+   CommandLine.arguments.indices.contains(index + 1) {
+    _ = NSApplication.shared
+    exit(MainActor.assumeIsolated {
+        do { try CapsulePasswordVisualFixtures.export(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])); return 0 }
+        catch { fputs("Password visual fixture export failed\n", stderr); return 1 }
+    })
+}
+if let index = CommandLine.arguments.firstIndex(of: "capture-linux-fixtures"),
+   CommandLine.arguments.indices.contains(index + 1) {
+    _ = NSApplication.shared
+    do {
+        try MainActor.assumeIsolated {
+            try CaptureLinuxFixtures.export(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+        }
+        exit(0)
+    } catch { fputs("Capture fixture export failed: \(error)\n", stderr); exit(1) }
+}
+
+if let index = CommandLine.arguments.firstIndex(of: "capsule-resources-preview"),
+   CommandLine.arguments.indices.contains(index + 1) {
+    _ = NSApplication.shared
+    exit(MainActor.assumeIsolated {
+        CapsuleReferenceLinuxFixtures.renderManager(to: CommandLine.arguments[index + 1])
+    } ? 0 : 1)
+}
+
+if let index = CommandLine.arguments.firstIndex(of: "capsule-reference-linux-fixtures"),
+   CommandLine.arguments.indices.contains(index + 1) {
+    do {
+        try CapsuleReferenceLinuxFixtures.export(to: CommandLine.arguments[index + 1])
+        exit(0)
+    } catch { fputs("Capsule reference fixture export failed\n", stderr); exit(1) }
+}
+
+if let index = CommandLine.arguments.firstIndex(of: "clipboard-linux-fixtures"),
+   CommandLine.arguments.indices.contains(index + 1) {
+    _ = NSApplication.shared
+    exit(MainActor.assumeIsolated {
+        ClipboardHistorySmoke.exportLinuxParityFixtures(to: CommandLine.arguments[index + 1])
+    } ? 0 : 1)
+}
 if CommandLine.arguments.contains("clipboard-history-smoke") {
     _ = NSApplication.shared
     exit(MainActor.assumeIsolated { ClipboardHistorySmoke.run() } ? 0 : 1)

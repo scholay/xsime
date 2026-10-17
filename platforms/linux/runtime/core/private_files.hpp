@@ -36,7 +36,7 @@ public:
     std::optional<std::string> Read(std::string_view name, std::size_t limit) const;
     void Write(std::string_view name, std::string_view bytes) const;
     void Remove(std::string_view name) const;
-    FileLock Lock() const;
+    FileLock Lock(bool wait = true) const;
     const std::filesystem::path& Path() const { return path_; }
 
 private:

@@ -1,0 +1,21 @@
+{
+  "logical_size": [
+    940,
+    660
+  ],
+  "scale": 2,
+  "themes": [
+    "night",
+    "day",
+    "quiet",
+    "rasta"
+  ],
+  "status": "requires_review",
+  "fixture": "Production resource editors with the same missing portable PDF bookmark and complete reference metadata. No personal data.",
+  "sources": {
+    "Sources/RimeBuffer/CapsuleReference.swift": "5cb819cbae91d5e229e0c43c5e409bd9460efba1b502199c53dda2c28be4fcaf",
+    "Sources/RimeBuffer/CapsuleReferenceLinuxFixtures.swift": "6ace72d405bad27cd19af4c447cf0ea5094647bfcb660f294661d87884ef1e05",
+    "platforms/linux/capsule/ui/capsule_resource_editor.cpp": "ec52e01cef8957a6573b3805d1ab96ea66dbe0d67ee7f67545ffd7e91ab73f43",
+    "platforms/linux/capsule/ui/capsule_manager.cpp": "d39c9a8d12848015ecfd31560fac79d12d743b0ae13cc7d8411b2d400224c14c"
+  }
+}

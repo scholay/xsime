@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=XSIME Capsule
+Name[zh_CN]=XSIME 胶囊
+Comment=Open XSIME notes and clipboard history
+Exec=rimes-launch --dialog capsule
+Icon=rimes
+Terminal=false
+Type=Application
+Categories=Utility;
+StartupNotify=false

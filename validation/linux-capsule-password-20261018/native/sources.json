@@ -1,0 +1,9 @@
+{
+  "purpose" : "public-parity-fixture",
+  "sources" : {
+    "Sources\/RimeBuffer\/CapsulePasswordVisualFixtures.swift" : "d437940c1a3413458143e10c4896e3207f87aa4dd5a9793bff01afd3e19fc956",
+    "Sources\/RimeBuffer\/CapsuleRevealPasscode.swift" : "c9a50fdb023109463faeb75bd5374f7a28fdc0f0c32f71f08f280a9900db2759",
+    "Sources\/RimeBuffer\/CapsuleWindowController.swift" : "141d3924c225440e3692295885b620948793222d6b01c67fb14091ffe04f048d"
+  },
+  "state" : "locked manager"
+}
