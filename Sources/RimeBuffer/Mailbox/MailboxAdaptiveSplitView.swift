@@ -20,7 +20,7 @@ final class MailboxAdaptiveSplitView: NSView {
     var visibilityChanged: ((Bool, Bool) -> Void)?
 
     init(sidebar: NSView, main: NSView, inspector: NSView? = nil,
-         sidebarWidth: CGFloat = 216, sidebarBreakpoint: CGFloat = 760) {
+         sidebarWidth: CGFloat = MailboxUI.chatListWidth, sidebarBreakpoint: CGFloat = MailboxUI.sidebarBreakpoint) {
         self.sidebar = sidebar; self.main = main; self.inspector = inspector
         self.sidebarWidth = sidebarWidth; self.sidebarBreakpoint = sidebarBreakpoint
         super.init(frame: .zero)

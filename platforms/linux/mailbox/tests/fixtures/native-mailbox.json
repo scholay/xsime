@@ -1,0 +1,654 @@
+{
+  "cases": [
+    {
+      "filter": "all",
+      "ids": [
+        "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65"
+      ],
+      "module": "chat",
+      "query": ""
+    },
+    {
+      "filter": "all",
+      "ids": [
+        "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65"
+      ],
+      "module": "chat",
+      "query": "公开"
+    },
+    {
+      "filter": "all",
+      "ids": [],
+      "module": "chat",
+      "query": "不会自动"
+    },
+    {
+      "filter": "all",
+      "ids": [],
+      "module": "chat",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "unread",
+      "ids": [
+        "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65"
+      ],
+      "module": "chat",
+      "query": ""
+    },
+    {
+      "filter": "unread",
+      "ids": [
+        "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65"
+      ],
+      "module": "chat",
+      "query": "公开"
+    },
+    {
+      "filter": "unread",
+      "ids": [],
+      "module": "chat",
+      "query": "不会自动"
+    },
+    {
+      "filter": "unread",
+      "ids": [],
+      "module": "chat",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "attention",
+      "ids": [],
+      "module": "chat",
+      "query": ""
+    },
+    {
+      "filter": "attention",
+      "ids": [],
+      "module": "chat",
+      "query": "公开"
+    },
+    {
+      "filter": "attention",
+      "ids": [],
+      "module": "chat",
+      "query": "不会自动"
+    },
+    {
+      "filter": "attention",
+      "ids": [],
+      "module": "chat",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "chat",
+      "query": ""
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "chat",
+      "query": "公开"
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "chat",
+      "query": "不会自动"
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "chat",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "all",
+      "ids": [
+        "c1913f45-cd0b-459d-8e23-0560291585da"
+      ],
+      "module": "inbox",
+      "query": ""
+    },
+    {
+      "filter": "all",
+      "ids": [
+        "c1913f45-cd0b-459d-8e23-0560291585da"
+      ],
+      "module": "inbox",
+      "query": "公开"
+    },
+    {
+      "filter": "all",
+      "ids": [
+        "c1913f45-cd0b-459d-8e23-0560291585da"
+      ],
+      "module": "inbox",
+      "query": "不会自动"
+    },
+    {
+      "filter": "all",
+      "ids": [],
+      "module": "inbox",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "unread",
+      "ids": [
+        "c1913f45-cd0b-459d-8e23-0560291585da"
+      ],
+      "module": "inbox",
+      "query": ""
+    },
+    {
+      "filter": "unread",
+      "ids": [
+        "c1913f45-cd0b-459d-8e23-0560291585da"
+      ],
+      "module": "inbox",
+      "query": "公开"
+    },
+    {
+      "filter": "unread",
+      "ids": [
+        "c1913f45-cd0b-459d-8e23-0560291585da"
+      ],
+      "module": "inbox",
+      "query": "不会自动"
+    },
+    {
+      "filter": "unread",
+      "ids": [],
+      "module": "inbox",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "attention",
+      "ids": [
+        "c1913f45-cd0b-459d-8e23-0560291585da"
+      ],
+      "module": "inbox",
+      "query": ""
+    },
+    {
+      "filter": "attention",
+      "ids": [
+        "c1913f45-cd0b-459d-8e23-0560291585da"
+      ],
+      "module": "inbox",
+      "query": "公开"
+    },
+    {
+      "filter": "attention",
+      "ids": [
+        "c1913f45-cd0b-459d-8e23-0560291585da"
+      ],
+      "module": "inbox",
+      "query": "不会自动"
+    },
+    {
+      "filter": "attention",
+      "ids": [],
+      "module": "inbox",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "archived",
+      "ids": [
+        "cf6b418c-19da-4264-aa14-3a60d6060e9d"
+      ],
+      "module": "inbox",
+      "query": ""
+    },
+    {
+      "filter": "archived",
+      "ids": [
+        "cf6b418c-19da-4264-aa14-3a60d6060e9d"
+      ],
+      "module": "inbox",
+      "query": "公开"
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "inbox",
+      "query": "不会自动"
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "inbox",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "all",
+      "ids": [],
+      "module": "terminal",
+      "query": ""
+    },
+    {
+      "filter": "all",
+      "ids": [],
+      "module": "terminal",
+      "query": "公开"
+    },
+    {
+      "filter": "all",
+      "ids": [],
+      "module": "terminal",
+      "query": "不会自动"
+    },
+    {
+      "filter": "all",
+      "ids": [],
+      "module": "terminal",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "unread",
+      "ids": [],
+      "module": "terminal",
+      "query": ""
+    },
+    {
+      "filter": "unread",
+      "ids": [],
+      "module": "terminal",
+      "query": "公开"
+    },
+    {
+      "filter": "unread",
+      "ids": [],
+      "module": "terminal",
+      "query": "不会自动"
+    },
+    {
+      "filter": "unread",
+      "ids": [],
+      "module": "terminal",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "attention",
+      "ids": [],
+      "module": "terminal",
+      "query": ""
+    },
+    {
+      "filter": "attention",
+      "ids": [],
+      "module": "terminal",
+      "query": "公开"
+    },
+    {
+      "filter": "attention",
+      "ids": [],
+      "module": "terminal",
+      "query": "不会自动"
+    },
+    {
+      "filter": "attention",
+      "ids": [],
+      "module": "terminal",
+      "query": "不存在的查询"
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "terminal",
+      "query": ""
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "terminal",
+      "query": "公开"
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "terminal",
+      "query": "不会自动"
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "terminal",
+      "query": "不存在的查询"
+    }
+  ],
+  "document": {
+    "nextSequence": 4,
+    "schemaVersion": 1,
+    "threads": [
+      {
+        "createdAt": 721692800,
+        "generation": {
+          "expectedFormat": "plain",
+          "finishedAt": 721692800,
+          "id": "0BAC9031-0F9D-4709-BA48-8A6C8DFD2F54",
+          "phase": "succeeded",
+          "startedAt": 721692800
+        },
+        "id": "430AD9B1-0A57-4BA2-9501-A3DDD37B3D65",
+        "messages": [
+          {
+            "author": "你",
+            "body": "你好，这是公开样例。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "54CC2210-51B8-4F36-9FBE-80CB33B9B7F5",
+            "kind": "content",
+            "role": "user"
+          },
+          {
+            "author": "OpenAI API",
+            "body": "## 本地工作区\n\n会话、消息和草稿各自保存。",
+            "createdAt": 721692800,
+            "format": "markdown",
+            "id": "F1A0A8D8-0F1F-4D32-9C97-CCC10424E9FC",
+            "kind": "content",
+            "role": "inbound"
+          }
+        ],
+        "sequence": 1,
+        "source": {
+          "displayName": "OpenAI API",
+          "identifier": "public-fixture",
+          "kind": "openAICompatible",
+          "model": "public-model",
+          "replyCapability": "aiContinuation"
+        },
+        "title": "公开测试对话",
+        "unread": true,
+        "updatedAt": 721692800
+      },
+      {
+        "createdAt": 721692800,
+        "id": "C1913F45-CD0B-459D-8E23-0560291585DA",
+        "messages": [
+          {
+            "author": "公开测试来源",
+            "body": "这是公开的本地测试消息。\n\n收件不会自动回复来源。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "3050A636-37DA-4C8F-9064-D7C986566087",
+            "kind": "content",
+            "role": "inbound"
+          },
+          {
+            "author": "你",
+            "body": "先在本机记录备注。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "E48D66FB-FA61-4716-9C6F-DF75BDBC506D",
+            "kind": "localNote",
+            "role": "user"
+          }
+        ],
+        "review": {
+          "messageID": "3050A636-37DA-4C8F-9064-D7C986566087",
+          "state": "pending"
+        },
+        "sequence": 2,
+        "source": {
+          "displayName": "公开测试来源",
+          "identifier": "公开测试来源",
+          "kind": "http",
+          "replyCapability": "localNotesOnly"
+        },
+        "title": "收到一份新的反馈",
+        "unread": true,
+        "updatedAt": 721692800
+      },
+      {
+        "archivedAt": 721692800,
+        "createdAt": 721692800,
+        "id": "CF6B418C-19DA-4264-AA14-3A60D6060E9D",
+        "messages": [
+          {
+            "author": "公开测试客户端",
+            "body": "已保留的公开历史。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "7DC860D0-1E80-4EB9-813F-D803CBE8915F",
+            "kind": "content",
+            "role": "inbound"
+          }
+        ],
+        "review": {
+          "messageID": "7DC860D0-1E80-4EB9-813F-D803CBE8915F",
+          "state": "pending"
+        },
+        "sequence": 3,
+        "source": {
+          "displayName": "公开测试客户端",
+          "identifier": "公开测试客户端",
+          "kind": "mcp",
+          "replyCapability": "localNotesOnly"
+        },
+        "title": "已归档的样例",
+        "unread": false,
+        "updatedAt": 721692800
+      }
+    ]
+  },
+  "legacy": {
+    "nextSequence": 4,
+    "schemaVersion": 1,
+    "threads": [
+      {
+        "createdAt": 721692800,
+        "generation": {
+          "expectedFormat": "plain",
+          "finishedAt": 721692800,
+          "id": "0BAC9031-0F9D-4709-BA48-8A6C8DFD2F54",
+          "phase": "succeeded",
+          "startedAt": 721692800
+        },
+        "id": "430AD9B1-0A57-4BA2-9501-A3DDD37B3D65",
+        "messages": [
+          {
+            "author": "你",
+            "body": "你好，这是公开样例。",
+            "createdAt": 721692800,
+            "id": "54CC2210-51B8-4F36-9FBE-80CB33B9B7F5",
+            "role": "user"
+          },
+          {
+            "author": "OpenAI API",
+            "body": "## 本地工作区\n\n会话、消息和草稿各自保存。",
+            "createdAt": 721692800,
+            "id": "F1A0A8D8-0F1F-4D32-9C97-CCC10424E9FC",
+            "role": "inbound"
+          }
+        ],
+        "sequence": 1,
+        "source": {
+          "displayName": "OpenAI API",
+          "identifier": "public-fixture",
+          "kind": "openAICompatible",
+          "model": "public-model",
+          "replyCapability": "aiContinuation"
+        },
+        "title": "公开测试对话",
+        "unread": true,
+        "updatedAt": 721692800
+      },
+      {
+        "createdAt": 721692800,
+        "id": "C1913F45-CD0B-459D-8E23-0560291585DA",
+        "messages": [
+          {
+            "author": "公开测试来源",
+            "body": "这是公开的本地测试消息。\n\n收件不会自动回复来源。",
+            "createdAt": 721692800,
+            "id": "3050A636-37DA-4C8F-9064-D7C986566087",
+            "role": "inbound"
+          },
+          {
+            "author": "你",
+            "body": "先在本机记录备注。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "E48D66FB-FA61-4716-9C6F-DF75BDBC506D",
+            "kind": "localNote",
+            "role": "user"
+          }
+        ],
+        "review": {
+          "messageID": "3050A636-37DA-4C8F-9064-D7C986566087",
+          "state": "pending"
+        },
+        "sequence": 2,
+        "source": {
+          "displayName": "公开测试来源",
+          "identifier": "公开测试来源",
+          "kind": "http",
+          "replyCapability": "localNotesOnly"
+        },
+        "title": "收到一份新的反馈",
+        "unread": true,
+        "updatedAt": 721692800
+      },
+      {
+        "createdAt": 721692800,
+        "id": "CF6B418C-19DA-4264-AA14-3A60D6060E9D",
+        "messages": [
+          {
+            "author": "公开测试客户端",
+            "body": "已保留的公开历史。",
+            "createdAt": 721692800,
+            "id": "7DC860D0-1E80-4EB9-813F-D803CBE8915F",
+            "role": "inbound"
+          }
+        ],
+        "review": {
+          "messageID": "7DC860D0-1E80-4EB9-813F-D803CBE8915F",
+          "state": "pending"
+        },
+        "sequence": 3,
+        "source": {
+          "displayName": "公开测试客户端",
+          "identifier": "公开测试客户端",
+          "kind": "mcp",
+          "replyCapability": "localNotesOnly"
+        },
+        "title": "已归档的样例",
+        "unread": false,
+        "updatedAt": 721692800
+      }
+    ]
+  },
+  "metrics": {
+    "chatListWidth": 216,
+    "contentInset": 16,
+    "defaultHeight": 700,
+    "defaultWidth": 1000,
+    "inboxListWidth": 232,
+    "minimumHeight": 500,
+    "minimumWidth": 680,
+    "navigationHeight": 56,
+    "navigationWidth": 48,
+    "railWidth": 64,
+    "rowHeight": 84,
+    "sidebarBreakpoint": 760
+  },
+  "modules": [
+    {
+      "filters": [
+        "all"
+      ],
+      "id": "terminal",
+      "symbol": "terminal",
+      "title": "终端"
+    },
+    {
+      "filters": [
+        "all",
+        "unread",
+        "attention",
+        "archived"
+      ],
+      "id": "chat",
+      "symbol": "bubble.left",
+      "title": "对话"
+    },
+    {
+      "filters": [
+        "all",
+        "unread",
+        "attention",
+        "archived"
+      ],
+      "id": "inbox",
+      "symbol": "tray",
+      "title": "收件"
+    }
+  ],
+  "palettes": {
+    "day": {
+      "accent": "rgba(74,117,92,1.0)",
+      "background": "rgba(255,255,255,1.0)",
+      "control": "rgba(255,255,255,1.0)",
+      "label": "rgba(0,0,0,0.8470588235294118)",
+      "secondary": "rgba(0,0,0,0.4980392156862745)",
+      "selection": "rgba(224,235,222,1.0)",
+      "separator": "rgba(0,0,0,0.09803921568627451)",
+      "sidebar": "rgba(244,245,242,1.0)",
+      "tertiary": "rgba(0,0,0,0.25882352941176473)"
+    },
+    "night": {
+      "accent": "rgba(148,189,166,1.0)",
+      "background": "rgba(30,30,30,1.0)",
+      "control": "rgba(30,30,30,1.0)",
+      "label": "rgba(255,255,255,0.8470588235294118)",
+      "secondary": "rgba(255,255,255,0.5490196078431373)",
+      "selection": "rgba(59,79,66,1.0)",
+      "separator": "rgba(255,255,255,0.09803921568627451)",
+      "sidebar": "rgba(36,41,38,1.0)",
+      "tertiary": "rgba(255,255,255,0.24705882352941178)"
+    },
+    "quiet": {
+      "accent": "rgba(148,189,166,1.0)",
+      "background": "rgba(30,30,30,1.0)",
+      "control": "rgba(30,30,30,1.0)",
+      "label": "rgba(255,255,255,0.8470588235294118)",
+      "secondary": "rgba(255,255,255,0.5490196078431373)",
+      "selection": "rgba(59,79,66,1.0)",
+      "separator": "rgba(255,255,255,0.09803921568627451)",
+      "sidebar": "rgba(36,41,38,1.0)",
+      "tertiary": "rgba(255,255,255,0.24705882352941178)"
+    },
+    "rasta": {
+      "accent": "rgba(148,189,166,1.0)",
+      "background": "rgba(30,30,30,1.0)",
+      "control": "rgba(30,30,30,1.0)",
+      "label": "rgba(255,255,255,0.8470588235294118)",
+      "secondary": "rgba(255,255,255,0.5490196078431373)",
+      "selection": "rgba(59,79,66,1.0)",
+      "separator": "rgba(255,255,255,0.09803921568627451)",
+      "sidebar": "rgba(36,41,38,1.0)",
+      "tertiary": "rgba(255,255,255,0.24705882352941178)"
+    }
+  },
+  "purpose": "public-parity-fixture",
+  "selectedChat": "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65",
+  "selectedInbox": "c1913f45-cd0b-459d-8e23-0560291585da",
+  "sources": {
+    "OfficialPlugins/plugins/mailbox.chat/plugin.json": "6f3f9391c59d6edb8251494b098638335a68f60a467e7ff843a7bf705217e1e5",
+    "OfficialPlugins/plugins/mailbox.inbox/plugin.json": "91801be8a90c5e39657e807b5220c518998e4c8ad774da240857b604582fbd9d",
+    "OfficialPlugins/plugins/mailbox.terminal/plugin.json": "21bd7f24002fde11d19972abe74c88fc2f7946a05ac5f22ed7e9f4db3a909088",
+    "Sources/RimeBuffer/Mailbox/MailboxAdaptiveSplitView.swift": "8e3eeb75fe185faaac1ce19f410c1a3e4cdc0b428c79e1c4c92e632fee571f45",
+    "Sources/RimeBuffer/Mailbox/MailboxLinuxFixtures.swift": "02e35b4c4d7dac6b0f99d323cba6a8cecc3e626ad7b4c172553c93b72b5187de",
+    "Sources/RimeBuffer/Mailbox/MailboxMessagesWorkspace.swift": "f4974a7e63cf8aae428713f3afd768543027fc24cd75a0594f6ec3ce81509107",
+    "Sources/RimeBuffer/Mailbox/MailboxModels.swift": "5269e2f8965235c57b01ecde28115a62882e2151a22a039c360ec63c1bd04c60",
+    "Sources/RimeBuffer/Mailbox/MailboxModules.swift": "9d03fa00da11812b5aa31d8dcbcc0aeba13087c348cfc2ebc25d3b54f4b8b77f",
+    "Sources/RimeBuffer/Mailbox/MailboxStore.swift": "150d1ce8224e73b7a41a69a94a270bb34447996e529d1e8300cc7ec15188c8bf",
+    "Sources/RimeBuffer/Mailbox/MailboxWorkspaceUI.swift": "a45caecf4705ef0286b0f7550f1bd6b0b1f7a69b93ca5540011e2168b9de618c",
+    "Sources/RimeBuffer/Mailbox/MailboxWorkspaceViewController.swift": "404bb3c78b1bc3e7468dc23f94ea1932736d1e0fc8ae7f80eda65b413c1f2d84",
+    "Sources/RimeBuffer/RimeUI.swift": "80a1a1046687fd469c8627489f4e9f93ec348a4ff35e4e8228e896464a9b1516"
+  }
+}

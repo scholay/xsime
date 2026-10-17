@@ -9,6 +9,7 @@ private final class MailboxSmokeWindow: NSWindow {
 /// Isolated native UI + PTY test. Fixtures never enter the user's Mailbox and
 /// no provider is called. Optional PNGs are real AppKit renders of the module.
 func runMailboxWorkspaceSmoke(output: URL? = nil) -> Bool {
+    defer { OfficialPluginSmokePreferences.clear() }
     struct Failure: LocalizedError {
         let message: String
         var errorDescription: String? { message }

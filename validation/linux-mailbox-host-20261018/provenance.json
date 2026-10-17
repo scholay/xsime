@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "task": 18,
+  "status": "requires_review",
+  "themes": [
+    "night",
+    "day",
+    "quiet",
+    "rasta"
+  ],
+  "modules": [
+    "terminal",
+    "chat",
+    "inbox"
+  ],
+  "logicalSizes": [
+    [
+      1000,
+      700
+    ],
+    [
+      680,
+      500
+    ]
+  ],
+  "scale": 2,
+  "timezone": "Asia/Tokyo",
+  "content": "public fixtures only",
+  "native": {
+    "renderer": "production AppKit workspace, offscreen",
+    "buildLog": ".build/linux-parity-20261017/task18-native-build7.log",
+    "command": "RimeBuffer mailbox-linux-fixtures validation/linux-mailbox-host-20261018/native",
+    "sources": {
+      "OfficialPlugins/plugins/mailbox.chat/plugin.json": "6f3f9391c59d6edb8251494b098638335a68f60a467e7ff843a7bf705217e1e5",
+      "OfficialPlugins/plugins/mailbox.inbox/plugin.json": "91801be8a90c5e39657e807b5220c518998e4c8ad774da240857b604582fbd9d",
+      "OfficialPlugins/plugins/mailbox.terminal/plugin.json": "21bd7f24002fde11d19972abe74c88fc2f7946a05ac5f22ed7e9f4db3a909088",
+      "Sources/RimeBuffer/Mailbox/MailboxAdaptiveSplitView.swift": "8e3eeb75fe185faaac1ce19f410c1a3e4cdc0b428c79e1c4c92e632fee571f45",
+      "Sources/RimeBuffer/Mailbox/MailboxLinuxFixtures.swift": "02e35b4c4d7dac6b0f99d323cba6a8cecc3e626ad7b4c172553c93b72b5187de",
+      "Sources/RimeBuffer/Mailbox/MailboxMessagesWorkspace.swift": "f4974a7e63cf8aae428713f3afd768543027fc24cd75a0594f6ec3ce81509107",
+      "Sources/RimeBuffer/Mailbox/MailboxModels.swift": "5269e2f8965235c57b01ecde28115a62882e2151a22a039c360ec63c1bd04c60",
+      "Sources/RimeBuffer/Mailbox/MailboxModules.swift": "9d03fa00da11812b5aa31d8dcbcc0aeba13087c348cfc2ebc25d3b54f4b8b77f",
+      "Sources/RimeBuffer/Mailbox/MailboxStore.swift": "150d1ce8224e73b7a41a69a94a270bb34447996e529d1e8300cc7ec15188c8bf",
+      "Sources/RimeBuffer/Mailbox/MailboxWorkspaceUI.swift": "a45caecf4705ef0286b0f7550f1bd6b0b1f7a69b93ca5540011e2168b9de618c",
+      "Sources/RimeBuffer/Mailbox/MailboxWorkspaceViewController.swift": "404bb3c78b1bc3e7468dc23f94ea1932736d1e0fc8ae7f80eda65b413c1f2d84",
+      "Sources/RimeBuffer/RimeUI.swift": "80a1a1046687fd469c8627489f4e9f93ec348a4ff35e4e8228e896464a9b1516"
+    }
+  },
+  "linux": {
+    "renderer": "production GTK workspace, offscreen Xvfb",
+    "buildLog": ".build/linux-parity-20261017/task18-host-build11.log",
+    "command": "TZ=Asia/Tokyo xvfb-run -a rimes-mailbox --render-fixture platforms/linux/mailbox/tests/fixtures/native-mailbox.json --render-dir OUTPUT",
+    "renderingSources": {
+      "platforms/linux/mailbox/ui/main.cpp": "314c0e7e978d0914e8411b988a728d33b809ba15d1720d3216b14e3e6fcb9c46",
+      "platforms/linux/mailbox/ui/mailbox_workspace.cpp": "5b3e2265f1f62d3552993adf54d104e988fb9d7c2deec4366cce4cf69abfae5e",
+      "platforms/linux/mailbox/ui/mailbox_workspace.hpp": "f13ce3207c35d9762b0adb0ff37b0e11f83d4b887e02ad91612ce988800f8570",
+      "platforms/linux/runtime/ui/desktop.cpp": "7e9a3ba60891b2cf3c97abcb3487bb046eda8e7021326d9886f5c2dfe15a403d",
+      "platforms/linux/mailbox/resources/native-mailbox.json": "8f5f8933241065878e488a72d78d966ce2014aec276399db6ef588551f00f78c"
+    }
+  },
+  "package": {
+    "name": "fcitx5-rimes_1.1.5_arm64.deb",
+    "sha256": "c59deb7dba9c9351e16d03fc28249d2ed3c2e225a58570d757c1dcae46e08cb8",
+    "buildLog": ".build/linux-parity-20261017/task18-deb2.log",
+    "ctestPassed": 67
+  },
+  "files": {
+    "native/day-chat-compact.png": "3ecdd408f21ed3b9b6594892804b386b462a350dbfd46a54cdb26915317c471a",
+    "native/day-chat-wide.png": "088e9a5786ae8266d3543441ec429a6f2e15639fbaa01df1a318762680a2b1e6",
+    "native/day-inbox-compact.png": "aa051f75ce083645c96824d3ae23e123103492a0ca22f8470a0d9b2cd2fe0a03",
+    "native/day-inbox-wide.png": "5740ded67635b24e584892981cdcc70eb742c9fa7bd81ace29ed26f903b2af87",
+    "native/day-terminal-compact.png": "57af72a01208413cc8676d4d871da66bc8e0ec3bda166171f0f512f9e6961f60",
+    "native/day-terminal-wide.png": "8b004d8a3a6600e2341121e0b09b3b89937c364bd557117ae01d086561b9e4ea",
+    "native/native-mailbox.json": "0b8a250bf0113b74018783fcab92b02b7fbb866aeb848970a217f9f1dcc87aa5",
+    "native/night-chat-compact.png": "268285d0f4c8390cb50b69614a257c9636b7fc620bfad82f78384ae680410599",
+    "native/night-chat-wide.png": "ba94d419317ba69b5e41c20baa0c090a9d34625398f7fa5e9a6add448d2431fd",
+    "native/night-inbox-compact.png": "6c164140f726877d6b358b0e3eb4dd3accb9cad901df1f97536d6e923b05f2a7",
+    "native/night-inbox-wide.png": "8aa145908cec63f8f2fa1a3bc9bf123fd1d6f8d766c96e9a8c6b0d21a6658714",
+    "native/night-terminal-compact.png": "d46a92d31f91823579e16e99ed81fa9fd508e2e79bf1a3aaae48d06f97a4ff32",
+    "native/night-terminal-wide.png": "8cbd338353ab3ef8e41901145e26e3ffc3a27387bd8d9f8bcfc3622a156a0075",
+    "native/quiet-chat-compact.png": "268285d0f4c8390cb50b69614a257c9636b7fc620bfad82f78384ae680410599",
+    "native/quiet-chat-wide.png": "ba94d419317ba69b5e41c20baa0c090a9d34625398f7fa5e9a6add448d2431fd",
+    "native/quiet-inbox-compact.png": "6c164140f726877d6b358b0e3eb4dd3accb9cad901df1f97536d6e923b05f2a7",
+    "native/quiet-inbox-wide.png": "8aa145908cec63f8f2fa1a3bc9bf123fd1d6f8d766c96e9a8c6b0d21a6658714",
+    "native/quiet-terminal-compact.png": "d46a92d31f91823579e16e99ed81fa9fd508e2e79bf1a3aaae48d06f97a4ff32",
+    "native/quiet-terminal-wide.png": "8cbd338353ab3ef8e41901145e26e3ffc3a27387bd8d9f8bcfc3622a156a0075",
+    "native/rasta-chat-compact.png": "268285d0f4c8390cb50b69614a257c9636b7fc620bfad82f78384ae680410599",
+    "native/rasta-chat-wide.png": "ba94d419317ba69b5e41c20baa0c090a9d34625398f7fa5e9a6add448d2431fd",
+    "native/rasta-inbox-compact.png": "6c164140f726877d6b358b0e3eb4dd3accb9cad901df1f97536d6e923b05f2a7",
+    "native/rasta-inbox-wide.png": "8aa145908cec63f8f2fa1a3bc9bf123fd1d6f8d766c96e9a8c6b0d21a6658714",
+    "native/rasta-terminal-compact.png": "d46a92d31f91823579e16e99ed81fa9fd508e2e79bf1a3aaae48d06f97a4ff32",
+    "native/rasta-terminal-wide.png": "8cbd338353ab3ef8e41901145e26e3ffc3a27387bd8d9f8bcfc3622a156a0075",
+    "linux/day-chat-compact.png": "ba31c31c15a4997ba39eaf61a3f5a8d135879fb8276f450096dc45289c8ec3ec",
+    "linux/day-chat-wide.png": "3c39087f12eb53fa9dac4204cb2ed0a44d334249a8ae7f6c0e5350397bb079b2",
+    "linux/day-inbox-compact.png": "8efc27328384a0cae2a046e36dbb4386bc1ccff34d62ffa042ecc58fd8a5c24a",
+    "linux/day-inbox-wide.png": "9f36c0de3cb17bed9d8d1e198c136ade9453fca7823fc97c48c59c90f1d20044",
+    "linux/day-terminal-compact.png": "b976e7cd151a42ec875af36fdd449e37a7aaf01dc88be78cca7875a636f15da6",
+    "linux/day-terminal-wide.png": "6a50ba68e51bef19aaa95cb8a9c15defb25e889f249ef8a1af30065e37e8d739",
+    "linux/night-chat-compact.png": "a210b0a2e53f24b8e8d8d6259bd7793a4560c4a2e612083771a21b01ab67ebdf",
+    "linux/night-chat-wide.png": "d05cc9dc9e7c0bb5549f6ec8fa453f4c3f275d0767f545b36f4dc095fd35499b",
+    "linux/night-inbox-compact.png": "3eed6dfeca42d8d3cc6eaec3b1883b757dff36ecd4d618bb0f0bbb5ec0663453",
+    "linux/night-inbox-wide.png": "c88bf12eb99185d2c6b834209bb2361601d974540a31add136ef24465b7fc32e",
+    "linux/night-terminal-compact.png": "98d853925495c8773c7c9f430952b933ac5e1c1bfa11166b4cac393b4b7e632a",
+    "linux/night-terminal-wide.png": "273ef0570e26a9916e39b0593494ff5106ea51abb9877a43d12d5c0e7374f094",
+    "linux/quiet-chat-compact.png": "db8fe1adce6c5bd4372b7bb72ce1dbdd0f257978c2437418dd00b58e3596450d",
+    "linux/quiet-chat-wide.png": "6e0cbe9e1f855e0d9b37474a5a7e5121d959681cd1d18548ad9afe54d7b4e576",
+    "linux/quiet-inbox-compact.png": "b53641d17aaf341e5c49275bef3bdfbfafe838af56863c178ca747c3652d7a40",
+    "linux/quiet-inbox-wide.png": "aac890173244761ceb218cdb34ce26d6cf26f53d633999a981887a6114be082d",
+    "linux/quiet-terminal-compact.png": "67d728d18fba95ca8b73b39de3c8fd724890696a6db95c51af1c17aad50c054e",
+    "linux/quiet-terminal-wide.png": "a5c77fef707a63802e24243f2ab6491162c6a28301793685fcd08499676ad1b5",
+    "linux/rasta-chat-compact.png": "ca04b6cb10894b9dc65e96d1ba134edb1463bda709fb0f6b44195f9dc1fe858c",
+    "linux/rasta-chat-wide.png": "7e1945bef1bac47e43754f4532cd3bbff2fc3799b6da575b305394089a0268df",
+    "linux/rasta-inbox-compact.png": "168a13e9e1c37eb01065f887f227f53b64d3d69f5d51055ff190f36ee374046d",
+    "linux/rasta-inbox-wide.png": "a54c2d860eae90e312b60622aa345bb1fb90409852d8dde5cca8316caa049521",
+    "linux/rasta-terminal-compact.png": "b38e1616f149ad71a2e31e7897d5591881520fa2df8bb4db53b2379f59ed81da",
+    "linux/rasta-terminal-wide.png": "7ef423b52d33b04fd923f2989db86a50e6437dda7985f8b1ac791b03e5efb4f6",
+    "linux/renders.json": "18802b81c461f4ef7b890858b4df75c4f34e5e22290ca7f284c1a87fbb017378",
+    "linux-roundtrip/linux-public-fixture.json": "baa40a4674c9d97171a20bdbb5cdbbda6a9a2b73975c7e2d0e64e2ece4e30f0b",
+    "linux-roundtrip/mailbox/images/67cd60c8-d0a1-43e7-9b36-cb6601d8fdcf.png": "1cd2fdb333687561e971297ece4327bb10dae27399d76d17c3a2e9f06b8c5357",
+    "linux-roundtrip/mailbox/mailbox.json": "a1196a2dcfd83bd9592f373d80e59d01fb3b86528a77183263bc64c21eed5af9"
+  }
+}

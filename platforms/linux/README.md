@@ -8,7 +8,7 @@ Linux 现在有两层，互相独立：
    暂存后再上屏；Capsule 用本机 Markdown 笔记库，经 `commitString` 插入选中笔记。
    规格见 [buffer/SPEC.md](buffer/SPEC.md) 与 [capsule/SPEC.md](capsule/SPEC.md)，
    真机清单见各自 `MANUAL-TEST.md` 与 [ime/MANUAL-TEST.md](ime/MANUAL-TEST.md)。
-   Mailbox 尚未移植。
+   **[Mailbox](mailbox/README.md)** 已有独立 GTK 窗口、三模块导航和兼容会话存储；AI 对话、PTY 与收件流转按后续任务继续接入。
 2. **下面的 Data / Input-Schemes Preview** — 仍把同一批 57 个审核文件装进用户已有的
    Fcitx5 Rime 或 IBus Rime。数据包保持原样，不依赖上面的 addon。
 

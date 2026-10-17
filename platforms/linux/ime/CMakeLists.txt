@@ -90,6 +90,20 @@ target_compile_definitions(RimesCapsuleCore PRIVATE RIMES_CAPSULE_CAPTURE_PATH="
 set_target_properties(RimesCapsuleCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 rimes_harden(RimesCapsuleCore)
 
+set(RIMES_MAILBOX_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../mailbox")
+add_library(RimesMailboxCore STATIC "${RIMES_MAILBOX_ROOT}/core/mailbox_store.cpp")
+target_include_directories(RimesMailboxCore PUBLIC "${RIMES_MAILBOX_ROOT}/core")
+target_link_libraries(RimesMailboxCore PUBLIC RimesCapsuleCore)
+set_target_properties(RimesMailboxCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
+rimes_harden(RimesMailboxCore)
+if(BUILD_TESTING)
+    add_executable(rimes-mailbox-store-tests "${RIMES_MAILBOX_ROOT}/tests/mailbox_store_tests.cpp")
+    target_link_libraries(rimes-mailbox-store-tests PRIVATE RimesMailboxCore)
+    target_compile_definitions(rimes-mailbox-store-tests PRIVATE RIMES_MAILBOX_FIXTURE="${RIMES_MAILBOX_ROOT}/tests/fixtures/native-mailbox.json")
+    rimes_harden(rimes-mailbox-store-tests)
+    add_test(NAME mailbox-store COMMAND rimes-mailbox-store-tests)
+endif()
+
 add_library(RimesEngine STATIC
     src/engine/rime_engine.cpp
     src/engine/rime_key.cpp
@@ -155,6 +169,8 @@ if(RIMES_BUILD_FCITX5)
         RIMES_PRODUCT_VERSION="${RIMES_PRODUCT_VERSION}"
         RIMES_INSTALLED_SETTINGS="${CMAKE_INSTALL_FULL_BINDIR}/rimes-settings"
         RIMES_BUILD_SETTINGS="${CMAKE_BINARY_DIR}/runtime/rimes-settings"
+        RIMES_INSTALLED_MAILBOX="${CMAKE_INSTALL_FULL_BINDIR}/rimes-mailbox"
+        RIMES_BUILD_MAILBOX="${CMAKE_BINARY_DIR}/rimes-mailbox"
     )
     set_target_properties(rimes PROPERTIES
         PREFIX ""
@@ -195,6 +211,27 @@ if(RIMES_BUILD_FCITX5)
     # silently build an addon whose advertised import entry is absent.
     pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
     if(GTK3_FOUND)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_custom_target(RimesMailboxContract ALL
+            COMMAND "${Python3_EXECUTABLE}" "${RIMES_MAILBOX_ROOT}/verify_native_contract.py"
+            VERBATIM)
+        file(READ "${RIMES_MAILBOX_ROOT}/resources/native-mailbox.json" RIMES_MAILBOX_TOKENS)
+        configure_file("${RIMES_MAILBOX_ROOT}/ui/mailbox_tokens.hpp.in" "${CMAKE_CURRENT_BINARY_DIR}/generated/mailbox_tokens.hpp" @ONLY)
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${RIMES_MAILBOX_ROOT}/resources/native-mailbox.json")
+        add_library(RimesMailboxUI STATIC "${RIMES_MAILBOX_ROOT}/ui/mailbox_workspace.cpp")
+        target_include_directories(RimesMailboxUI PUBLIC "${RIMES_MAILBOX_ROOT}/ui" PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+        target_compile_definitions(RimesMailboxUI PRIVATE RIMES_PRODUCT_VERSION="${RIMES_PRODUCT_VERSION}")
+        target_link_libraries(RimesMailboxUI PUBLIC RimesMailboxCore RimesDesktopUI)
+        rimes_harden(RimesMailboxUI)
+        add_dependencies(RimesMailboxUI RimesMailboxContract)
+        add_executable(rimes-mailbox "${RIMES_MAILBOX_ROOT}/ui/main.cpp" "${RIMES_MAILBOX_ROOT}/ui/mailbox_session.cpp" src/session/session_monitor.cpp)
+        target_include_directories(rimes-mailbox PRIVATE src)
+        target_compile_definitions(rimes-mailbox PRIVATE RIMES_PRODUCT_VERSION="${RIMES_PRODUCT_VERSION}")
+        target_link_libraries(rimes-mailbox PRIVATE RimesMailboxUI Fcitx5::Utils Threads::Threads)
+        rimes_harden(rimes-mailbox)
+        add_dependencies(rimes rimes-mailbox)
+        install(TARGETS rimes-mailbox DESTINATION "${CMAKE_INSTALL_BINDIR}")
+        install(FILES "${RIMES_MAILBOX_ROOT}/ui/org.scholay.rimes.mailbox.desktop" DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
         add_executable(rimes-schemes src/schemes/scheme_manager.cpp)
         target_include_directories(rimes-schemes PRIVATE ${GTK3_INCLUDE_DIRS})
         target_link_libraries(rimes-schemes PRIVATE RimesEngine RimesSchemeImport ${GTK3_LIBRARIES})
@@ -529,6 +566,20 @@ if(RIMES_BUILD_TESTS)
         target_link_libraries(rimes-capsule-note-editor-tests PRIVATE RimesCapsuleCore RimesDesktopUI)
         target_compile_definitions(rimes-capsule-note-editor-tests PRIVATE NATIVE_NOTES_FIXTURES="${RIMES_CAPSULE_ROOT}/tests/fixtures/native-notes.json")
         rimes_harden(rimes-capsule-note-editor-tests)
+        add_executable(rimes-mailbox-session-tests "${RIMES_MAILBOX_ROOT}/tests/mailbox_session_tests.cpp" "${RIMES_MAILBOX_ROOT}/ui/mailbox_session.cpp" src/session/session_monitor.cpp)
+        target_include_directories(rimes-mailbox-session-tests PRIVATE src tests)
+        target_link_libraries(rimes-mailbox-session-tests PRIVATE RimesMailboxUI Fcitx5::Utils Threads::Threads)
+        target_compile_definitions(rimes-mailbox-session-tests PRIVATE RIMES_MAILBOX_FIXTURE="${RIMES_MAILBOX_ROOT}/tests/fixtures/native-mailbox.json")
+        rimes_harden(rimes-mailbox-session-tests)
+        add_test(NAME mailbox-session-protection COMMAND dbus-run-session -- xvfb-run -a "${RIMES_DESKTOP_TEST_PYTHON}" "${RIMES_CAPSULE_ROOT}/tests/password_ui_test.py" $<TARGET_FILE:rimes-mailbox-session-tests>)
+        set_tests_properties(mailbox-session-protection PROPERTIES ENVIRONMENT "RIMES_PRIVATE_SESSION_TEST=1")
+        add_test(NAME mailbox-native-contract COMMAND "${Python3_EXECUTABLE}" "${RIMES_MAILBOX_ROOT}/verify_native_contract.py")
+        add_executable(rimes-mailbox-ui-tests "${RIMES_MAILBOX_ROOT}/tests/mailbox_ui_tests.cpp")
+        target_link_libraries(rimes-mailbox-ui-tests PRIVATE RimesMailboxUI)
+        target_compile_definitions(rimes-mailbox-ui-tests PRIVATE RIMES_PRODUCT_VERSION="${RIMES_PRODUCT_VERSION}" RIMES_MAILBOX_FIXTURE="${RIMES_MAILBOX_ROOT}/tests/fixtures/native-mailbox.json")
+        rimes_harden(rimes-mailbox-ui-tests)
+        add_test(NAME mailbox-ui COMMAND dbus-run-session -- xvfb-run -a "${RIMES_DESKTOP_TEST_PYTHON}" "${RIMES_CAPSULE_ROOT}/tests/password_ui_test.py" $<TARGET_FILE:rimes-mailbox-ui-tests>)
+        add_test(NAME mailbox-primary-process COMMAND dbus-run-session -- xvfb-run -a "${RIMES_DESKTOP_TEST_PYTHON}" "${RIMES_CAPSULE_ROOT}/tests/password_ui_test.py" "${RIMES_DESKTOP_TEST_PYTHON}" "${RIMES_MAILBOX_ROOT}/tests/mailbox_process_test.py" $<TARGET_FILE:rimes-mailbox> "${RIMES_MAILBOX_ROOT}/tests/fixtures/native-mailbox.json")
         add_executable(rimes-capsule-password-ui-tests "${RIMES_CAPSULE_ROOT}/tests/capsule_password_ui_tests.cpp"
             "${RIMES_CAPSULE_ROOT}/ui/capsule_password_view.cpp")
         target_include_directories(rimes-capsule-password-ui-tests PRIVATE "${RIMES_CAPSULE_ROOT}/ui")

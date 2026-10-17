@@ -4,7 +4,7 @@ import Foundation
 /// selection preferences. Normal app launches always use the existing domain.
 enum OfficialPluginSmokePreferences {
     private static let suite = "RIMES.MusicPluginSmoke.\(UUID().uuidString)"
-    static let shared: UserDefaults = CommandLine.arguments.contains("buffer-music-panel-smoke")
+    static let shared: UserDefaults = ["buffer-music-panel-smoke", "mailbox-linux-fixtures", "mailbox-workspace-smoke"].contains(where: CommandLine.arguments.contains)
         ? UserDefaults(suiteName: suite)! : .standard
     static func clear() { shared.removePersistentDomain(forName: suite) }
 }

@@ -89,9 +89,9 @@
     "plugins/codex-cli/plugin.json": "ed57713a52a826f825ac60742c321216184ca39b8ea169c03ca1782805538d0f",
     "plugins/fly-chord-learning/plugin.json": "1c36b6fd323617ae85e159d76e9a1ade41e77c8163320fc882cd1571a257a031",
     "plugins/latex/plugin.json": "8ef6044b827f00dbe876d2c351002804ee5d05603af59d5a8181b99bb69fd8f4",
-    "plugins/mailbox.chat/plugin.json": "1c11a7bca6a28dc689fcbc0c4003afb5a3ff2eb9d3a17d0ba946ef6208db3db4",
-    "plugins/mailbox.inbox/plugin.json": "9076dad0ef59c588fc7ca200db4e2ae4be9520799b34a191a62c2c7e2fd03945",
-    "plugins/mailbox.terminal/plugin.json": "2cdc1392fcafe469c472e5495b87ec348d28f3d397cadfbc31157791b2e523d8",
+    "plugins/mailbox.chat/plugin.json": "6f3f9391c59d6edb8251494b098638335a68f60a467e7ff843a7bf705217e1e5",
+    "plugins/mailbox.inbox/plugin.json": "91801be8a90c5e39657e807b5220c518998e4c8ad774da240857b604582fbd9d",
+    "plugins/mailbox.terminal/plugin.json": "21bd7f24002fde11d19972abe74c88fc2f7946a05ac5f22ed7e9f4db3a909088",
     "plugins/morse/plugin.json": "feae95bc9d84f222853dc195174847f709d3b60caa8492458255d66978909870",
     "plugins/music/plugin.json": "a9e722f63a54261976494547edb0a570290c4ec2963f7d13dfddfcc82fc51071",
     "plugins/openai-compatible/plugin.json": "b4183669078331c7894bd69c589f75ca564a36e10822a1fa7af8d9a4f50cced9",
@@ -104,6 +104,6 @@
     "source-map.json": "aa2e4792f45a52e1ba78d42af7ac362cc12e44a6e308908d50edea377597ae84"
   },
   "repository": "https://github.com/scholay/rimes-plugins",
-  "revision": "04287a7bb8ee4a4679fe022d26796e35537d39fd",
+  "revision": "6b3ba55e16fadd5d749a22d0166e9120b62f5074",
   "schemaVersion": 1
 }

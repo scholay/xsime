@@ -82,10 +82,11 @@ python3 "$SCRIPT_DIR/install_state.py" install --prefix "$PREFIX" \
     --stage "$WORK_DIR/root" --build-dir "$BUILD_DIR"
 
 cat <<EOF
-Installed the RIMES Fcitx5 addon, Buffer workbench, and Capsule rail.
+Installed the RIMES Fcitx5 addon, Buffer, Capsule and Mailbox workspaces.
   prefix:  $PREFIX
   addon:   $PREFIX/lib/*/fcitx5/rimes.so (or lib64)
   buffer:  $PREFIX/libexec/rimes/rimes-buffer and $PREFIX/bin/rimes-buffer
+  mailbox: $PREFIX/bin/rimes-mailbox
   capsule: $PREFIX/libexec/rimes/rimes-capsule and $PREFIX/bin/rimes-capsule
   ctl:     $PREFIX/bin/rimes-buffer-ctl and $PREFIX/bin/rimes-capsule-ctl
   deploy:  $PREFIX/libexec/rimes/rimes-deploy

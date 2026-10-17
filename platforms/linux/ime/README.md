@@ -26,7 +26,7 @@ installation, status, cancellation and repair; see the
 [resource instructions](../runtime/README.md#local-translation-resources).
 Its Python 3.12 runtime is included in deb dependencies. Downloaded resources
 remain in the user directory when either source or deb installation is removed.
-Mailbox is still later. Buffer and Capsule behavior are specified in
+The [Mailbox host](../mailbox/README.md) now provides independent navigation, persistent threads and local notes; AI conversation, PTY and inbox-transfer adapters are tracked separately. Buffer and Capsule behavior are specified in
 [`../buffer/SPEC.md`](../buffer/SPEC.md) and
 [`../capsule/SPEC.md`](../capsule/SPEC.md). Hooks live in
 `src/engine/rime_hooks.hpp`.
@@ -61,7 +61,7 @@ Mailbox is still later. Buffer and Capsule behavior are specified in
   See [Capsule usage](../capsule/README.md).
 
 macOS-only behaviour that is **not** reproduced here: custom candidate chrome,
-Mailbox, Capsule iCloud / password vault, advanced capture editing and audio,
+Mailbox AI/PTY adapters and inbox transfers, Capsule iCloud, advanced capture editing and audio,
 Buffer stream/music plugins, cross-batch chord pairing,
 IMK `Delivery.insert`. See [`../buffer/SPEC.md`](../buffer/SPEC.md) and
 [`../capsule/SPEC.md`](../capsule/SPEC.md) for the explicit gap lists.
@@ -71,11 +71,11 @@ tracked separately in the parity plan.
 
 ## Desktop launch and global shortcuts
 
-Use **XSIME Buffer**, **XSIME Capsule** or **XSIME Settings** from the application
+Use **XSIME Buffer**, **XSIME Capsule**, **XSIME Mailbox** or **XSIME Settings** from the application
 menu, even when another input method is selected. `rimes-launch buffer`,
-`rimes-launch capsule` and `rimes-launch settings` provide the same entry points
+`rimes-launch capsule`, `rimes-launch mailbox` and `rimes-launch settings` provide the same entry points
 for system custom shortcuts. They start Fcitx5 if necessary; add XSIME to its
-input-method group first. A workspace launch selects XSIME for the focused
+input-method group first. A Buffer or Capsule launch selects XSIME for the focused
 input context, waits for activation and then captures it. Changing focus or
 switching input methods in that interval cancels capture. Closing the workspace
 keeps the selected input method. With no focused input context, the workspace
@@ -86,8 +86,8 @@ Escape cancels; unmodified Delete restores that action's default. Duplicate
 bindings and Ctrl/Super+A/V are rejected. The defaults and action titles are
 imported from macOS `ShortcutPreferences.swift`, mapping Command to Ctrl:
 Buffer `Ctrl+Shift+B`, Capsule `Ctrl+Shift+V`, settings `Ctrl+Shift+S`.
-Mailbox `Ctrl+Shift+M` is reserved in preferences and remains unavailable until
-the Mailbox host is installed. Super can be selected explicitly in the recorder.
+Mailbox uses `Ctrl+Shift+M`; it opens its independent workspace without changing
+the current input method. Super can be selected explicitly in the recorder.
 Global grabs pause during recording and resume on completion, cancellation,
 settings-process exit or a two-minute timeout.
 
@@ -378,7 +378,9 @@ Not started in this tree.
 Buffer and Capsule are implemented: `BufferService` / `CapsuleService` live
 in the addon. GTK companions are `rimes-buffer` and `rimes-capsule`, on
 `$XDG_RUNTIME_DIR/rimes-buffer.sock` and
-`$XDG_RUNTIME_DIR/rimes-capsule.sock`. Mailbox is not started.
+`$XDG_RUNTIME_DIR/rimes-capsule.sock`. `rimes-mailbox` uses one GTK application
+per canonical user directory, a process lock and native D-Bus forwarding.
+See [Mailbox usage, data preservation and parity](../mailbox/README.md).
 
 See `src/engine/rime_hooks.hpp`. Ordinary Rime commits still go through
 `RimesIme::commitText` → `InputContext::commitString` (or into Buffer when

@@ -83,6 +83,18 @@ RimesIme::RimesIme(Instance* instance)
         GError* error = nullptr;
         const bool launched = g_spawn_async(nullptr, arguments, nullptr, G_SPAWN_DEFAULT, nullptr, nullptr, nullptr, &error);
         g_clear_error(&error); return launched;
+    }, [this] {
+        bool enabled = false;
+        for (const auto* module : {"terminal", "chat", "inbox"}) {
+            const auto lease = plugins_.Authorize(std::string("builtin.mailbox.") + module, "mailbox.navigate");
+            if (lease && acceptsPluginResult(*lease)) enabled = true;
+        }
+        if (!enabled) return false;
+        const char* program = access(RIMES_INSTALLED_MAILBOX, X_OK) == 0 ? RIMES_INSTALLED_MAILBOX : RIMES_BUILD_MAILBOX;
+        gchar* arguments[] = {const_cast<gchar*>(program), const_cast<gchar*>("--show"), nullptr};
+        GError* error = nullptr;
+        const bool launched = g_spawn_async(nullptr, arguments, nullptr, G_SPAWN_DEFAULT, nullptr, nullptr, nullptr, &error);
+        g_clear_error(&error); return launched;
     });
     buffer_->SetManagedHotkey(); capsule_->SetManagedHotkey();
     desktop_shortcuts_ = std::make_unique<DesktopShortcuts>(instance_->eventLoop(),
@@ -102,6 +114,10 @@ RimesIme::RimesIme(Instance* instance)
         {[] {}, [this] { translation_worker_.CancelAll(); }});
     plugins_.Register(rimes::plugins::CompiledAdapters().at("builtin.openai-compatible"),
         {[] {}, [this] { ai_worker_.CancelAll(); }});
+    for (const auto* module : {"terminal", "chat", "inbox"}) {
+        const auto id = std::string("builtin.mailbox.") + module;
+        plugins_.Register(rimes::plugins::CompiledAdapters().at(id), {[] {}, [] {}});
+    }
     WatchPluginPackages();
     WatchConfiguration();
     capsule_->BindModuleValidation([this](auto module) {

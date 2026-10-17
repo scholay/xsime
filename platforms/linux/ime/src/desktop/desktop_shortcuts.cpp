@@ -18,7 +18,7 @@ bool Wayland() {
     const char* type = std::getenv("XDG_SESSION_TYPE");
     return (display && *display) || (type && std::string(type) == "wayland");
 }
-bool Available(const std::string& id) { return id == "buffer" || id == "capsule" || id == "settings"; }
+bool Available(const std::string& id) { return id == "buffer" || id == "capsule" || id == "settings" || id == "mailbox"; }
 constexpr auto kPortal = "org.freedesktop.portal.Desktop";
 constexpr auto kPortalPath = "/org/freedesktop/portal/desktop";
 constexpr auto kShortcuts = "org.freedesktop.portal.GlobalShortcuts";

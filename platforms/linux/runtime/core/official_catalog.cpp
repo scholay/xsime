@@ -5,7 +5,10 @@ namespace rimes::plugins {
 std::map<std::string, Descriptor> CompiledAdapters() {
     // An entry is added only with its native implementation and acceptance
     // tests. Platform declarations are a separate required gate in PackageStore.
-    return {{"builtin.capsule.notes", {"builtin.capsule.notes", "笔记", "1.1.0", Kind::Capsule, {"capsule.navigate"}}},
+    return {{"builtin.mailbox.inbox", {"builtin.mailbox.inbox", "收件", "1.1.0", Kind::Mailbox, {"mailbox.navigate"}}},
+        {"builtin.mailbox.chat", {"builtin.mailbox.chat", "对话", "1.1.0", Kind::Mailbox, {"mailbox.navigate"}}},
+        {"builtin.mailbox.terminal", {"builtin.mailbox.terminal", "终端", "1.1.0", Kind::Mailbox, {"mailbox.navigate"}}},
+        {"builtin.capsule.notes", {"builtin.capsule.notes", "笔记", "1.1.0", Kind::Capsule, {"capsule.navigate"}}},
         {"builtin.capsule.temporary", {"builtin.capsule.temporary", "临时", "1.1.0", Kind::Capsule, {"capsule.navigate"}}},
         {"builtin.capsule.capture", {"builtin.capsule.capture", "捕获", "1.1.0", Kind::Capsule, {"capsule.navigate"}}},
         {"builtin.capsule.resources", {"builtin.capsule.resources", "资源", "1.1.0", Kind::Capsule, {"capsule.navigate"}}},

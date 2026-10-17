@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=XSIME Mailbox
+Name[zh_CN]=XSIME Mailbox
+Comment=Local conversations and inbox
+Comment[zh_CN]=本地对话与收件
+Exec=rimes-mailbox --show
+Icon=rimes
+Terminal=false
+Categories=Utility;
+StartupNotify=true

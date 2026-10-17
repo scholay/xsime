@@ -48,9 +48,8 @@ struct PortalFixture {
                 Check(msg.signature() == "oa(sa{sv})sa{sv}", "BindShortcuts signature");
                 dbus::ObjectPath handle; std::string parent;
                 msg >> handle >> requested >> parent >> options;
-                Check(handle.path() == session && requested.size() == 3, "binding set/session mismatch");
+                Check(handle.path() == session && requested.size() == 4, "binding set/session mismatch");
                 for (const auto& binding : requested) {
-                    Check(std::get<0>(binding) != "mailbox", "unavailable Mailbox was registered");
                     Check(!Property(std::get<1>(binding), "description").empty(), "native title missing");
                     Check(rimes::runtime::ParseShortcut(Property(std::get<1>(binding), "preferred_trigger")).has_value(), "trigger syntax");
                 }
@@ -123,10 +122,10 @@ int PortalTest(const char* launcher) {
                 auto state = [&](const char* id) { return status.at("actions").at(id).at("state").get<std::string>(); };
                 if (current - checkpoint >= 70000) {
                     if (step == 0 && state("buffer") == "registered") {
-                        Check(fixture.creates == 1 && state("capsule") == "not-granted", "duplicate session or fabricated grant");
+                        Check(fixture.creates == 1 && state("capsule") == "not-granted" && state("mailbox") == "not-granted", "duplicate session or fabricated grant");
                         Check(status["actions"]["buffer"]["trigger"] == "Ctrl+Alt+B (desktop)", "desktop binding ignored");
                         fixture.Activate("buffer"); fixture.Activate("buffer");
-                        fixture.Activate("settings", "/invalid/session"); fixture.Activate("capsule"); ++step;
+                        fixture.Activate("settings", "/invalid/session"); fixture.Activate("capsule"); fixture.Activate("mailbox"); ++step;
                     } else if (step == 1) {
                         Check(opened == std::vector<std::string>{"buffer"}, "repeat/invalid activation");
                         fixture.Activate("buffer", "", true); fixture.Activate("buffer"); ++step;

@@ -142,7 +142,7 @@
       "defaultInstalled": true,
       "defaultEnabled": true,
       "downloadAssetName": "preset-plugin-builtin.mailbox.chat-1.1.0.json",
-      "sha256": "4f1e62d8aae3b0fe03f4813518dd83385d9d038ebab476668bda1a08db497bb0"
+      "sha256": "b38217f40ff13d6859ee77954feb87d43f53e11d733e73727b3787a418c8cfe4"
     },
     {
       "id": "builtin.mailbox.inbox",
@@ -155,7 +155,7 @@
       "defaultInstalled": true,
       "defaultEnabled": true,
       "downloadAssetName": "preset-plugin-builtin.mailbox.inbox-1.1.0.json",
-      "sha256": "0281048738c8454fe65af9293fc84d34754bdb6904ccc6254bc0d1f9a6881b92"
+      "sha256": "242b317d944fc15dc913f0bb22465ab2059f315a692095c50d68a17fd8931841"
     },
     {
       "id": "builtin.mailbox.terminal",
@@ -168,7 +168,7 @@
       "defaultInstalled": true,
       "defaultEnabled": true,
       "downloadAssetName": "preset-plugin-builtin.mailbox.terminal-1.1.0.json",
-      "sha256": "0bbc3dcce5af9c4a17f559f7780c9d666873575c79fe4e9653b6261d5b64bc02"
+      "sha256": "4a42a4fa04bffb0de076885a32f82a0a2b35158b45963041e18c67b18b07e53e"
     },
     {
       "id": "builtin.morse",

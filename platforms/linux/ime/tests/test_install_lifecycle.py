@@ -37,6 +37,7 @@ install(PROGRAMS program DESTINATION bin RENAME rimes-schemes)
 install(PROGRAMS program DESTINATION bin RENAME rimes-settings)
 install(PROGRAMS program DESTINATION bin RENAME rimes-translation)
 install(PROGRAMS program DESTINATION bin RENAME rimes-launch)
+install(PROGRAMS program DESTINATION bin RENAME rimes-mailbox)
 install(FILES program DESTINATION libexec/rimes/translation RENAME runtime.py)
 install(FILES program DESTINATION libexec/rimes/translation RENAME translation_core.py)
 install(FILES program DESTINATION libexec/rimes/translation RENAME resources.lock.json)
@@ -54,6 +55,7 @@ install(FILES program DESTINATION share/applications RENAME org.scholay.rimes.sc
 install(FILES program DESTINATION share/applications RENAME org.scholay.rimes.settings.desktop)
 install(FILES program DESTINATION share/applications RENAME org.scholay.rimes.buffer.desktop)
 install(FILES program DESTINATION share/applications RENAME org.scholay.rimes.capsule.desktop)
+install(FILES program DESTINATION share/applications RENAME org.scholay.rimes.mailbox.desktop)
 ''')
         self.env = {k: v for k, v in os.environ.items()
                     if k not in {"DESTDIR", "RIMES_IME_PREFIX", "RIMES_IME_BUILD_DIR"}}
@@ -94,6 +96,7 @@ install(FILES program DESTINATION share/applications RENAME org.scholay.rimes.ca
             "share/rimes/capsule/clipboard/history-v1.sqlite3",
             "share/rimes/capsule/master-key", "share/rimes/capsule/reveal-credential-v1",
             "share/rimes/capsule/passwords/fixture.md",
+            "share/rimes/mailbox/mailbox.json", "share/rimes/mailbox/images/fixture.png", "share/rimes/mailbox/window.json",
             "share/rimes/capsule/captures/example/record.json", "share/rimes/capsule/captures/example/original.webm",
             "share/rimes/capsule/assets/reference.asset", "share/rimes/capsule/reference-style-v1",
             "share/rimes/data/personal.yaml", "share/fcitx5/addon/another.conf",
@@ -111,6 +114,8 @@ install(FILES program DESTINATION share/applications RENAME org.scholay.rimes.ca
         self.assertIn("libexec/rimes/translation/runtime.py", installed)
         self.assertTrue(os.access(self.target / "bin/rimes-translation", os.X_OK))
         self.assertTrue(os.access(self.target / "bin/rimes-launch", os.X_OK))
+        self.assertTrue(os.access(self.target / "bin/rimes-mailbox", os.X_OK))
+        self.assertIn("share/applications/org.scholay.rimes.mailbox.desktop", installed)
         self.assertIn("share/applications/org.scholay.rimes.buffer.desktop", installed)
         self.assertIn("share/applications/org.scholay.rimes.capsule.desktop", installed)
         self.assertTrue(os.access(self.target / "libexec/rimes/rimes-deploy", os.X_OK))

@@ -15,7 +15,7 @@ import tempfile
 REPO_ROOT = Path(__file__).resolve().parents[4]
 RECEIPT = "share/rimes/ime-install-manifest.json"
 PROGRAMS = {"rimes-buffer", "rimes-buffer-ctl", "rimes-capsule",
-            "rimes-capsule-ctl", "rimes-schemes", "rimes-plugins", "rimes-settings", "rimes-translation", "rimes-launch"}
+            "rimes-capsule-ctl", "rimes-schemes", "rimes-plugins", "rimes-settings", "rimes-mailbox", "rimes-translation", "rimes-launch"}
 
 
 def managed_path(raw):
@@ -36,6 +36,7 @@ def managed_path(raw):
                    "share/metainfo/org.fcitx.Fcitx5.Addon.Rimes.metainfo.xml",
                    "share/applications/org.scholay.rimes.schemes.desktop",
                    "share/applications/org.scholay.rimes.settings.desktop",
+                   "share/applications/org.scholay.rimes.mailbox.desktop",
                    "share/applications/org.scholay.rimes.buffer.desktop",
                    "share/applications/org.scholay.rimes.capsule.desktop"}
         or re.fullmatch(r"share/icons/hicolor/[^/]+/apps/rimes\.(?:png|svg)", raw)

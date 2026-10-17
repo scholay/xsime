@@ -160,6 +160,12 @@ jobs:
               --password-preview --theme "$theme" --render "$RUNNER_TEMP/capsule-render/password-$theme.png"
           done
 
+      - name: Render Mailbox modules at native dimensions
+        run: |
+          TZ=Asia/Tokyo xvfb-run -a platforms/linux/ime/build/rimes-mailbox \
+            --render-fixture platforms/linux/mailbox/tests/fixtures/native-mailbox.json \
+            --render-dir "$RUNNER_TEMP/mailbox-render"
+
       - name: Desktop focus, first click, window movement and scale
         run: |
           xvfb-run -a dbus-run-session -- python3 platforms/linux/runtime/tests/desktop_windows_test.py platforms/linux/ime/build
@@ -182,6 +188,7 @@ jobs:
           path: |
             ${{ runner.temp }}/settings-render
             ${{ runner.temp }}/buffer-render
+            ${{ runner.temp }}/mailbox-render
           retention-days: 14
 
       - name: Original source import and native typing
@@ -210,6 +217,7 @@ jobs:
             platforms/linux/ime/build/rimes-buffer-ctl
             platforms/linux/ime/build/rimes-capsule
             platforms/linux/ime/build/rimes-capsule-ctl
+            platforms/linux/ime/build/rimes-mailbox
             platforms/linux/ime/build/rimes-schemes
             platforms/linux/ime/build/rimes-deploy
             platforms/linux/ime/.engine/install/lib/librime.so*

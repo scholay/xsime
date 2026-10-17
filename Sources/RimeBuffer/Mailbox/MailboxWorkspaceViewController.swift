@@ -34,7 +34,7 @@ final class MailboxWorkspaceViewController: NSViewController {
         layout.alignment = .height
         MailboxUI.pin(layout, to: view)
         rail.translatesAutoresizingMaskIntoConstraints = false
-        rail.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        rail.widthAnchor.constraint(equalToConstant: MailboxUI.railWidth).isActive = true
         let brand = MailboxUI.label("M", size: 22, weight: .semibold)
         brand.textColor = MailboxUI.accent
         brand.alignment = .center

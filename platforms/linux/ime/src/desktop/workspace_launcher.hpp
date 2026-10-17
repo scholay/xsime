@@ -14,7 +14,7 @@ class WorkspaceLauncher {
 public:
     using Json = rimes::plugins::Json;
     WorkspaceLauncher(Instance& instance, BufferService& buffer, CapsuleService& capsule,
-                      std::function<bool()> open_settings);
+                      std::function<bool()> open_settings, std::function<bool()> open_mailbox = {});
     ~WorkspaceLauncher();
     void Configure(const Json& shortcuts, bool global);
     bool HandleKey(KeyEvent& event);
@@ -29,7 +29,7 @@ private:
     Instance& instance_;
     BufferService& buffer_;
     CapsuleService& capsule_;
-    std::function<bool()> open_settings_;
+    std::function<bool()> open_settings_, open_mailbox_;
     std::function<Json()> desktop_status_;
     std::map<std::string, Key> bindings_;
     std::set<KeySym> down_;

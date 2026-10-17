@@ -1,0 +1,108 @@
+{
+  "palettes": {
+    "day": {
+      "accent": "rgba(74,117,92,1.0)",
+      "background": "rgba(255,255,255,1.0)",
+      "control": "rgba(255,255,255,1.0)",
+      "label": "rgba(0,0,0,0.8470588235294118)",
+      "secondary": "rgba(0,0,0,0.4980392156862745)",
+      "selection": "rgba(224,235,222,1.0)",
+      "separator": "rgba(0,0,0,0.09803921568627451)",
+      "sidebar": "rgba(244,245,242,1.0)",
+      "tertiary": "rgba(0,0,0,0.25882352941176473)"
+    },
+    "night": {
+      "accent": "rgba(148,189,166,1.0)",
+      "background": "rgba(30,30,30,1.0)",
+      "control": "rgba(30,30,30,1.0)",
+      "label": "rgba(255,255,255,0.8470588235294118)",
+      "secondary": "rgba(255,255,255,0.5490196078431373)",
+      "selection": "rgba(59,79,66,1.0)",
+      "separator": "rgba(255,255,255,0.09803921568627451)",
+      "sidebar": "rgba(36,41,38,1.0)",
+      "tertiary": "rgba(255,255,255,0.24705882352941178)"
+    },
+    "quiet": {
+      "accent": "rgba(148,189,166,1.0)",
+      "background": "rgba(30,30,30,1.0)",
+      "control": "rgba(30,30,30,1.0)",
+      "label": "rgba(255,255,255,0.8470588235294118)",
+      "secondary": "rgba(255,255,255,0.5490196078431373)",
+      "selection": "rgba(59,79,66,1.0)",
+      "separator": "rgba(255,255,255,0.09803921568627451)",
+      "sidebar": "rgba(36,41,38,1.0)",
+      "tertiary": "rgba(255,255,255,0.24705882352941178)"
+    },
+    "rasta": {
+      "accent": "rgba(148,189,166,1.0)",
+      "background": "rgba(30,30,30,1.0)",
+      "control": "rgba(30,30,30,1.0)",
+      "label": "rgba(255,255,255,0.8470588235294118)",
+      "secondary": "rgba(255,255,255,0.5490196078431373)",
+      "selection": "rgba(59,79,66,1.0)",
+      "separator": "rgba(255,255,255,0.09803921568627451)",
+      "sidebar": "rgba(36,41,38,1.0)",
+      "tertiary": "rgba(255,255,255,0.24705882352941178)"
+    }
+  },
+  "metrics": {
+    "chatListWidth": 216,
+    "contentInset": 16,
+    "defaultHeight": 700,
+    "defaultWidth": 1000,
+    "inboxListWidth": 232,
+    "minimumHeight": 500,
+    "minimumWidth": 680,
+    "navigationHeight": 56,
+    "navigationWidth": 48,
+    "railWidth": 64,
+    "rowHeight": 84,
+    "sidebarBreakpoint": 760
+  },
+  "modules": [
+    {
+      "filters": [
+        "all"
+      ],
+      "id": "terminal",
+      "symbol": "terminal",
+      "title": "终端"
+    },
+    {
+      "filters": [
+        "all",
+        "unread",
+        "attention",
+        "archived"
+      ],
+      "id": "chat",
+      "symbol": "bubble.left",
+      "title": "对话"
+    },
+    {
+      "filters": [
+        "all",
+        "unread",
+        "attention",
+        "archived"
+      ],
+      "id": "inbox",
+      "symbol": "tray",
+      "title": "收件"
+    }
+  ],
+  "sources": {
+    "OfficialPlugins/plugins/mailbox.chat/plugin.json": "6f3f9391c59d6edb8251494b098638335a68f60a467e7ff843a7bf705217e1e5",
+    "OfficialPlugins/plugins/mailbox.inbox/plugin.json": "91801be8a90c5e39657e807b5220c518998e4c8ad774da240857b604582fbd9d",
+    "OfficialPlugins/plugins/mailbox.terminal/plugin.json": "21bd7f24002fde11d19972abe74c88fc2f7946a05ac5f22ed7e9f4db3a909088",
+    "Sources/RimeBuffer/Mailbox/MailboxAdaptiveSplitView.swift": "8e3eeb75fe185faaac1ce19f410c1a3e4cdc0b428c79e1c4c92e632fee571f45",
+    "Sources/RimeBuffer/Mailbox/MailboxLinuxFixtures.swift": "02e35b4c4d7dac6b0f99d323cba6a8cecc3e626ad7b4c172553c93b72b5187de",
+    "Sources/RimeBuffer/Mailbox/MailboxMessagesWorkspace.swift": "f4974a7e63cf8aae428713f3afd768543027fc24cd75a0594f6ec3ce81509107",
+    "Sources/RimeBuffer/Mailbox/MailboxModels.swift": "5269e2f8965235c57b01ecde28115a62882e2151a22a039c360ec63c1bd04c60",
+    "Sources/RimeBuffer/Mailbox/MailboxModules.swift": "9d03fa00da11812b5aa31d8dcbcc0aeba13087c348cfc2ebc25d3b54f4b8b77f",
+    "Sources/RimeBuffer/Mailbox/MailboxStore.swift": "150d1ce8224e73b7a41a69a94a270bb34447996e529d1e8300cc7ec15188c8bf",
+    "Sources/RimeBuffer/Mailbox/MailboxWorkspaceUI.swift": "a45caecf4705ef0286b0f7550f1bd6b0b1f7a69b93ca5540011e2168b9de618c",
+    "Sources/RimeBuffer/Mailbox/MailboxWorkspaceViewController.swift": "404bb3c78b1bc3e7468dc23f94ea1932736d1e0fc8ae7f80eda65b413c1f2d84",
+    "Sources/RimeBuffer/RimeUI.swift": "80a1a1046687fd469c8627489f4e9f93ec348a4ff35e4e8228e896464a9b1516"
+  }
+}

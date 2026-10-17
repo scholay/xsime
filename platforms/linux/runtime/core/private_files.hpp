@@ -5,12 +5,18 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <stdexcept>
 
 namespace rimes::runtime {
 
 std::string RandomID();
 std::string Sha256(std::string_view bytes);
 std::filesystem::path UserRoot();
+
+class StorageBusy : public std::runtime_error {
+public:
+    StorageBusy() : std::runtime_error("Cannot lock private storage") {}
+};
 
 class FileLock {
 public:

@@ -17,7 +17,7 @@ VERSION=$(dpkg-deb -f "$DEB" Version)
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 DATA="$WORK/user-data/rimes"
-mkdir -p "$DATA/rime_ice.userdb" "$DATA/schemes/learning/custom.userdb" "$DATA/capsule/clipboard" "$DATA/capsule/passwords" "$DATA/capsule/assets" "$DATA/capsule/captures/fixture" "$DATA/translation/cache"
+mkdir -p "$DATA/rime_ice.userdb" "$DATA/schemes/learning/custom.userdb" "$DATA/capsule/clipboard" "$DATA/capsule/passwords" "$DATA/capsule/assets" "$DATA/capsule/captures/fixture" "$DATA/translation/cache" "$DATA/mailbox/images"
 printf '%s\n' 'keep learned dictionary' > "$DATA/rime_ice.userdb/CURRENT"
 printf '%s\n' 'keep imported learning' > "$DATA/schemes/learning/custom.userdb/CURRENT"
 printf '%s\n' 'keep notes' > "$DATA/capsule/note.md"
@@ -30,25 +30,35 @@ printf '%s\n' 'keep original screen recording' > "$DATA/capsule/captures/fixture
 printf '%s\n' 'keep existing encryption master key' > "$DATA/capsule/master-key"
 printf '%s\n' 'keep salted reveal credential' > "$DATA/capsule/reveal-credential-v1"
 printf '%s\n' 'keep encrypted password record' > "$DATA/capsule/passwords/fixture.md"
+printf '%s\n' 'keep Mailbox threads and messages' > "$DATA/mailbox/mailbox.json"
+printf '%s\n' 'keep Mailbox original attachment' > "$DATA/mailbox/images/fixture.png"
+printf '%s\n' 'keep Mailbox window preferences' > "$DATA/mailbox/window.json"
 (cd "$DATA" && find . -type f -exec sha256sum {} +) > "$WORK/user-data.sha256"
 
 sudo env XDG_DATA_HOME="$WORK/user-data" apt-get install -y "$DEB"
 [[ "$(dpkg-query -W -f='${Version}' fcitx5-rimes)" == "$VERSION" ]]
 mapfile -t FILES < <(dpkg-query -L fcitx5-rimes)
 [[ -x /usr/bin/rimes-schemes && -x /usr/bin/rimes-buffer && -x /usr/bin/rimes-capsule ]]
-[[ -x /usr/bin/rimes-settings && -x /usr/bin/rimes-plugins ]]
+[[ -x /usr/bin/rimes-settings && -x /usr/bin/rimes-plugins && -x /usr/bin/rimes-mailbox ]]
+[[ -f /usr/share/applications/org.scholay.rimes.mailbox.desktop ]]
+/usr/bin/rimes-mailbox --version
 [[ -x /usr/bin/rimes-translation && -f /usr/libexec/rimes/translation/resources.lock.json ]]
 RIMES_USER_DIR="$WORK/resource-status" /usr/bin/rimes-translation --status | python3 -c 'import json,sys; assert json.load(sys.stdin)["state"] == "missing"'
 [[ -f /usr/share/applications/org.scholay.rimes.settings.desktop ]]
 /usr/bin/rimes-settings --help
 [[ -f /usr/share/rimes/data/default.yaml ]]
-for program in /usr/bin/rimes-schemes /usr/bin/rimes-buffer /usr/bin/rimes-capsule /usr/bin/rimes-settings /usr/bin/rimes-plugins /usr/bin/rimes-translation /usr/libexec/rimes/rimes-capsule-preview /usr/libexec/rimes/rimes-capsule-capture; do
+for program in /usr/bin/rimes-mailbox /usr/bin/rimes-schemes /usr/bin/rimes-buffer /usr/bin/rimes-capsule /usr/bin/rimes-settings /usr/bin/rimes-plugins /usr/bin/rimes-translation /usr/libexec/rimes/rimes-capsule-preview /usr/libexec/rimes/rimes-capsule-capture; do
     ldd "$program" > "$WORK/ldd.txt"
     if grep -q 'not found' "$WORK/ldd.txt"; then
         cat "$WORK/ldd.txt" >&2
         exit 1
     fi
 done
+# Exercise the installed ELF and its resolved shared libraries, not only a build-tree binary.
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+dbus-run-session -- xvfb-run -a python3 "$SCRIPT_DIR/../../capsule/tests/password_ui_test.py" \
+    python3 "$SCRIPT_DIR/../../mailbox/tests/mailbox_process_test.py" /usr/bin/rimes-mailbox \
+    "$SCRIPT_DIR/../../mailbox/tests/fixtures/native-mailbox.json"
 sudo env XDG_DATA_HOME="$WORK/user-data" apt-get install --reinstall -y "$DEB"
 sudo env XDG_DATA_HOME="$WORK/user-data" apt-get remove -y fcitx5-rimes
 for file in "${FILES[@]}"; do

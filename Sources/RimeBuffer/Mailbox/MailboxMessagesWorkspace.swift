@@ -7,6 +7,9 @@ final class MailboxMessagesWorkspace: NSViewController, NSSearchFieldDelegate {
     let module: MailboxModuleID
     private let store: MailboxStore
     private let bridge = MailboxInteractionBridge.shared
+    // Hydrate inbound review routing before this view installs notification observers.
+    // Its first initialization may synchronously publish recovered associations.
+    private let reviewAdapter = MailboxBufferReviewAdapter.shared
     private var snapshot: MailboxStoreSnapshot
     private var observation: MailboxStoreObservation?
     private var associationObserver: NSObjectProtocol?
@@ -105,7 +108,7 @@ final class MailboxMessagesWorkspace: NSViewController, NSSearchFieldDelegate {
         input.wantsLayer = true; input.layer?.cornerRadius = 12
         let footer = MailboxUI.padded(MailboxUI.stack([input, feedback], spacing: 7), inset: MailboxUI.contentInset)
         let main = MailboxUI.stack([topPanel, MailboxUI.line(), transcriptScroll, footer], spacing: 0)
-        split = MailboxAdaptiveSplitView(sidebar: sidebar, main: main, sidebarWidth: module == .chat ? 216 : 232)
+        split = MailboxAdaptiveSplitView(sidebar: sidebar, main: main, sidebarWidth: module == .chat ? MailboxUI.chatListWidth : MailboxUI.inboxListWidth)
         split.visibilityChanged = { [weak self] visible, _ in
             self?.toggleList.contentTintColor = visible ? MailboxUI.accent : .secondaryLabelColor
         }

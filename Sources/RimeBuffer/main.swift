@@ -626,6 +626,18 @@ if let index = CommandLine.arguments.firstIndex(where: { $0 == "capsule-password
     } catch { fputs("Public password fixture operation failed\n", stderr); exit(1) }
 }
 
+if let index = CommandLine.arguments.firstIndex(where: { $0 == "mailbox-linux-fixtures" || $0 == "mailbox-linux-verify" }),
+   CommandLine.arguments.indices.contains(index + 1) {
+    _ = NSApplication.shared
+    exit(MainActor.assumeIsolated {
+        do {
+            let path = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+            if CommandLine.arguments[index] == "mailbox-linux-fixtures" { try MailboxLinuxFixtures.export(to: path) }
+            else { try MailboxLinuxFixtures.verifyLinux(at: path) }
+            return 0
+        } catch { fputs("Public Mailbox fixture operation failed\n", stderr); return 1 }
+    })
+}
 if let index = CommandLine.arguments.firstIndex(of: "capsule-password-visual-fixtures"),
    CommandLine.arguments.indices.contains(index + 1) {
     _ = NSApplication.shared

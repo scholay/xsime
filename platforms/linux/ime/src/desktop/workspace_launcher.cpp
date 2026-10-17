@@ -14,8 +14,8 @@ Key Normalized(Key key) {
 }
 }
 WorkspaceLauncher::WorkspaceLauncher(Instance& instance, BufferService& buffer, CapsuleService& capsule,
-                                     std::function<bool()> open_settings)
-    : instance_(instance), buffer_(buffer), capsule_(capsule), open_settings_(std::move(open_settings)) {
+                                     std::function<bool()> open_settings, std::function<bool()> open_mailbox)
+    : instance_(instance), buffer_(buffer), capsule_(capsule), open_settings_(std::move(open_settings)), open_mailbox_(std::move(open_mailbox)) {
     for (auto event : {EventType::InputContextFocusIn, EventType::InputContextFocusOut,
                        EventType::InputContextSwitchInputMethod, EventType::InputContextDestroyed})
         watchers_.push_back(instance_.watchEvent(event, EventWatcherPhase::Default, [this](Event&) { Invalidate(); }));
@@ -46,7 +46,7 @@ bool WorkspaceLauncher::HandleKey(KeyEvent& event) {
     if (!ic || !ic->hasFocus() || ProtectedInput(ic->capabilityFlags()) || buffer_.model().secure() ||
         (!global_ && instance_.inputMethod(ic) != "rimes")) return false;
     for (const auto& [action, binding] : bindings_) {
-        if (!key.check(binding) || action == "mailbox") continue; // registered when task 18 adds its host
+        if (!key.check(binding)) continue;
         const auto status = desktop_status_ ? desktop_status_() : Json::object();
         if (status.value("recording", false)) return false;
         if (global_ && desktop_status_) {
@@ -83,7 +83,7 @@ WorkspaceLauncher::Json WorkspaceLauncher::Open(const std::string& action) {
     auto fail = [&](const char* status, const char* message) -> Json {
         result_ = {{"ok", false}, {"request", request_id_}, {"status", status}, {"message", message}}; return result_;
     };
-    if (action != "buffer" && action != "capsule" && action != "settings")
+    if (action != "buffer" && action != "capsule" && action != "settings" && action != "mailbox")
         return fail("unavailable", "此功能尚未安装或当前版本不支持。");
     if (buffer_.model().secure()) return fail("protected", "会话受保护，请解锁后重试。");
     if (action == "capsule" && !capsule_.Enabled()) return fail("disabled", "胶囊插件已停用，请在设置中启用后重试。");
@@ -95,6 +95,10 @@ WorkspaceLauncher::Json WorkspaceLauncher::Open(const std::string& action) {
     instance_.inputContextManager().foreachFocused([&](InputContext* value) { ic = value; return false; });
     if ((ic && ProtectedInput(ic->capabilityFlags())) || buffer_.model().password_field())
         return fail("protected", "当前输入框受保护，请切换到普通输入框。");
+    if (action == "mailbox") {
+        if (!open_mailbox_ || !open_mailbox_()) return fail("unavailable", "Mailbox 插件已停用或程序未安装，请检查设置。");
+        return result_ = {{"ok", true}, {"request", request_id_}, {"status", "requested"}};
+    }
     if (!ic || instance_.inputMethod(ic) == "rimes") { Show(action, ic); return result_; }
     const auto uuid = ic->uuid();
     instance_.setCurrentInputMethod(ic, "rimes", true);

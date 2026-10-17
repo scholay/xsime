@@ -84,8 +84,8 @@ final class MailboxNavigationButton: RimePointingHandButton {
         title = module.title; image = NSImage(systemSymbolName: module.symbol, accessibilityDescription: nil)
         isBordered = false; target = self; self.action = #selector(invoke)
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 48).isActive = true
-        heightAnchor.constraint(equalToConstant: 56).isActive = true
+        widthAnchor.constraint(equalToConstant: MailboxUI.navigationWidth).isActive = true
+        heightAnchor.constraint(equalToConstant: MailboxUI.navigationHeight).isActive = true
         setAccessibilityLabel(module.title)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unavailable") }
@@ -153,7 +153,7 @@ final class MailboxListButton: RimePointingHandButton {
         target = self; self.action = #selector(invoke)
         setAccessibilityLabel([title, subtitle, metadata].joined(separator: ", "))
         translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 84).isActive = true
+        heightAnchor.constraint(equalToConstant: MailboxUI.rowHeight).isActive = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) unavailable") }
     @objc private func invoke() { handler() }
@@ -203,6 +203,13 @@ enum MailboxUI {
     static let defaultSize = NSSize(width: 1000, height: 700)
     static let minimumSize = NSSize(width: 680, height: 500)
     static let contentInset: CGFloat = 16
+    static let railWidth: CGFloat = 64
+    static let chatListWidth: CGFloat = 216
+    static let inboxListWidth: CGFloat = 232
+    static let sidebarBreakpoint: CGFloat = 760
+    static let navigationWidth: CGFloat = 48
+    static let navigationHeight: CGFloat = 56
+    static let rowHeight: CGFloat = 84
     static func drawSymbol(_ image: NSImage, in rect: NSRect, color: NSColor) {
         let symbol = image.withSymbolConfiguration(.init(paletteColors: [color])) ?? image
         let scale = min(rect.width / max(1, symbol.size.width), rect.height / max(1, symbol.size.height))

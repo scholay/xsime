@@ -320,6 +320,23 @@ GtkWidget *Icon(const std::string &name, int size) {
           line(12, 6, 12, 17);
           line(7, 12, 12, 17);
           cairo_line_to(cr, 17, 12);
+        } else if (icon == "terminal") {
+          cairo_rectangle(cr, 3, 4, 18, 15);
+          line(6, 8, 9, 11); cairo_line_to(cr, 6, 14); line(12, 14, 17, 14);
+        } else if (icon == "bubble.left") {
+          line(4, 3, 20, 3); cairo_line_to(cr, 21, 4); cairo_line_to(cr, 21, 16);
+          cairo_line_to(cr, 10, 16); cairo_line_to(cr, 5, 21); cairo_line_to(cr, 5, 16);
+          cairo_line_to(cr, 3, 16); cairo_line_to(cr, 3, 4); cairo_close_path(cr);
+        } else if (icon == "sidebar.left") {
+          cairo_rectangle(cr, 3, 5, 18, 14); line(9, 5, 9, 19);
+          line(5, 8, 7, 8); line(5, 11, 7, 11);
+        } else if (icon == "pencil" || icon == "square.and.pencil") {
+          line(5, 17, 17, 5); cairo_line_to(cr, 20, 8); cairo_line_to(cr, 8, 20);
+          cairo_line_to(cr, 4, 21); cairo_close_path(cr); line(14, 8, 17, 11);
+          if (icon == "square.and.pencil") { line(12, 4, 3, 4); cairo_line_to(cr, 3, 21); cairo_line_to(cr, 20, 21); cairo_line_to(cr, 20, 13); }
+        } else if (icon == "slider.horizontal.3") {
+          for (int y : {6, 12, 18}) { line(3, y, 21, y); }
+          for (auto pair : {std::pair<int,int>{8,6}, {16,12}, {10,18}}) { cairo_move_to(cr, pair.first + 2, pair.second); cairo_arc(cr, pair.first, pair.second, 2, 0, 2 * M_PI); }
         } else if (icon == "archivebox") {
           cairo_rectangle(cr, 3, 4, 18, 4);
           cairo_rectangle(cr, 5, 8, 14, 13);

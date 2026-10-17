@@ -8,7 +8,7 @@ ARGS=(uninstall)
 
 usage() {
     cat <<'EOF'
-Uninstall a source-installed RIMES Fcitx5 addon, Buffer, Capsule and shared data.
+Uninstall a source-installed RIMES Fcitx5 addon, Buffer, Capsule, Mailbox and shared data.
 
 Usage: uninstall.sh [--prefix DIR] [--dry-run] [--build-dir DIR]
 
@@ -19,7 +19,7 @@ Default prefix: $HOME/.local (or RIMES_IME_PREFIX).
 
 System-wide: sudo uninstall.sh --prefix /usr
 DESTDIR is supported for staged installations and tests.
-User dictionaries, learning records, imported schemes and notes are preserved.
+User dictionaries, learning records, imported schemes, notes, Mailbox messages and attachments are preserved.
 Modified installed files stop the uninstall; move or restore them and retry.
 Deb packages must be removed with: sudo apt remove fcitx5-rimes
 EOF

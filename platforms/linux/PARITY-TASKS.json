@@ -360,9 +360,10 @@
         "实现兼容 schema-v1 的会话/消息/附件存储、原子写入及迁移；停用或关闭不删除内容。",
         "验证空态、长内容、最小尺寸、深浅主题、重启、损坏记录及通知打开同一窗口。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 168,
-      "url": "https://github.com/scholay/xsime/issues/168"
+      "url": "https://github.com/scholay/xsime/issues/168",
+      "visual_status": "requires_review"
     },
     {
       "order": 19,

@@ -27,7 +27,7 @@ P0 优先完成插件基础、实时翻译和 AI API；P1 补齐其余核心模�
 | 15 | P1 | [#165 Capsule 资源、文献和文件预览](https://github.com/scholay/xsime/issues/165) | 资源、引用与安装测试通过，四主题像素对照待验收 |
 | 16 | P1 | [#166 Capsule 截图、录屏与捕获归档](https://github.com/scholay/xsime/issues/166) | 捕获、归档、宿主及 deb 测试通过，真实桌面录屏与像素待验收 |
 | 17 | P1 | [#167 Capsule 密码库、结构化秘密与 TOTP](https://github.com/scholay/xsime/issues/167) | 加密兼容、宿主及 deb 测试通过，底栏详情、桌面与像素待验收 |
-| 18 | P1 | [#168 Mailbox 窗口、模块宿主和持久化](https://github.com/scholay/xsime/issues/168) | 待开发 |
+| 18 | P1 | [#168 Mailbox 窗口、模块宿主和持久化](https://github.com/scholay/xsime/issues/168) | GTK 宿主、原生数据往返、单实例与锁屏测试通过；双端 24 状态截图仍需视觉验收 |
 | 19 | P1 | [#169 Mailbox 收件、附件与 Capsule/Buffer 流转](https://github.com/scholay/xsime/issues/169) | 待开发 |
 | 20 | P1 | [#170 本地 MCP/HTTP 网关与收件审核](https://github.com/scholay/xsime/issues/170) | 待开发 |
 | 21 | P1 | [#171 ChatGPT/Codex CLI 渠道插件](https://github.com/scholay/xsime/issues/171) | 待开发 |
