@@ -8,7 +8,7 @@ Category=InputMethod
 Version=@PROJECT_VERSION@
 Library=rimes
 Type=SharedLibrary
-OnDemand=True
+OnDemand=False
 Configurable=True
 
 [Addon/Dependencies]

@@ -1,4 +1,5 @@
 #include "configuration.hpp"
+#include "shortcuts.hpp"
 #include <iostream>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -43,6 +44,23 @@ int main() {
               snapshot.provider.at("model") == "fixture-model",
           "credential did not reach frozen request");
     PrivateDirectory prefs(root / "settings");
+    auto legacy = store.Load();
+    legacy.erase("autoSendSeconds");
+    legacy.erase("shortcuts"); legacy.erase("globalShortcuts");
+    prefs.Write("preferences.json", legacy.dump());
+    Check(store.Load().at("autoSendSeconds") == 1 &&
+          store.Load().at("revision") == legacy.at("revision"), "legacy auto-send migration lost revision");
+    Check(store.Load().at("shortcuts") == DefaultShortcuts() && store.Load().at("globalShortcuts") == true,
+          "legacy shortcut migration failed");
+    ValidateShortcuts(DefaultShortcuts());
+    for (const auto* chord : {"b", "SHIFT+b", "CTRL+a", "CTRL+v", "LOGO+v", "CTRL+CTRL+b", "CTRL+SHIFT+B", "SHIFT+CTRL+b", "CTRL+bad", "CTRL+b\n"})
+      Reject([&] { ParseShortcut(chord); });
+    Check(!ParseShortcut("") && ParseShortcut("CTRL+ALT+F12")->Fcitx() == "Control+Alt+F12", "shortcut encoding failed");
+    auto duplicate = store.Load(); duplicate["shortcuts"]["capsule"] = duplicate["shortcuts"]["buffer"];
+    Reject([&] { store.Save(duplicate, duplicate.at("revision")); });
+    auto invalid_lifetime = store.Load();
+    invalid_lifetime["autoSendSeconds"] = 4;
+    Reject([&] { store.Save(invalid_lifetime, invalid_lifetime.at("revision")); });
     Check(prefs.Read("preferences.json", 1048576)->find(secret) ==
               std::string::npos,
           "credential leaked to ordinary preferences");

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -30,6 +31,8 @@ enum class CommandOp {
     ReturnToEdit,
     SelectResult,
     CopyResult,
+    CycleAutoSend,
+    ToggleCloseAfterLast,
     Unknown,
 };
 
@@ -53,6 +56,8 @@ struct Snapshot {
     bool empty = true;
     int insertion_index = 0;
     double hold_progress = 0;
+    int auto_send_seconds = 0;
+    std::map<std::string, double> auto_send_progress;
     std::string preedit;
     std::string placeholder;
     std::string target;
@@ -65,9 +70,12 @@ struct Snapshot {
     bool live_expand = true;
     std::vector<PluginChoice> plugins;
     DerivedPhase phase = DerivedPhase::Idle;
+    std::string message;
     bool can_generate = false;
+    bool can_deliver = false;
     std::string selected_result;
     std::vector<DerivedResult> results;
+    std::vector<Block> result_blocks;
 };
 
 Snapshot MakeSnapshot(const BufferModel& model);

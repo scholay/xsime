@@ -51,6 +51,10 @@ public:
   bool MoveResult(int delta);
   const DerivedResult *SelectedResult() const;
   std::string CopyText() const;
+  // First successful delivery prunes alternatives; every consumption changes
+  // the result identity so an older copy command cannot copy a changed value.
+  bool ConsumePrefix(const DerivedRequest& request, bool grant_valid,
+                     std::string_view result_id, std::string_view text);
   DerivedPhase Phase() const { return phase_; }
   const std::vector<DerivedResult> &Results() const { return results_; }
   const std::string &Plugin() const { return plugin_; }

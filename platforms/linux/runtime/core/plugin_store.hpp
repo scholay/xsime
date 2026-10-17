@@ -2,6 +2,7 @@
 #include "plugin_registry.hpp"
 #include "private_files.hpp"
 #include <nlohmann/json.hpp>
+#include <functional>
 
 namespace rimes::plugins {
 using Json = nlohmann::json;
@@ -23,6 +24,10 @@ public:
     std::vector<PackageView> Entries() const;
     PackageView Inspect(const std::string& id) const;
     Json Package(const std::string& id) const;
+    // Linearize a local host operation with enable/disable/update. The action
+    // must not call back into this store or acquire the package lock again.
+    void WithEnabledGrant(const std::string& id, const std::string& grant,
+                          const std::function<void()>& action) const;
     void Install(const std::string& id, std::string_view bytes, const std::string& expected_grant);
     void RestoreBundled(const std::string& id, const std::string& expected_grant);
     void Enable(const std::string& id, bool enabled, const std::string& expected_grant);

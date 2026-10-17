@@ -2,6 +2,8 @@
 #include "native_buffer_metrics.hpp"
 #include "desktop.hpp"
 #include "official_catalog.hpp"
+#include "shortcuts.hpp"
+#include "launcher_client.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cstring>
@@ -24,13 +26,26 @@ struct Settings {
             *sidebar = nullptr, *feedback = nullptr;
   std::string route = "core.rimes", subpage = "about", message;
   std::map<std::string, GtkWidget *> navigation;
+  std::map<std::string, GtkWidget *> shortcut_buttons;
+  GtkWidget *shortcut_status = nullptr;
+  std::string recording_action, recording_token;
+  bool recording_ready = false;
+  uint64_t page_revision = 0;
+  guint shortcut_poll = 0;
   bool rendering = false, busy = false;
+  bool application_window = false;
   GSubprocess *operation = nullptr;
   GCancellable *cancel = g_cancellable_new();
   std::shared_ptr<std::atomic<bool>> alive =
       std::make_shared<std::atomic<bool>>(true);
   ~Settings() {
     alive->store(false);
+    if (window) {
+      g_signal_handlers_disconnect_by_data(window, this);
+      gtk_widget_destroy(window);
+      window = nullptr;
+    }
+    if (shortcut_poll) g_source_remove(shortcut_poll);
     if (operation) {
       g_subprocess_force_exit(operation);
       g_object_unref(operation);
@@ -56,14 +71,15 @@ struct Settings {
     Theme(saved.at("theme"));
     Message(cleaned ? "已保存" : "已保存；旧密钥清理未完成，请检查目录权限。");
   }
-  void Build(bool offscreen) {
+  void Build(bool offscreen, GtkApplication *application = nullptr) {
     rendering = offscreen;
+    application_window = application != nullptr;
     if (offscreen)
       g_object_set(gtk_settings_get_default(), "gtk-enable-animations", FALSE,
                    nullptr);
     Theme(saved.at("theme"));
     window = offscreen ? gtk_offscreen_window_new()
-                       : gtk_window_new(GTK_WINDOW_TOPLEVEL);
+                       : application ? gtk_application_window_new(application) : gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "XSIME 设置");
     gtk_window_set_default_size(GTK_WINDOW(window), Metric("settingsWidth"),
                                 Metric("settingsHeight"));
@@ -82,7 +98,8 @@ struct Settings {
                      G_CALLBACK(+[](GtkWidget *, gpointer p) {
                        auto *self = static_cast<Settings *>(p);
                        self->alive->store(false);
-                       if (!self->rendering)
+                       self->window = nullptr;
+                       if (!self->rendering && !self->application_window)
                          gtk_main_quit();
                      }),
                      this);
@@ -149,6 +166,11 @@ struct Settings {
     content = Column(0);
     Add(body, content, true);
     Select(route, subpage);
+    if (!offscreen) shortcut_poll = g_timeout_add_seconds(2, +[](gpointer data) -> gboolean {
+      auto* self = static_cast<Settings*>(data);
+      if (self->alive->load() && self->route == "core.buffer") self->ShortcutStatus();
+      return G_SOURCE_CONTINUE;
+    }, this);
   }
   const Json &Route() const {
     for (const auto &r : Visuals().at("routes"))
@@ -157,6 +179,9 @@ struct Settings {
     throw std::runtime_error("Unknown route");
   }
   void Select(std::string next, const std::string &page = "") {
+    StopShortcutRecording();
+    ++page_revision;
+    shortcut_buttons.clear(); shortcut_status = nullptr;
     route = std::move(next);
     const auto &r = Route();
     subpage = page.empty() ? r.at("subpages")[0][0].get<std::string>() : page;
@@ -213,6 +238,8 @@ struct Settings {
       Connectors(body);
     else if (route == "core.appearance")
       Appearance(body);
+    else if (route == "core.capsule")
+        Capsule(body);
     else if (route == "core.buffer")
       Buffer(body);
     else if (route == "core.input-method") {
@@ -715,6 +742,26 @@ struct Settings {
     }
     Add(body, grid);
   }
+  void Capsule(GtkWidget* body) {
+      const std::string id = "builtin.capsule.temporary";
+      auto form = std::make_shared<Form>(PluginFields(id), config.Plugin(id));
+      Add(body, form->Widget());
+      Add(body, Button("应用修改", [this, form, id] {
+              Try([&] {
+                  auto next = saved;
+                  next["plugins"][id] = form->Values();
+                  Save(next);
+              });
+          }));
+      Add(body,
+          Label("文字通过输入法直接上屏；图片、文件和富文本可复制后在目标应用粘贴。", "caption"));
+      Add(body, Label("本地资料库", "section"));
+      Add(body, Label("剪贴板原始格式与 Capsule 内容保存在本机，卸载程序时保留。", "caption"));
+      Add(body, Button("打开数据目录…", [this] { OpenPath(UserRoot() / "capsule"); }));
+      Add(body,
+          Label("X11 使用剪贴板所有权事件；Wayland 需要桌面开放 data-control 接口。", "caption"));
+      Add(body, Button("管理 Capsule 插件…", [this] { Select("core.plugins"); }));
+  }
   void Buffer(GtkWidget *body) {
     auto form = std::make_shared<Form>(
         std::vector<Field>{{"closeAfterLast",
@@ -740,6 +787,181 @@ struct Settings {
             Save(next);
           });
         }));
+    auto* spacer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_size_request(spacer, -1, 20); Add(body, spacer);
+    Add(body, Label("快捷键", "section"));
+    Shortcuts(body);
+  }
+  static std::string ShortcutTitle(const std::string& chord) {
+    if (chord.empty()) return "未设置";
+    const auto parsed = ParseShortcut(chord);
+    std::string result;
+    if (parsed->modifiers & Shortcut::Control) result += "Ctrl ";
+    if (parsed->modifiers & Shortcut::Alt) result += "Alt ";
+    if (parsed->modifiers & Shortcut::Shift) result += "⇧ ";
+    if (parsed->modifiers & Shortcut::Logo) result += "Super ";
+    auto key = parsed->key;
+    if (key.size() == 1) key[0] = g_ascii_toupper(key[0]);
+    return result + key;
+  }
+  void ShortcutStatus(const std::string& method = "GetStatus") {
+    if (rendering || !shortcut_status) return;
+    const auto revision = page_revision;
+    LauncherCall(method, "", cancel, [this, life = alive, revision](Json status) {
+      if (!life->load() || revision != page_revision || !shortcut_status) return;
+      const std::map<std::string, std::string> names = {
+        {"recording", "正在录入"},
+        {"registered", "已绑定"}, {"pending", "等待桌面授权"}, {"conflict", "键位已被占用"},
+        {"not-granted", "未获授权"}, {"layout-unavailable", "当前键盘布局不可用"},
+        {"unavailable", "尚不可用"}, {"input-method", "仅在输入框中可用"}, {"unbound", "未绑定"}};
+      const auto actions = status.value("actions", Json::object());
+      std::string summary;
+      for (const auto& action : ShortcutActions()) {
+        const auto id = action.at("id").get<std::string>();
+        if (!actions.contains(id) || !shortcut_buttons.count(id)) continue;
+        const auto state = actions[id].value("state", "unavailable");
+        const auto label = names.count(state) ? names.at(state) : names.at("unavailable");
+        const auto text = action.at("title").get<std::string>() + "：" + label;
+        if (!summary.empty()) summary += "；";
+        summary += text;
+        const auto tip = text + "\n" + actions[id].value("trigger", "") +
+          "\n点击后按组合键；Delete 恢复默认，Esc 取消。";
+        gtk_widget_set_tooltip_text(shortcut_buttons.at(id), tip.c_str());
+        if (recording_action != id && status.value("backend", "") == "portal" && state == "registered") {
+          const auto actual = actions[id].value("trigger", "");
+          if (!actual.empty()) gtk_button_set_label(GTK_BUTTON(shortcut_buttons.at(id)), actual.c_str());
+        }
+      }
+      if (summary.empty()) summary = status.value("message", "无法获取桌面绑定状态。");
+      gtk_label_set_text(GTK_LABEL(shortcut_status), summary.c_str());
+      const auto detail = summary + "\n" + status.value("message", "");
+      gtk_widget_set_tooltip_text(shortcut_status, detail.c_str());
+    });
+  }
+  void StopShortcutRecording() {
+    if (!recording_token.empty() && !rendering)
+      LauncherCall("EndRecording", recording_token, nullptr, [](Json) {});
+    recording_action.clear(); recording_token.clear(); recording_ready = false;
+  }
+  void BeginShortcutRecording(const std::string& id) {
+    StopShortcutRecording();
+    recording_action = id; recording_token = RandomID(); recording_ready = rendering;
+    gtk_button_set_label(GTK_BUTTON(shortcut_buttons.at(id)), rendering ? "请按快捷键…" : "正在暂停全局绑定…");
+    gtk_widget_grab_focus(shortcut_buttons.at(id));
+    if (rendering) return;
+    const auto token = recording_token;
+    LauncherCall("BeginRecording", token, cancel, [this, life = alive, token](Json status) {
+      if (!life->load()) { LauncherCall("EndRecording", token, nullptr, [](Json) {}); return; }
+      if (recording_token != token) { LauncherCall("EndRecording", token, nullptr, [](Json) {}); return; }
+      if (!status.value("recording", false)) {
+        Message(status.value("message", "无法暂停全局快捷键，请启动 Fcitx5 后重试。"));
+        Select(route, subpage); return;
+      }
+      recording_ready = true;
+      if (shortcut_buttons.count(recording_action))
+        gtk_button_set_label(GTK_BUTTON(shortcut_buttons.at(recording_action)), "请按快捷键…");
+    });
+  }
+  bool RecordShortcut(GdkEventKey* event) {
+    if (recording_action.empty()) return false;
+    if (event->keyval == GDK_KEY_Escape) { Select(route, subpage); return true; }
+    if (!recording_ready) return true;
+    if (event->is_modifier) return true;
+    const auto id = recording_action;
+    Try([&] {
+      std::string chord;
+      const auto modifiers = event->state & (GDK_CONTROL_MASK | GDK_MOD1_MASK | GDK_SUPER_MASK | GDK_MOD4_MASK | GDK_SHIFT_MASK);
+      if (!modifiers && (event->keyval == GDK_KEY_BackSpace || event->keyval == GDK_KEY_Delete)) {
+        chord = DefaultShortcuts().at(id);
+      } else {
+        Shortcut value;
+        if (event->state & GDK_CONTROL_MASK) value.modifiers |= Shortcut::Control;
+        if (event->state & GDK_MOD1_MASK) value.modifiers |= Shortcut::Alt;
+        if (event->state & (GDK_SUPER_MASK | GDK_MOD4_MASK)) value.modifiers |= Shortcut::Logo;
+        if (event->state & GDK_SHIFT_MASK) value.modifiers |= Shortcut::Shift;
+        guint key = event->keyval;
+        // Store the base XKB symbol, even for Shift+1 or Shift+Tab.
+        if (event->hardware_keycode)
+          gdk_keymap_translate_keyboard_state(gdk_keymap_get_for_display(gtk_widget_get_display(window)),
+            event->hardware_keycode, static_cast<GdkModifierType>(0), event->group, &key, nullptr, nullptr, nullptr);
+        key = gdk_keyval_to_lower(key);
+        const char* name = gdk_keyval_name(key);
+        value.key = name ? name : "";
+        chord = value.Canonical();
+      }
+      auto next = saved; next["shortcuts"][id] = chord;
+      // Report a local validation failure without exposing persisted values.
+      try { ValidateShortcuts(next.at("shortcuts")); }
+      catch (const std::exception&) {
+        Message("请选择包含 Ctrl、Alt 或 Super 的组合键；不可重复或占用全选、粘贴键。"); return;
+      }
+      Save(next); Select(route, subpage);
+    });
+    return true;
+  }
+  void Shortcuts(GtkWidget* body) {
+    auto* rows = Column(Metric("shortcutRowSpacing")); Add(body, rows);
+    for (const auto& action : ShortcutActions()) {
+      const std::string id = action.at("id"), title = action.at("title");
+      auto* card = Class(gtk_event_box_new(), "shortcut-row");
+      auto* row = Row(Metric("shortcutControlSpacing"));
+      gtk_widget_set_margin_start(row, Metric("shortcutInsetHorizontal")); gtk_widget_set_margin_end(row, Metric("shortcutInsetHorizontal"));
+      gtk_widget_set_margin_top(row, Metric("shortcutInsetVertical")); gtk_widget_set_margin_bottom(row, Metric("shortcutInsetVertical"));
+      gtk_widget_set_size_request(card, Metric("shortcutRowWidth"), -1);
+      auto* title_label = Class(Label(title), "shortcut-title");
+      gtk_label_set_ellipsize(GTK_LABEL(title_label), PANGO_ELLIPSIZE_END);
+      Add(row, title_label); Add(row, Column(0), true);
+      auto* recorder = Button(ShortcutTitle(saved.at("shortcuts").at(id)), [this, id] {
+        const bool stop = recording_action == id;
+        for (const auto& [other, button] : shortcut_buttons)
+          gtk_button_set_label(GTK_BUTTON(button), ShortcutTitle(saved.at("shortcuts").at(other)).c_str());
+        if (stop) { StopShortcutRecording(); return; }
+        BeginShortcutRecording(id);
+      }, "shortcut-recorder");
+      gtk_widget_set_size_request(recorder, Metric("shortcutRecorderMinWidth"), -1);
+      auto* recorder_label = gtk_bin_get_child(GTK_BIN(recorder));
+      gtk_label_set_max_width_chars(GTK_LABEL(recorder_label), 22);
+      gtk_label_set_ellipsize(GTK_LABEL(recorder_label), PANGO_ELLIPSIZE_END);
+      atk_object_set_name(gtk_widget_get_accessible(recorder), (title + "快捷键").c_str());
+      gtk_widget_set_tooltip_text(recorder, "点击后按组合键；Delete 恢复默认，Esc 取消。");
+      g_signal_connect(recorder, "key-press-event", G_CALLBACK(+[](GtkWidget*, GdkEventKey* e, gpointer p) -> gboolean {
+        return static_cast<Settings*>(p)->RecordShortcut(e);
+      }), this);
+      g_signal_connect(recorder, "focus-out-event", G_CALLBACK(+[](GtkWidget* widget, GdkEventFocus*, gpointer p) -> gboolean {
+        auto* self = static_cast<Settings*>(p);
+        const auto found = self->shortcut_buttons.find(self->recording_action);
+        if (found != self->shortcut_buttons.end() && found->second == widget) {
+          gtk_button_set_label(GTK_BUTTON(widget), ShortcutTitle(self->saved.at("shortcuts").at(found->first)).c_str());
+          self->StopShortcutRecording();
+        }
+        return FALSE;
+      }), this);
+      shortcut_buttons[id] = recorder;
+      Add(row, recorder); gtk_container_add(GTK_CONTAINER(card), row); Add(rows, card);
+    }
+    Add(body, Button("恢复全部默认快捷键", [this] {
+      Try([&] { auto next = saved; next["shortcuts"] = DefaultShortcuts(); Save(next); Select(route, subpage); });
+    }));
+    auto* global_row = Row(16);
+    Add(global_row, Label("在其他输入法中使用全局快捷键", "name"), true);
+    auto* global = gtk_switch_new();
+    gtk_switch_set_active(GTK_SWITCH(global), saved.at("globalShortcuts"));
+    atk_object_set_name(gtk_widget_get_accessible(global), "在其他输入法中使用全局快捷键");
+    g_signal_connect(global, "notify::active", G_CALLBACK(+[](GObject* button, GParamSpec*, gpointer data) {
+      auto* self = static_cast<Settings*>(data);
+      self->Try([&] {
+        auto next = self->saved; next["globalShortcuts"] = static_cast<bool>(gtk_switch_get_active(GTK_SWITCH(button)));
+        self->Save(next); self->ShortcutStatus();
+      });
+    }), this);
+    Add(global_row, global); Add(body, global_row);
+    shortcut_status = Label("正在检查桌面快捷键…", "caption");
+    gtk_label_set_ellipsize(GTK_LABEL(shortcut_status), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_size_request(shortcut_status, 650, -1);
+    Add(body, shortcut_status);
+    Add(body, Button("重新绑定全局快捷键", [this] { ShortcutStatus("Retry"); }));
+    Add(body, Label("若桌面未提供授权，可在系统自定义快捷键中绑定 rimes-launch buffer 或 capsule。", "caption"));
+    ShortcutStatus();
   }
 };
 
@@ -807,6 +1029,25 @@ int SettingsSmoke() {
     click("应用修改");
     check(app.config.Load().at("closeAfterLast") == false);
     check(app.config.Load().at("resetOnAppSwitch") == false);
+    phase = "shortcuts";
+    app.recording_action = "buffer";
+    app.recording_ready = true;
+    GdkEventKey event{}; event.keyval = GDK_KEY_j; event.state = GDK_CONTROL_MASK | GDK_MOD1_MASK;
+    check(app.RecordShortcut(&event));
+    check(app.config.Load().at("shortcuts").at("buffer") == "CTRL+ALT+j");
+    app.recording_action = "capsule";
+    app.recording_ready = true;
+    const auto before_conflict = app.config.Load();
+    check(app.RecordShortcut(&event)); check(app.config.Load() == before_conflict);
+    event.keyval = GDK_KEY_Escape; app.RecordShortcut(&event);
+    check(app.recording_action.empty());
+    app.recording_action = "buffer"; app.recording_ready = true;
+    event.keyval = GDK_KEY_Delete; event.state = 0; app.RecordShortcut(&event);
+    check(app.config.Load().at("shortcuts").at("buffer") == DefaultShortcuts().at("buffer"));
+    gtk_switch_set_active(GTK_SWITCH(control("在其他输入法中使用全局快捷键")), false);
+    check(app.config.Load().at("globalShortcuts") == false);
+    click("恢复全部默认快捷键");
+    check(app.config.Load().at("shortcuts") == DefaultShortcuts());
     phase = "theme";
     app.Select("core.appearance", "theme");
     click("翡翠");
@@ -893,6 +1134,32 @@ int main(int argc, char **argv) {
     }
     if (smoke)
       return SettingsSmoke();
+    if (!render) {
+      struct Session { std::unique_ptr<Settings> settings; bool failed = false; } session;
+      // Isolate test/user roots; normal launches in the same desktop session
+      // share one settings window, including activations from the IME.
+      const auto identity = "org.scholay.rimes.settings.u" + Sha256(UserRoot().string()).substr(0, 16);
+      auto *application = gtk_application_new(identity.c_str(), static_cast<GApplicationFlags>(0));
+      g_signal_connect(application, "activate", G_CALLBACK(+[](GtkApplication *application, gpointer data) {
+        auto *session = static_cast<Session *>(data);
+        try {
+          if (!session->settings || !session->settings->window) {
+            session->settings = std::make_unique<Settings>();
+            session->settings->Build(false, application);
+          }
+          gtk_widget_show_all(session->settings->window);
+          gtk_window_present(GTK_WINDOW(session->settings->window));
+        } catch (const std::exception &) {
+          session->failed = true;
+          g_printerr("XSIME 设置无法启动；现有配置已保留。\n");
+          g_application_quit(G_APPLICATION(application));
+        }
+      }), &session);
+      const int result = g_application_run(G_APPLICATION(application), argc, argv);
+      session.settings.reset();
+      g_object_unref(application);
+      return session.failed ? 1 : result;
+    }
     Settings app;
     app.Build(render);
     if (render) {
@@ -916,8 +1183,6 @@ int main(int argc, char **argv) {
       file << manifest.dump(2) << '\n';
       return file ? 0 : 1;
     }
-    gtk_widget_show_all(app.window);
-    gtk_main();
     return 0;
   } catch (const std::exception &) {
     std::cerr

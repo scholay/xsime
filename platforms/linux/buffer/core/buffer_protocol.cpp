@@ -58,6 +58,8 @@ Snapshot MakeSnapshot(const BufferModel& model) {
     snapshot.target = model.target_name();
     snapshot.caret = model.caret();
     if (snapshot.secure) {
+        snapshot.target.clear();
+        snapshot.caret = {};
         snapshot.preedit.clear();
         snapshot.staged_text.clear();
         snapshot.blocks.clear();
@@ -70,13 +72,22 @@ Snapshot MakeSnapshot(const BufferModel& model) {
 }
 
 std::string EncodeSnapshot(const Snapshot& snapshot) {
-    Json blocks = Json::array(), results = Json::array(), choices = Json::array();
+    if (snapshot.password_field && !snapshot.secure) {
+        auto protected_snapshot = snapshot; protected_snapshot.secure = true;
+        return EncodeSnapshot(protected_snapshot);
+    }
+    const auto caret = snapshot.secure ? CaretRect{} : snapshot.caret;
+    Json blocks = Json::array(), results = Json::array(), choices = Json::array(), segments = Json::array();
     if (!snapshot.secure) {
         for (const auto& b : snapshot.blocks)
             blocks.push_back({{"id", b.id}, {"text", b.text}, {"origin", OriginTag(b.origin)},
-                              {"created_at_ms", b.created_at_ms}});
+                              {"created_at_ms", b.created_at_ms},
+                              {"auto_send_progress", snapshot.auto_send_progress.count(b.id) ? snapshot.auto_send_progress.at(b.id) : 0.0}});
         for (const auto& r : snapshot.results)
             results.push_back({{"id", r.id}, {"text", r.text}, {"alternative", r.alternative}, {"ready", r.ready}});
+        // Sizes refer to the selected result, without duplicating its text.
+        for (const auto& block : snapshot.result_blocks)
+            segments.push_back({{"id", block.id}, {"bytes", block.text.size()}});
     }
     for (const auto& p : snapshot.plugins) choices.push_back({{"id", p.id}, {"name", p.name}});
     return Json{{"v", 1}, {"type", "snapshot"}, {"generation", snapshot.generation},
@@ -84,15 +95,18 @@ std::string EncodeSnapshot(const Snapshot& snapshot) {
         {"enabled", snapshot.enabled}, {"secure", snapshot.secure}, {"password_field", snapshot.password_field},
         {"close_after_last", snapshot.close_after_last}, {"empty", snapshot.secure || snapshot.empty},
         {"insertion_index", snapshot.insertion_index}, {"hold_progress", snapshot.hold_progress},
+        {"auto_send_seconds", snapshot.auto_send_seconds},
         {"preedit", snapshot.secure ? "" : snapshot.preedit}, {"placeholder", snapshot.placeholder},
-        {"target", snapshot.target}, {"staged_text", snapshot.secure ? "" : snapshot.staged_text},
-        {"caret", {{"x", snapshot.caret.x}, {"y", snapshot.caret.y}, {"w", snapshot.caret.width},
-                   {"h", snapshot.caret.height}, {"valid", snapshot.caret.valid}}},
+        {"target", snapshot.secure ? "" : snapshot.target}, {"staged_text", snapshot.secure ? "" : snapshot.staged_text},
+        {"caret", {{"x", caret.x}, {"y", caret.y}, {"w", caret.width},
+                   {"h", caret.height}, {"valid", caret.valid}}},
         {"ui_clients", snapshot.ui_clients}, {"blocks", blocks}, {"theme", snapshot.theme},
         {"active_plugin", snapshot.active_plugin}, {"plugins", choices}, {"live_expand", snapshot.live_expand},
         {"phase", PhaseName(snapshot.secure ? DerivedPhase::Protected : snapshot.phase)},
+        {"message", snapshot.secure ? "" : snapshot.message},
         {"can_generate", !snapshot.secure && snapshot.can_generate},
-        {"selected_result", snapshot.secure ? "" : snapshot.selected_result}, {"results", results}}.dump();
+        {"can_deliver", !snapshot.secure && snapshot.can_deliver},
+        {"selected_result", snapshot.secure ? "" : snapshot.selected_result}, {"results", results}, {"result_blocks", segments}}.dump();
 }
 
 bool ParseSnapshot(std::string_view text, Snapshot* output) {
@@ -113,6 +127,9 @@ bool ParseSnapshot(std::string_view text, Snapshot* output) {
         s.empty = value.at("empty").get<bool>();
         s.insertion_index = value.value("insertion_index", 0);
         s.hold_progress = value.value("hold_progress", 0.0);
+        s.auto_send_seconds = value.value("auto_send_seconds", 0);
+        if (s.auto_send_seconds != 0 && s.auto_send_seconds != 1 && s.auto_send_seconds != 2 &&
+            s.auto_send_seconds != 3 && s.auto_send_seconds != 5) return false;
         if (!std::isfinite(s.hold_progress)) return false;
         s.hold_progress = std::clamp(s.hold_progress, 0.0, 1.0);
         s.preedit = ReadText(value, "preedit");
@@ -129,6 +146,9 @@ bool ParseSnapshot(std::string_view text, Snapshot* output) {
             block.text = ReadText(b, "text");
             if (block.id.empty() || !ParseOrigin(ReadText(b, "origin"), &block.origin)) return false;
             block.created_at_ms = b.value("created_at_ms", std::int64_t{0});
+            const double progress = b.value("auto_send_progress", 0.0);
+            if (!std::isfinite(progress) || progress < 0 || progress > 1) return false;
+            s.auto_send_progress[block.id] = progress;
             s.blocks.push_back(std::move(block));
         }
         s.theme = ReadText(value, "theme", "night");
@@ -140,7 +160,10 @@ bool ParseSnapshot(std::string_view text, Snapshot* output) {
             for (const auto& p : value.at("plugins")) s.plugins.push_back({ReadText(p, "id"), ReadText(p, "name")});
         }
         s.phase = ReadPhase(ReadText(value, "phase", "idle"));
+        s.message = ReadText(value, "message", "");
+        if (s.message.size() > 512) return false;
         s.can_generate = value.value("can_generate", false);
+        s.can_deliver = value.value("can_deliver", false);
         s.selected_result = ReadText(value, "selected_result");
         if (value.contains("results")) {
             if (!value.at("results").is_array() || value.at("results").size() > 5) return false;
@@ -150,9 +173,30 @@ bool ParseSnapshot(std::string_view text, Snapshot* output) {
                 s.results.push_back(std::move(result));
             }
         }
+        if (value.contains("result_blocks")) {
+            const auto& parts = value.at("result_blocks");
+            if (!parts.is_array() || parts.size() > 200) return false;
+            const auto selected = std::find_if(s.results.begin(), s.results.end(), [&](const auto& r) { return r.id == s.selected_result; });
+            if (!parts.empty() && selected == s.results.end()) return false;
+            std::size_t offset = 0;
+            for (const auto& part : parts) {
+                const auto id = ReadText(part, "id");
+                if (id.empty() || !part.at("bytes").is_number_unsigned()) return false;
+                const auto length = part.at("bytes").get<std::size_t>();
+                if (!length || length > selected->text.size() - offset) return false;
+                auto segment = selected->text.substr(offset, length);
+                (void)Json(segment).dump();
+                s.result_blocks.push_back({id, std::move(segment), Origin::Local, 0});
+                offset += length;
+            }
+            if (!parts.empty() && offset != selected->text.size()) return false;
+        }
         if (s.secure) {
+            s.target.clear(); s.caret = {}; s.can_deliver = false;
             s.blocks.clear(); s.results.clear(); s.preedit.clear(); s.staged_text.clear();
-            s.selected_result.clear(); s.empty = true; s.can_generate = false; s.phase = DerivedPhase::Protected;
+            s.result_blocks.clear();
+            s.auto_send_progress.clear();
+            s.selected_result.clear(); s.message.clear(); s.empty = true; s.can_generate = false; s.phase = DerivedPhase::Protected;
         }
         *output = std::move(s);
         return true;
@@ -178,7 +222,8 @@ bool ParseCommand(std::string_view text, Command* command, std::string* error) {
             {"drag_end", CommandOp::DragEnd}, {"select_plugin", CommandOp::SelectPlugin},
             {"generate", CommandOp::Generate}, {"cancel_generation", CommandOp::CancelGeneration},
             {"return_to_edit", CommandOp::ReturnToEdit}, {"select_result", CommandOp::SelectResult},
-            {"copy_result", CommandOp::CopyResult}};
+            {"copy_result", CommandOp::CopyResult}, {"cycle_auto_send", CommandOp::CycleAutoSend},
+            {"toggle_close_after_last", CommandOp::ToggleCloseAfterLast}};
         Command next;
         for (const auto& [name, code] : ops) if (op == name) next.op = code;
         if (next.op == CommandOp::Unknown) throw std::runtime_error("Unknown operation");

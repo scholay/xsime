@@ -12,20 +12,20 @@ P0 优先完成插件基础、实时翻译和 AI API；P1 补齐其余核心模�
 |---|---|---|---|
 | 01 | P0 | [#151 插件注册、能力与启停生命周期](https://github.com/scholay/xsime/issues/151) | 已合入，CI 与审查通过 |
 | 02 | P0 | [#152 官方插件安装、更新和完整性校验](https://github.com/scholay/xsime/issues/152) | 已合入，CI 与审查通过 |
-| 03 | P0 | [#153 统一设置、插件配置与凭据存储](https://github.com/scholay/xsime/issues/153) | 进行中 |
+| 03 | P0 | [#153 统一设置、插件配置与凭据存储](https://github.com/scholay/xsime/issues/153) | 基础已合入，模块页及视觉验收中 |
 | 04 | P0 | [#154 Buffer 双轨工作区与异步任务状态](https://github.com/scholay/xsime/issues/154) | 进行中 |
 | 05 | P0 | [#155 Linux 本地翻译引擎和资源管理](https://github.com/scholay/xsime/issues/155) | 引擎与资源管理已实现，视觉验收中 |
-| 06 | P0 | [#156 实时增量翻译与连续输入](https://github.com/scholay/xsime/issues/156) | 待开发 |
-| 07 | P0 | [#157 派生结果投递、源消费与自动发送](https://github.com/scholay/xsime/issues/157) | 待开发 |
-| 08 | P0 | [#158 AI API 插件与流式请求](https://github.com/scholay/xsime/issues/158) | 待开发 |
-| 09 | P0 | [#159 保护态、锁屏睡眠与会话生命周期](https://github.com/scholay/xsime/issues/159) | 待开发 |
-| 10 | P0 | [#160 全局快捷键与跨输入法唤起](https://github.com/scholay/xsime/issues/160) | 待开发 |
-| 11 | P0 | [#161 桌面窗口、主题与多屏交互](https://github.com/scholay/xsime/issues/161) | 待开发 |
-| 12 | P1 | [#162 Capsule 五模块宿主、管理页和底栏](https://github.com/scholay/xsime/issues/162) | 待开发 |
-| 13 | P1 | [#163 Capsule 结构化笔记与编辑](https://github.com/scholay/xsime/issues/163) | 待开发 |
-| 14 | P1 | [#164 Capsule 临时剪贴板历史](https://github.com/scholay/xsime/issues/164) | 待开发 |
-| 15 | P1 | [#165 Capsule 资源、文献和文件预览](https://github.com/scholay/xsime/issues/165) | 待开发 |
-| 16 | P1 | [#166 Capsule 截图、录屏与捕获归档](https://github.com/scholay/xsime/issues/166) | 待开发 |
+| 06 | P0 | [#156 实时增量翻译与连续输入](https://github.com/scholay/xsime/issues/156) | 增量翻译与宿主验证通过，验收中 |
+| 07 | P0 | [#157 派生结果投递、源消费与自动发送](https://github.com/scholay/xsime/issues/157) | 原生投递与计时测试通过，视觉待验收 |
+| 08 | P0 | [#158 AI API 插件与流式请求](https://github.com/scholay/xsime/issues/158) | HTTP 与 Fcitx 测试通过，外部渠道及视觉待验收 |
+| 09 | P0 | [#159 保护态、锁屏睡眠与会话生命周期](https://github.com/scholay/xsime/issues/159) | D-Bus 与 Fcitx 保护测试通过，桌面及视觉待验收 |
+| 10 | P0 | [#160 全局快捷键与跨输入法唤起](https://github.com/scholay/xsime/issues/160) | X11、portal 与 Fcitx 测试通过，Mailbox 接入及桌面视觉待验收 |
+| 11 | P0 | [#161 桌面窗口、主题与多屏交互](https://github.com/scholay/xsime/issues/161) | 共享浮窗、缩放与工具栏测试通过，实际桌面及像素对照待验收 |
+| 12 | P1 | [#162 Capsule 五模块宿主、管理页和底栏](https://github.com/scholay/xsime/issues/162) | 模块、存储、管理页与 Fcitx 测试通过，四主题截图校准中 |
+| 13 | P1 | [#163 Capsule 结构化笔记与编辑](https://github.com/scholay/xsime/issues/163) | 结构化笔记、富文本及真实 Fcitx 测试通过，像素对照待验收 |
+| 14 | P1 | [#164 Capsule 临时剪贴板历史](https://github.com/scholay/xsime/issues/164) | 原始 MIME、X11/Wayland 与宿主测试通过，四主题像素对照待验收 |
+| 15 | P1 | [#165 Capsule 资源、文献和文件预览](https://github.com/scholay/xsime/issues/165) | 资源、引用与安装测试通过，四主题像素对照待验收 |
+| 16 | P1 | [#166 Capsule 截图、录屏与捕获归档](https://github.com/scholay/xsime/issues/166) | 捕获、归档、宿主及 deb 测试通过，真实桌面录屏与像素待验收 |
 | 17 | P1 | [#167 Capsule 密码库、结构化秘密与 TOTP](https://github.com/scholay/xsime/issues/167) | 待开发 |
 | 18 | P1 | [#168 Mailbox 窗口、模块宿主和持久化](https://github.com/scholay/xsime/issues/168) | 待开发 |
 | 19 | P1 | [#169 Mailbox 收件、附件与 Capsule/Buffer 流转](https://github.com/scholay/xsime/issues/169) | 待开发 |

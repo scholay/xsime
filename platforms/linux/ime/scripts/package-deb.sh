@@ -117,8 +117,8 @@ Section: utils
 Priority: optional
 Architecture: $ARCH
 Installed-Size: $SIZE
-Depends: fcitx5, python3.12, $DEPS
-Recommends: libgtk-layer-shell0, wl-clipboard, fonts-inter, fonts-noto-cjk
+Depends: fcitx5, python3.12, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-pipewire, xdg-desktop-portal, $DEPS
+Recommends: xdg-desktop-portal-gtk, libgtk-layer-shell0, wl-clipboard, fonts-inter, fonts-noto-cjk, fonts-noto-color-emoji
 Maintainer: XSIME contributors <https://github.com/scholay/xsime>
 Homepage: https://xsime.com
 Description: XSIME input method frontend for Fcitx 5

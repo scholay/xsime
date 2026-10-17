@@ -61,7 +61,7 @@ This table is generated from [`Catalog/buffer-plugins.json`](Catalog/buffer-plug
 
 | Plug-in | ID | Version | Default installation | Default state |
 |---|---|---:|---|---|
-| Translation | `builtin.apple-translation` | 2.2.0 | Bundled with XSIME | Enabled |
+| Translation | `builtin.apple-translation` | 2.3.0 | Bundled with XSIME | Enabled |
 | Capture | `builtin.capsule.capture` | 1.1.0 | Bundled with XSIME | Enabled |
 | Notes | `builtin.capsule.notes` | 1.1.0 | Bundled with XSIME | Enabled |
 | Passwords | `builtin.capsule.passwords` | 1.1.0 | Bundled with XSIME | Enabled |
@@ -76,7 +76,7 @@ This table is generated from [`Catalog/buffer-plugins.json`](Catalog/buffer-plug
 | Terminal | `builtin.mailbox.terminal` | 1.1.0 | Bundled with XSIME | Enabled |
 | Morse Code | `builtin.morse` | 0.1.0 | On demand in Settings | Disabled |
 | Electronic Music | `builtin.music` | 0.2.3 | On demand in Settings | Disabled |
-| AI API | `builtin.openai-compatible` | 1.0.0 | On demand in Settings | Disabled |
+| AI API | `builtin.openai-compatible` | 1.1.0 | On demand in Settings | Disabled |
 | Polisher | `builtin.polisher` | 1.1.0 | On demand in Settings | Disabled |
 | Reference | `builtin.scholay` | 0.1.0 | On demand in Settings | Disabled |
 | Statistics | `builtin.statistics` | 2.0.0 | Bundled with XSIME | Enabled |

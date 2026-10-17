@@ -1,0 +1,106 @@
+[
+  {
+    "page": "day-image",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      412,
+      252
+    ],
+    "changed_pixel_fraction": 0.4684466019417476,
+    "mean_absolute_channel_error": 36.854394616530534,
+    "pair": "day-image-pair.png",
+    "difference_4x": "day-image-diff.png"
+  },
+  {
+    "page": "day-video",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      412,
+      252
+    ],
+    "changed_pixel_fraction": 0.4973127600554785,
+    "mean_absolute_channel_error": 40.17208609441619,
+    "pair": "day-video-pair.png",
+    "difference_4x": "day-video-diff.png"
+  },
+  {
+    "page": "night-image",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      412,
+      252
+    ],
+    "changed_pixel_fraction": 0.8936565726614271,
+    "mean_absolute_channel_error": 38.19198836492526,
+    "pair": "night-image-pair.png",
+    "difference_4x": "night-image-diff.png"
+  },
+  {
+    "page": "night-video",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      412,
+      252
+    ],
+    "changed_pixel_fraction": 0.8929823547541994,
+    "mean_absolute_channel_error": 41.88310024657112,
+    "pair": "night-video-pair.png",
+    "difference_4x": "night-video-diff.png"
+  },
+  {
+    "page": "quiet-image",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      412,
+      252
+    ],
+    "changed_pixel_fraction": 0.44738210818307905,
+    "mean_absolute_channel_error": 37.93301163507474,
+    "pair": "quiet-image-pair.png",
+    "difference_4x": "quiet-image-diff.png"
+  },
+  {
+    "page": "quiet-video",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      412,
+      252
+    ],
+    "changed_pixel_fraction": 0.4770573277854831,
+    "mean_absolute_channel_error": 41.62952047053989,
+    "pair": "quiet-video-pair.png",
+    "difference_4x": "quiet-video-diff.png"
+  },
+  {
+    "page": "rasta-image",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      412,
+      252
+    ],
+    "changed_pixel_fraction": 0.4708448913546001,
+    "mean_absolute_channel_error": 37.80562297734628,
+    "pair": "rasta-image-pair.png",
+    "difference_4x": "rasta-image-diff.png"
+  },
+  {
+    "page": "rasta-video",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      412,
+      252
+    ],
+    "changed_pixel_fraction": 0.50055863769456,
+    "mean_absolute_channel_error": 41.410229490933375,
+    "pair": "rasta-video-pair.png",
+    "difference_4x": "rasta-video-diff.png"
+  }
+]

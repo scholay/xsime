@@ -48,6 +48,21 @@ int main() {
     Expect(gesture.on_release(t0 + std::chrono::milliseconds(50)) == Action::None,
            "cancel drops the release");
 
+    Expect(gesture.on_press(false, false, t0, true) == Action::SendNext,
+           "ready derived output sends its first child on key down");
+    Expect(gesture.on_release(t0 + std::chrono::milliseconds(100)) == Action::Consume,
+           "derived key up never sends another child");
+    Expect(gesture.on_press(false, false, t0, true) == Action::SendNext,
+           "next derived press sends next child immediately");
+    Expect(gesture.on_tick(t0 + std::chrono::milliseconds(1200)) == Action::SendAll,
+           "derived hold sends remaining children");
+    Expect(gesture.on_tick(t0 + std::chrono::milliseconds(1300)) == Action::None &&
+           gesture.on_release(t0 + std::chrono::milliseconds(1400)) == Action::Consume,
+           "derived hold never repeats delivery");
+    Expect(gesture.on_press(true, false, t0, true) == Action::SettleOnly &&
+           gesture.on_tick(t0 + std::chrono::milliseconds(2000)) == Action::None,
+           "composition disarms even a derived hold");
+
     if (failures != 0) {
         std::cerr << failures << " return-gesture checks failed\n";
         return EXIT_FAILURE;

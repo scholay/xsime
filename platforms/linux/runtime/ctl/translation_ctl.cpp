@@ -1,6 +1,7 @@
 #include "private_files.hpp"
 #include "plugin_store.hpp"
 #include "process.hpp"
+#include "translation_command.hpp"
 #include <atomic>
 #include <csignal>
 #include <filesystem>
@@ -26,12 +27,8 @@ int main(int argc, char** argv) {
             std::cerr << "Usage: rimes-translation --status|--install|--request\n";
             return 2;
         }
-        auto resources = std::filesystem::path(RIMES_INSTALLED_TRANSLATION_RESOURCES);
-        if (!std::filesystem::is_regular_file(resources / "runtime.py")) resources = RIMES_BUILD_TRANSLATION_RESOURCES;
-        const auto python = access("/usr/bin/python3.12", X_OK) == 0 ? "/usr/bin/python3.12" : RIMES_TRANSLATION_PYTHON;
-        rimes::runtime::PrivateDirectory root(rimes::runtime::UserRoot() / "translation");
         bool emitted = false;
-        const auto result = rimes::runtime::RunProcess({python, "-I", (resources / "runtime.py").string(), "--root", root.Path().string()},
+        const auto result = rimes::runtime::RunProcess(rimes::runtime::TranslationCommand(),
             request, cancelled, std::chrono::minutes(10), 1024 * 1024,
             [&](std::string_view data) { emitted = true; std::cout << data << std::flush; });
         if (!result.success && (cancelled.load() || !emitted))

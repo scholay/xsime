@@ -1,5 +1,6 @@
 #include "native_buffer_metrics.hpp"
 #include "configuration.hpp"
+#include "shortcuts.hpp"
 #include <algorithm>
 #include <cmath>
 #include <curl/curl.h>
@@ -36,6 +37,10 @@ std::string URLPart(CURLU *url, CURLUPart part) {
 } // namespace
 
 std::vector<Field> PluginFields(std::string_view id) {
+  if (id == "builtin.capsule.temporary")
+    return {{"captureEnabled", "允许收录剪贴板内容",
+             "XSIME 运行时后台收录；安全输入、锁屏和休眠期间不会读取。",
+             FieldKind::Toggle, false, {}}};
   if (id == "builtin.apple-translation")
     return {
         Choice("sourceLanguage", "源语言", "zh-Hans",
@@ -215,7 +220,9 @@ Json ConfigurationStore::Defaults() {
   return {{"schemaVersion", 1},       {"revision", RandomID()},
           {"theme", "night"},         {"bufferWidth", 760},
           {"closeAfterLast", true},   {"resetOnAppSwitch", false},
-          {"autoSend", false},        {"activeConnector", "openai-compatible"},
+          {"autoSend", false},        {"autoSendSeconds", 1},
+          {"globalShortcuts", true},  {"shortcuts", DefaultShortcuts()},
+          {"activeConnector", "openai-compatible"},
           {"activeProvider", ""},     {"providers", Json::array()},
           {"plugins", Json::object()}};
 }
@@ -269,15 +276,19 @@ Json ConfigurationStore::NormalizePlugin(std::string_view id,
   return normalized;
 }
 void ConfigurationStore::Validate(const Json &value) {
-  Require(value.is_object() && value.size() == 11 &&
+  Require(value.is_object() && value.size() == 14 &&
           value.at("schemaVersion") == 1 && Identity(value.at("revision")));
   Require(value.at("theme") == "night" || value.at("theme") == "day" ||
           value.at("theme") == "quiet" || value.at("theme") == "rasta" ||
           value.at("theme") == "liquidGlass");
   Require(value.at("bufferWidth").is_number_integer() &&
           value.at("bufferWidth") >= rimes::native::bufferMinimumWidth && value.at("bufferWidth") <= rimes::native::bufferMaximumWidth);
-  for (auto key : {"closeAfterLast", "resetOnAppSwitch", "autoSend"})
+  for (auto key : {"closeAfterLast", "resetOnAppSwitch", "autoSend", "globalShortcuts"})
     Require(value.at(key).is_boolean());
+  ValidateShortcuts(value.at("shortcuts"));
+  Require(value.at("autoSendSeconds").is_number_integer() &&
+          (value.at("autoSendSeconds") == 1 || value.at("autoSendSeconds") == 2 ||
+           value.at("autoSendSeconds") == 3 || value.at("autoSendSeconds") == 5));
   Require(value.at("activeConnector") == "openai-compatible" ||
           value.at("activeConnector") == "codex-cli" ||
           value.at("activeConnector") == "claude-code-cli");
@@ -312,6 +323,9 @@ Json ConfigurationStore::Load() const {
   if (!bytes)
     throw std::runtime_error("设置文件缺失，请恢复备份后重试。");
   auto value = Json::parse(*bytes);
+  if (value.is_object() && !value.contains("autoSendSeconds")) value["autoSendSeconds"] = 1;
+  if (value.is_object() && !value.contains("shortcuts")) value["shortcuts"] = DefaultShortcuts();
+  if (value.is_object() && !value.contains("globalShortcuts")) value["globalShortcuts"] = true;
   Validate(value);
   return value;
 }
@@ -319,6 +333,9 @@ bool ConfigurationStore::Save(
     Json next, const std::string &expected,
     const std::map<std::string, std::string> &changes) {
   auto lock = files_.Lock();
+  if (next.is_object() && !next.contains("autoSendSeconds")) next["autoSendSeconds"] = 1;
+  if (next.is_object() && !next.contains("shortcuts")) next["shortcuts"] = DefaultShortcuts();
+  if (next.is_object() && !next.contains("globalShortcuts")) next["globalShortcuts"] = true;
   const auto current = Load();
   if (current.at("revision") != expected)
     throw std::runtime_error("设置已在其他窗口更新，请重新加载后再保存。");

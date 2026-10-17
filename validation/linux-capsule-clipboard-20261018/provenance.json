@@ -1,0 +1,23 @@
+{
+  "logical_size": [
+    940,
+    208
+  ],
+  "scale": 2,
+  "themes": [
+    "night",
+    "day",
+    "quiet",
+    "rasta"
+  ],
+  "status": "requires_review",
+  "fixture": "Production ClipboardHistorySmoke.renderPreview; generated native clipboard contract; actual shared Logo PNG",
+  "sources": {
+    "Sources/RimeBuffer/ClipboardRailView.swift": "bf6ad2c5f4930f442d7db1e89dc4f7e05d0c8478116d93495b96eec296a39cee",
+    "Sources/RimeBuffer/ClipboardHistorySmoke.swift": "70aa71f434626c44d4a0db476689d942197e9863d4582b9a1ca7d110dce148a9",
+    "Sources/RimeBuffer/RimeUI.swift": "80a1a1046687fd469c8627489f4e9f93ec348a4ff35e4e8228e896464a9b1516",
+    "platforms/linux/capsule/ui/rimes_capsule_app.cpp": "03d2ce86b1bf54d6ee917b34c40489c0f421c6290639c1d33f245d78e51ad440",
+    "platforms/linux/runtime/ui/desktop.cpp": "2582a83f225714fbf4e76a69c0efb579db983af3ff563442aa846d64dcef29af",
+    "platforms/linux/runtime/generate_capsule_contract.py": "12433e4a05c199645cb09d5dc7692bdcbb401103c829eca956eb1a650aed36c3"
+  }
+}

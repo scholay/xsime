@@ -1,0 +1,68 @@
+{
+  "cards" : [
+    {
+      "duration" : 125.90000000000001,
+      "favorite" : false,
+      "incomplete" : false,
+      "kind" : "image",
+      "labels" : [
+        "截图示例",
+        "捕获 · 截图"
+      ],
+      "source" : "桌面捕获",
+      "title" : "截图示例"
+    },
+    {
+      "duration" : 125.90000000000001,
+      "favorite" : true,
+      "incomplete" : true,
+      "kind" : "video",
+      "labels" : [
+        "录屏示例 👨‍👩‍👧‍👦",
+        "导入 · 录屏 · 02:05 · 已收藏 · 未完成"
+      ],
+      "source" : "文件导入",
+      "title" : "录屏示例 👨‍👩‍👧‍👦"
+    }
+  ],
+  "durations" : [
+    {
+      "input" : "0.0",
+      "label" : "00:00"
+    },
+    {
+      "input" : "59.9",
+      "label" : "00:59"
+    },
+    {
+      "input" : "60.0",
+      "label" : "01:00"
+    },
+    {
+      "input" : "125.9",
+      "label" : "02:05"
+    },
+    {
+      "input" : "-1.0",
+      "label" : "--:--"
+    },
+    {
+      "input" : "2147483647.0",
+      "label" : "--:--"
+    },
+    {
+      "input" : "inf",
+      "label" : "--:--"
+    },
+    {
+      "input" : "nan",
+      "label" : "--:--"
+    }
+  ],
+  "sources" : {
+    "Sources/RimeBuffer/Capture/CaptureHistoryView.swift" : "c40aa8b7d44e55134637378f6b14fb3fe978311e938f3617d91ea199acfb1599",
+    "Sources/RimeBuffer/Capture/CaptureLinuxFixtures.swift" : "8bcdb7a2cb720290a2b1822f3c2250b4c5f531d03f0e52d0a271925268318dce",
+    "Sources/RimeBuffer/Capture/CaptureStore.swift" : "77efe8420cb8885f5a3dcd66669a92472381e43c802d94b8082d475587cbea96"
+  },
+  "version" : 1
+}

@@ -1,0 +1,599 @@
+{
+  "cases" : [
+    {
+      "citation" : "张三, Alice Example, 李四. 示例文献 👨‍👩‍👧‍👦[M]. 示例出版社, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "book",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "book",
+      "missing" : [
+
+      ],
+      "style" : "gbt7714",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. (2024). 示例文献 👨‍👩‍👧‍👦. 示例出版社, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "book",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "book",
+      "missing" : [
+
+      ],
+      "style" : "apa7",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. \"示例文献 👨‍👩‍👧‍👦.\" 示例出版社, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "book",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "book",
+      "missing" : [
+
+      ],
+      "style" : "mla9",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 2024. \"示例文献 👨‍👩‍👧‍👦.\" 示例出版社, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "book",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "book",
+      "missing" : [
+
+      ],
+      "style" : "chicago-author-date",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 示例文献 👨‍👩‍👧‍👦. 示例出版社. 2024;12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "book",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "book",
+      "missing" : [
+
+      ],
+      "style" : "vancouver",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四, \"示例文献 👨‍👩‍👧‍👦,\" 示例出版社, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "book",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "book",
+      "missing" : [
+
+      ],
+      "style" : "ieee",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 示例文献 👨‍👩‍👧‍👦[J]. Journal of Local Examples, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "journalArticle",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "journalArticle",
+      "missing" : [
+
+      ],
+      "style" : "gbt7714",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. (2024). 示例文献 👨‍👩‍👧‍👦. Journal of Local Examples, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "journalArticle",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "journalArticle",
+      "missing" : [
+
+      ],
+      "style" : "apa7",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. \"示例文献 👨‍👩‍👧‍👦.\" Journal of Local Examples, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "journalArticle",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "journalArticle",
+      "missing" : [
+
+      ],
+      "style" : "mla9",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 2024. \"示例文献 👨‍👩‍👧‍👦.\" Journal of Local Examples, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "journalArticle",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "journalArticle",
+      "missing" : [
+
+      ],
+      "style" : "chicago-author-date",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 示例文献 👨‍👩‍👧‍👦. Journal of Local Examples. 2024;12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "journalArticle",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "journalArticle",
+      "missing" : [
+
+      ],
+      "style" : "vancouver",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四, \"示例文献 👨‍👩‍👧‍👦,\" Journal of Local Examples, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "journalArticle",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "journalArticle",
+      "missing" : [
+
+      ],
+      "style" : "ieee",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 示例文献 👨‍👩‍👧‍👦[C]. Journal of Local Examples, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "conferencePaper",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "conferencePaper",
+      "missing" : [
+
+      ],
+      "style" : "gbt7714",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. (2024). 示例文献 👨‍👩‍👧‍👦. Journal of Local Examples, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "conferencePaper",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "conferencePaper",
+      "missing" : [
+
+      ],
+      "style" : "apa7",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. \"示例文献 👨‍👩‍👧‍👦.\" Journal of Local Examples, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "conferencePaper",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "conferencePaper",
+      "missing" : [
+
+      ],
+      "style" : "mla9",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 2024. \"示例文献 👨‍👩‍👧‍👦.\" Journal of Local Examples, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "conferencePaper",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "conferencePaper",
+      "missing" : [
+
+      ],
+      "style" : "chicago-author-date",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 示例文献 👨‍👩‍👧‍👦. Journal of Local Examples. 2024;12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "conferencePaper",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "conferencePaper",
+      "missing" : [
+
+      ],
+      "style" : "vancouver",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四, \"示例文献 👨‍👩‍👧‍👦,\" Journal of Local Examples, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "conferencePaper",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "conferencePaper",
+      "missing" : [
+
+      ],
+      "style" : "ieee",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 示例文献 👨‍👩‍👧‍👦[R]. 示例出版社, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "report",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "report",
+      "missing" : [
+
+      ],
+      "style" : "gbt7714",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. (2024). 示例文献 👨‍👩‍👧‍👦. 示例出版社, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "report",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "report",
+      "missing" : [
+
+      ],
+      "style" : "apa7",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. \"示例文献 👨‍👩‍👧‍👦.\" 示例出版社, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "report",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "report",
+      "missing" : [
+
+      ],
+      "style" : "mla9",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 2024. \"示例文献 👨‍👩‍👧‍👦.\" 示例出版社, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "report",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "report",
+      "missing" : [
+
+      ],
+      "style" : "chicago-author-date",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四. 示例文献 👨‍👩‍👧‍👦. 示例出版社. 2024;12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "report",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "report",
+      "missing" : [
+
+      ],
+      "style" : "vancouver",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : "张三, Alice Example, 李四, \"示例文献 👨‍👩‍👧‍👦,\" 示例出版社, 2024, 12(3): 12–25. https://doi.org/10.1000/example",
+      "headers" : {
+        "reference_authors" : "  张三 ; Alice Example; ; 李四  ",
+        "reference_container" : "Journal of Local Examples",
+        "reference_doi" : "https://doi.org/10.1000/example",
+        "reference_isbn" : "9780000000000",
+        "reference_issue" : "3",
+        "reference_pages" : "12–25",
+        "reference_publisher" : "示例出版社",
+        "reference_type" : "report",
+        "reference_url" : "https://example.org/ignored-when-doi-present",
+        "reference_volume" : "12",
+        "reference_year" : " 2024 "
+      },
+      "kind" : "report",
+      "missing" : [
+
+      ],
+      "style" : "ieee",
+      "title" : " 示例文献 👨‍👩‍👧‍👦 "
+    },
+    {
+      "citation" : null,
+      "headers" : {
+        "reference_type" : "book"
+      },
+      "kind" : "book",
+      "missing" : [
+        "作者",
+        "年份",
+        "出版社 / 机构"
+      ],
+      "style" : "gbt7714",
+      "title" : "旧 PDF"
+    },
+    {
+      "citation" : null,
+      "headers" : {
+        "reference_authors" : " ; ; ",
+        "reference_publisher" : "Publisher",
+        "reference_type" : "book",
+        "reference_year" : "2020"
+      },
+      "kind" : "book",
+      "missing" : [
+
+      ],
+      "style" : "apa7",
+      "title" : "No authors"
+    },
+    {
+      "citation" : "Alice, Bob. \"URL only.\" Publisher, 2020. https://example.org/resource",
+      "headers" : {
+        "reference_authors" : " Alice  ; Bob ",
+        "reference_publisher" : "Publisher",
+        "reference_type" : "book",
+        "reference_url" : "https://example.org/resource",
+        "reference_year" : "2020"
+      },
+      "kind" : "book",
+      "missing" : [
+
+      ],
+      "style" : "mla9",
+      "title" : " URL only "
+    },
+    {
+      "citation" : null,
+      "headers" : {
+        "reference_authors" : " Alice  ; Bob ",
+        "reference_publisher" : "Publisher",
+        "reference_type" : "book",
+        "reference_url" : "https://example.org/resource",
+        "reference_year" : "2020"
+      },
+      "kind" : "book",
+      "missing" : [
+
+      ],
+      "style" : "ieee",
+      "title" : " \n\t"
+    }
+  ],
+  "sources" : {
+    "Sources/RimeBuffer/CapsuleReference.swift" : "5cb819cbae91d5e229e0c43c5e409bd9460efba1b502199c53dda2c28be4fcaf",
+    "Sources/RimeBuffer/CapsuleReferenceLinuxFixtures.swift" : "6ace72d405bad27cd19af4c447cf0ea5094647bfcb660f294661d87884ef1e05",
+    "Sources/RimeBuffer/ScholayPlugin.swift" : "792634f0cd92ef4a5d9b113a207668142693fc4880965acb5bf128a9a6e637d1"
+  },
+  "version" : 1
+}

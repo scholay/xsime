@@ -209,4 +209,16 @@ std::string DerivedWorkspace::CopyText() const {
              ? result->text
              : "";
 }
+bool DerivedWorkspace::ConsumePrefix(const DerivedRequest& request, bool grant_valid,
+    std::string_view id, std::string_view text) {
+  const auto* selected = SelectedResult();
+  if (!Owns(request, grant_valid) || phase_ != DerivedPhase::Ready || !selected || selected->id != id ||
+      text.empty() || selected->text.compare(0, text.size(), text) != 0) return false;
+  auto remaining = *selected;
+  remaining.text.erase(0, text.size());
+  remaining.id = NewBlockId();
+  results_ = {remaining};
+  selected_ = remaining.id;
+  return true;
+}
 } // namespace rimes::buffer

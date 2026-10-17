@@ -17,8 +17,13 @@ on:
       - "Sources/RimeBuffer/RimeUI.swift"
       - "Sources/RimeBuffer/SettingsWindow.swift"
       - "Sources/RimeBuffer/SettingsRouting.swift"
+      - "Sources/RimeBuffer/ShortcutPreferences.swift"
+      - "Sources/RimeBuffer/RimeFixedAccentSwitch.swift"
+      - "Sources/RimeBuffer/AITextPlugins.swift"
       - "Sources/RimeBuffer/BufferWindowController.swift"
       - "Sources/RimeBuffer/BufferInlineView.swift"
+      - "Sources/RimeBuffer/Capsule*.swift"
+      - "Sources/RimeBuffer/Clipboard*.swift"
       - "Sources/RimeBuffer/Resources/PluginIcons/**"
       - "scripts/prepare-official-plugins.py"
       - "scripts/input-schemes/fetch_fixture.py"
@@ -44,8 +49,13 @@ on:
       - "Sources/RimeBuffer/RimeUI.swift"
       - "Sources/RimeBuffer/SettingsWindow.swift"
       - "Sources/RimeBuffer/SettingsRouting.swift"
+      - "Sources/RimeBuffer/ShortcutPreferences.swift"
+      - "Sources/RimeBuffer/RimeFixedAccentSwitch.swift"
+      - "Sources/RimeBuffer/AITextPlugins.swift"
       - "Sources/RimeBuffer/BufferWindowController.swift"
       - "Sources/RimeBuffer/BufferInlineView.swift"
+      - "Sources/RimeBuffer/Capsule*.swift"
+      - "Sources/RimeBuffer/Clipboard*.swift"
       - "Sources/RimeBuffer/Resources/PluginIcons/**"
       - "scripts/prepare-official-plugins.py"
       - "scripts/input-schemes/fetch_fixture.py"
@@ -93,10 +103,11 @@ jobs:
             fcitx5-frontend-gtk3 fcitx5-frontend-qt5 \
             librime-dev librime-plugin-lua librime-bin \
             libopencc-dev libopencc-data libyaml-cpp-dev libleveldb-dev libmarisa-dev libgoogle-glog-dev libboost-regex-dev \
-            xvfb xdotool dbus-x11 \
-            python3-gi gir1.2-gtk-3.0 libgtk-3-dev \
-            libgtk-layer-shell-dev libssl-dev libcurl4-openssl-dev \
-            qtbase5-dev fonts-inter fonts-noto-cjk weston wtype sway patchelf dpkg-dev
+            xvfb xdotool x11-utils dbus-x11 xfwm4 \
+            python3-gi gir1.2-gtk-3.0 libgtk-3-dev libicu-dev libsqlite3-dev libpoppler-glib-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libportal-dev \
+            gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pipewire pipewire wireplumber xdg-desktop-portal \
+            libgtk-layer-shell-dev libxcb1-dev libxcb-xfixes0-dev libwayland-dev libssl-dev libcurl4-openssl-dev \
+            qtbase5-dev fonts-inter fonts-noto-cjk fonts-noto-color-emoji weston wtype sway wl-clipboard xdg-desktop-portal-wlr xdg-desktop-portal-gtk grim slurp patchelf dpkg-dev
 
       - name: Build pinned Rime and Lua runtime
         run: |
@@ -113,16 +124,54 @@ jobs:
       - name: Unit tests
         run: ctest --test-dir platforms/linux/ime/build --output-on-failure
 
+      - name: Real Wayland capture portal and PipeWire
+        run: dbus-run-session -- /usr/bin/python3 platforms/linux/capsule/tests/capture_wayland_test.py platforms/linux/ime/build/rimes-capsule-capture --allow-headless-no-dmabuf
+
       - name: Real pinned offline translation engine
-        run: python3 platforms/linux/runtime/tests/translation_engine_smoke.py platforms/linux/ime/build/runtime/rimes-translation
+        run: |
+          python3 scripts/platform-preview/preview.py stage --repo-root "$PWD" --output-dir "$RUNNER_TEMP/translation-shared"
+          python3 platforms/linux/runtime/tests/translation_engine_smoke.py platforms/linux/ime/build/runtime/rimes-translation \
+            --fcitx-build platforms/linux/ime/build --shared-data "$RUNNER_TEMP/translation-shared"
 
       - name: Render native settings with an isolated profile
         run: |
           RIMES_USER_DIR="$RUNNER_TEMP/settings-profile" xvfb-run -a \
             platforms/linux/ime/build/runtime/rimes-settings --render "$RUNNER_TEMP/settings-render"
 
+      - name: Real AI API transport and Fcitx derived delivery
+        run: |
+          RIMES_SHARED_DIR="$RUNNER_TEMP/translation-shared" python3 platforms/linux/runtime/tests/ai_http_fixture.py \
+            --fcitx platforms/linux/ime/build
+
       - name: Render Buffer states for macOS comparison
         run: xvfb-run -a platforms/linux/ime/build/rimes-buffer --render "$RUNNER_TEMP/buffer-render"
+
+      - name: Render Capsule manager themes for macOS comparison
+        run: |
+          mkdir -p "$RUNNER_TEMP/capsule-render"
+          for theme in night day quiet rasta; do
+            xvfb-run -a platforms/linux/ime/build/rimes-capsule --manager-preview --theme "$theme" \
+              --render "$RUNNER_TEMP/capsule-render/$theme.png"
+            GDK_SCALE=2 xvfb-run -a -s "-screen 0 2560x1600x24" platforms/linux/ime/build/rimes-capsule \
+              --clipboard-preview --theme "$theme" --render "$RUNNER_TEMP/capsule-render/clipboard-$theme.png"
+            GDK_SCALE=2 xvfb-run -a -s "-screen 0 2560x1600x24" platforms/linux/ime/build/rimes-capsule \
+              --resources-preview --theme "$theme" --render "$RUNNER_TEMP/capsule-render/resources-$theme.png"
+          done
+
+      - name: Desktop focus, first click, window movement and scale
+        run: |
+          xvfb-run -a dbus-run-session -- python3 platforms/linux/runtime/tests/desktop_windows_test.py platforms/linux/ime/build
+          GDK_SCALE=2 xvfb-run -a -s "-screen 0 2560x1600x24" dbus-run-session -- \
+            python3 platforms/linux/runtime/tests/desktop_windows_test.py platforms/linux/ime/build
+          dbus-run-session -- python3 platforms/linux/runtime/tests/panel_wayland_test.py platforms/linux/ime/build
+          dbus-run-session -- python3 platforms/linux/capsule/tests/clipboard_wayland_test.py platforms/linux/ime/build
+          xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session -- python3 platforms/linux/runtime/tests/panel_fallback_test.py platforms/linux/ime/build
+
+      - name: Upload Capsule manager renders
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: capsule-manager-linux
+          path: ${{ runner.temp }}/capsule-render
 
       - name: Upload settings for macOS comparison
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

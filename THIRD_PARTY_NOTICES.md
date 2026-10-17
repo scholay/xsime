@@ -192,3 +192,13 @@ BeatBuddy recordings, MIDI content, or firmware are redistributed.
 - macOS and iOS: [Yams 5.1.3](https://github.com/jpsim/Yams/tree/5.1.3) and [ZIPFoundation 0.9.19](https://github.com/weichsel/ZIPFoundation/tree/0.9.19), MIT. Full notices are in `LICENSES/Yams-MIT.txt` and `LICENSES/ZIPFoundation-MIT.txt`; iOS also embeds them in its third-party notices.
 - Windows and Linux: [yaml-cpp 0.8.0](https://github.com/jbeder/yaml-cpp/tree/0.8.0), [miniz 3.1.2](https://github.com/richgel999/miniz/tree/3.1.2), and [PicoSHA2](https://github.com/okdshin/PicoSHA2/tree/161cb3fc4170fa7a3eca9e582cebd27cc4d1fe29), MIT. Exact source hashes are pinned in `Shared/SchemeImport/CMakeLists.txt`; full notices are in `LICENSES/`.
 - Android: [SnakeYAML 2.4](https://bitbucket.org/snakeyaml/snakeyaml), Apache-2.0. Its upstream license is bundled under `assets/licenses/`.
+
+## Linux clipboard data-control protocols
+
+The Capsule clipboard backend uses unmodified ext-data-control-v1 (wayland-protocols 1.45) and wlr-data-control-unstable-v1 (swaywm/wlr-protocols b010a03648b88d143236de193bddbfea0c08bc84) XML descriptions. Their permissive licenses are retained in the XML and `LICENSES/Wayland-data-control.txt`; exact hashes and source locations are in `platforms/linux/capsule/protocols/README.md`. Generated bindings link against the system Wayland client library. Clipboard storage links the system SQLite library (public domain).
+
+The Linux Capsule resource preview helper links the distribution's Poppler GLib PDF renderer, GdkPixbuf and Cairo. Poppler's source and API documentation are at <https://poppler.freedesktop.org/>; the Ubuntu 24.04 package's copyright notice identifies the core license as GPL-2 or GPL-3. The distribution packages provide their license notices and corresponding source. These libraries are dynamically resolved by the deb dependencies; their binaries are not vendored in this repository.
+
+## Linux screen capture and media preview
+
+The Linux capture and preview helpers dynamically use the distribution's GStreamer libraries and plugins (including PNG, VP8/WebM and PipeWire) and libportal for interactive screenshots. GStreamer source and component licenses are published at <https://gstreamer.freedesktop.org/>; libportal source and its LGPL-3.0 / LGPL-2.1 notices are at <https://github.com/flatpak/libportal>. The deb declares system package dependencies, including the runtime plugins that are loaded dynamically. No GStreamer, libportal or PipeWire binary is vendored in this repository. The test-only virtual-pointer XML retains its upstream MIT license and pinned provenance under `platforms/linux/capsule/protocols/README.md`.

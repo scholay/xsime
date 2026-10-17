@@ -1,0 +1,23 @@
+{
+  "logical_size": [
+    206,
+    126
+  ],
+  "scale": 2,
+  "themes": [
+    "night",
+    "day",
+    "quiet",
+    "rasta"
+  ],
+  "status": "requires_review",
+  "fixture": "Production capture history cards, shared public grid image, image/video metadata and emoji. No personal captures.",
+  "sources": {
+    "Sources/RimeBuffer/Capture/CaptureHistoryView.swift": "c40aa8b7d44e55134637378f6b14fb3fe978311e938f3617d91ea199acfb1599",
+    "Sources/RimeBuffer/Capture/CaptureStore.swift": "77efe8420cb8885f5a3dcd66669a92472381e43c802d94b8082d475587cbea96",
+    "Sources/RimeBuffer/Capture/CaptureLinuxFixtures.swift": "8bcdb7a2cb720290a2b1822f3c2250b4c5f531d03f0e52d0a271925268318dce",
+    "Sources/RimeBuffer/Capture/CaptureChrome.swift": "f7aa181002cfec45401805ab889939959aa897298ccfe78f5cafcec89e735ccb",
+    "Sources/RimeBuffer/Capture/CaptureUI.swift": "f233bc46f17bbba7beafb4ed3283cd501604bf3e3d060c3b969fa3a5a241e3e5",
+    "platforms/linux/capsule/ui/rimes_capsule_app.cpp": "9a0345defe56b61f202aa1359a1d24c5bf16fae85bd2b350cd4fa6fdd838c028"
+  }
+}

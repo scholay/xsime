@@ -8,14 +8,14 @@ enum PresetBufferPluginCatalog {
             id: "builtin.apple-translation",
             nameZH: "实时翻译",
             nameEN: "Translation",
-            version: "2.2.0",
+            version: "2.3.0",
             summaryZH: "实时翻译官方插件；用户数据由 RIMES 宿主管理。",
             summaryEN: "Translation official plugin; user data remains owned by the RIMES host.",
             producerID: "official",
             defaultInstalled: true,
             defaultEnabled: true,
-            downloadAssetName: "preset-plugin-builtin.apple-translation-2.2.0.json",
-            sha256: "6fbb30f06133b95b6a7e9ee167550f95a123ca522637c21265df9e36fbc8d37e"
+            downloadAssetName: "preset-plugin-builtin.apple-translation-2.3.0.json",
+            sha256: "9ed28df8f1621bb22c2bbfdec48397e38a035ff9d0c00a8826d330d07ad8daa4"
         ),
         PresetBufferPluginCatalogEntry(
             id: "builtin.capsule.capture",
@@ -28,7 +28,7 @@ enum PresetBufferPluginCatalog {
             defaultInstalled: true,
             defaultEnabled: true,
             downloadAssetName: "preset-plugin-builtin.capsule.capture-1.1.0.json",
-            sha256: "7f8ebcd86cc4ae22027ae2e217a2bfda346c89ddf6c69f0430d1b4870c0d4110"
+            sha256: "8afdd5fa30a3d8f1a890ccd79c6b29cfa0b6f269b18c143ff01e740c732097b0"
         ),
         PresetBufferPluginCatalogEntry(
             id: "builtin.capsule.notes",
@@ -41,7 +41,7 @@ enum PresetBufferPluginCatalog {
             defaultInstalled: true,
             defaultEnabled: true,
             downloadAssetName: "preset-plugin-builtin.capsule.notes-1.1.0.json",
-            sha256: "ee5bcd94fcddae9afd390a9fb642657c07a220f7ae722971ef447a9bd6b0368c"
+            sha256: "701da23c70fd1a8d580571324a25ca9cd509ae64161110d1986be13b204305e4"
         ),
         PresetBufferPluginCatalogEntry(
             id: "builtin.capsule.passwords",
@@ -54,7 +54,7 @@ enum PresetBufferPluginCatalog {
             defaultInstalled: true,
             defaultEnabled: true,
             downloadAssetName: "preset-plugin-builtin.capsule.passwords-1.1.0.json",
-            sha256: "88bff74158b3d00bb147bf21e2f67129790d7cae300b00db29d70865e575ae46"
+            sha256: "5fcb636c8ef9f6435f1b4e8c1ddafabf731ed1004ea81781f60046b6ebfd02bd"
         ),
         PresetBufferPluginCatalogEntry(
             id: "builtin.capsule.resources",
@@ -67,7 +67,7 @@ enum PresetBufferPluginCatalog {
             defaultInstalled: true,
             defaultEnabled: true,
             downloadAssetName: "preset-plugin-builtin.capsule.resources-1.1.0.json",
-            sha256: "7927977374c53d720356675d7aba13230930042565f03a12ed018617fc66c61c"
+            sha256: "6a9162ad4214824651c8d96a4ba5d0f38b2cf0808acb2e44eb03e9b9e993b8cd"
         ),
         PresetBufferPluginCatalogEntry(
             id: "builtin.capsule.temporary",
@@ -80,7 +80,7 @@ enum PresetBufferPluginCatalog {
             defaultInstalled: true,
             defaultEnabled: true,
             downloadAssetName: "preset-plugin-builtin.capsule.temporary-1.1.0.json",
-            sha256: "a8879a170a27eef3da67e0381387c04e614def857fa476b8a61d978b364d2162"
+            sha256: "eb49235d52ed854e7b6c43048bfbdafb247132bce70f0276e1e9fad5e3e194b1"
         ),
         PresetBufferPluginCatalogEntry(
             id: "builtin.claude-code-cli",
@@ -203,14 +203,14 @@ enum PresetBufferPluginCatalog {
             id: "builtin.openai-compatible",
             nameZH: "AI API",
             nameEN: "AI API",
-            version: "1.0.0",
+            version: "1.1.0",
             summaryZH: "把源缓冲区原样作为请求发给通用 Open API（OpenAI 兼容），回复进入独立目标缓冲区。",
             summaryEN: "AI API official plugin; user data remains owned by the RIMES host.",
             producerID: "official",
             defaultInstalled: false,
             defaultEnabled: false,
-            downloadAssetName: "preset-plugin-builtin.openai-compatible-1.0.0.json",
-            sha256: "9d4b1e16d0db3dc70cd30fd7ffb8e122968bcab321e2e2061f368a51d12f52a9"
+            downloadAssetName: "preset-plugin-builtin.openai-compatible-1.1.0.json",
+            sha256: "01550f3450571af0810fbf7332a95e1a099dd78dabce17100d9a63f80cb2396c"
         ),
         PresetBufferPluginCatalogEntry(
             id: "builtin.polisher",

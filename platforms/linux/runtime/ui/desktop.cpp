@@ -1,5 +1,6 @@
 #include "desktop.hpp"
 #include "native_visual_tokens.hpp"
+#include "native_buffer_metrics.hpp"
 #include <cmath>
 #include <memory>
 
@@ -12,20 +13,28 @@ GtkWidget *Class(GtkWidget *widget, const char *name) {
   gtk_style_context_add_class(gtk_widget_get_style_context(widget), name);
   return widget;
 }
-void Theme(const std::string &name) {
+void Theme(const std::string &name, GdkScreen *screen) {
+  if (!screen) screen = gdk_screen_get_default();
   const auto theme = name == "liquidGlass" ? "day" : name;
   const auto &colors = Visuals().at("palettes").at(theme);
   auto c = [&](const char *key) { return colors.at(key).get<std::string>(); };
-  g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
+  g_object_set(gtk_settings_get_for_screen(screen), "gtk-application-prefer-dark-theme",
                theme != "day", nullptr);
   static GtkCssProvider *provider = nullptr;
   if (!provider) {
     provider = gtk_css_provider_new();
-    gtk_style_context_add_provider_for_screen(
-        gdk_screen_get_default(), GTK_STYLE_PROVIDER(provider),
-        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   }
+  // A passive panel may explicitly use XWayland on a Wayland session. Its
+  // screen is not necessarily the process default screen.
+  gtk_style_context_remove_provider_for_screen(screen, GTK_STYLE_PROVIDER(provider));
+  gtk_style_context_add_provider_for_screen(screen, GTK_STYLE_PROVIDER(provider),
+                                           GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   std::string css =
+      "@define-color xsime_switch_on " + c("accentGreen") + ";"
+      "@define-color xsime_switch_off " + c("surfaceTertiary") + ";"
+      "@define-color xsime_switch_border " + c("border") + ";"
+      "@define-color xsime_switch_accent " + c("accentText") + ";"
+      "button.compact-switch, button.compact-switch:hover, button.compact-switch:active, button.compact-switch:checked, button.compact-switch:disabled { background: transparent; border: 0; padding: 0; min-width: 0; min-height: 0; box-shadow: none; outline: 0; opacity: 1; }"
       "* { font-family: 'SF Pro Text', Inter, 'Noto Sans CJK SC', sans-serif; "
       "font-size: 11px; -gtk-icon-shadow: none; text-shadow: none; }"
       "window, .settings { background: " +
@@ -95,6 +104,11 @@ void Theme(const std::string &name) {
       ".name { font-size: 11px; font-weight: 600; } .card { background: " +
       c("surfaceSecondary") + "; border: 0.5px solid " + c("border") +
       "; border-radius: 8px; }"
+      ".shortcut-row { background: " + c("surfaceSecondary") + "; border: 0.5px solid " + c("border") +
+      "; border-radius: " + std::to_string(Visuals().at("metrics").at(name == "liquidGlass" ? "settingsGlassCardRadius" : "settingsCardRadius").get<int>()) +
+      "px; } .shortcut-title { font-size: " + std::to_string(Visuals().at("metrics").at("shortcutTitleFont").get<int>()) +
+      "px; font-weight: 600; } .shortcut-recorder { font-family: monospace; font-size: " +
+      std::to_string(Visuals().at("metrics").at("shortcutRecorderFont").get<int>()) + "px; font-weight: 500; }"
       ".panel { background: " +
       c("surfaceSecondary") + "; border: 1px solid " + c("border") +
       "; border-radius: 10px; padding: 11px; }"
@@ -159,6 +173,50 @@ GtkWidget *Button(const std::string &title, std::function<void()> clicked,
 }
 GtkWidget *Column(int spacing) {
   return gtk_box_new(GTK_ORIENTATION_VERTICAL, spacing);
+}
+GtkWidget *CompactSwitch(const std::string &label, std::function<void()> clicked) {
+  auto *button = Class(gtk_toggle_button_new(), "compact-switch");
+  gtk_widget_set_can_focus(button, FALSE);
+  gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
+  gtk_widget_set_tooltip_text(button, label.c_str());
+  atk_object_set_name(gtk_widget_get_accessible(button), label.c_str());
+  auto *drawing = gtk_drawing_area_new();
+  gtk_widget_set_size_request(drawing,
+      native::compactSwitchTrackWidth + native::switchControlInset,
+      native::compactSwitchTrackHeight + native::switchControlInset);
+  gtk_container_add(GTK_CONTAINER(button), drawing);
+  g_signal_connect(drawing, "draw", G_CALLBACK((+[](GtkWidget *widget, cairo_t *cr, gpointer data) -> gboolean {
+    auto *control = GTK_WIDGET(data);
+    const bool on = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(control));
+    const bool enabled = gtk_widget_is_sensitive(control);
+    const bool pressed = gtk_widget_get_state_flags(control) & GTK_STATE_FLAG_ACTIVE;
+    auto color = [&](const char *name, double alpha) {
+      GdkRGBA rgba{};
+      gtk_style_context_lookup_color(gtk_widget_get_style_context(control), name, &rgba);
+      rgba.alpha = alpha; gdk_cairo_set_source_rgba(cr, &rgba);
+    };
+    const double width = native::compactSwitchTrackWidth, height = native::compactSwitchTrackHeight;
+    const double x = (gtk_widget_get_allocated_width(widget) - width) / 2.0;
+    const double y = (gtk_widget_get_allocated_height(widget) - height) / 2.0;
+    const double radius = height / 2;
+    cairo_arc(cr, x + width - radius, y + radius, radius, -M_PI / 2, M_PI / 2);
+    cairo_arc(cr, x + radius, y + radius, radius, M_PI / 2, 3 * M_PI / 2);
+    cairo_close_path(cr);
+    color(on ? "xsime_switch_on" : "xsime_switch_off", enabled ? (pressed ? 0.78 : 1) : 0.48);
+    cairo_fill_preserve(cr);
+    color(on ? "xsime_switch_accent" : "xsime_switch_border", enabled ? 0.78 : 0.30);
+    cairo_set_line_width(cr, 1); cairo_stroke(cr);
+    const double inset = native::switchKnobInset, knob = height - inset * 2;
+    const double knob_x = on ? x + width - inset - knob : x + inset;
+    cairo_arc(cr, knob_x + knob / 2, y + inset + knob / 2, knob / 2, 0, 2 * M_PI);
+    cairo_set_source_rgba(cr, 1, 1, 1, enabled ? 1 : 0.70); cairo_fill(cr);
+    return FALSE;
+  })), button);
+  auto *action = new std::function<void()>(std::move(clicked));
+  g_signal_connect_data(button, "clicked", G_CALLBACK(+[](GtkButton *, gpointer data) {
+    (*static_cast<std::function<void()> *>(data))();
+  }), action, +[](gpointer data, GClosure *) { delete static_cast<std::function<void()> *>(data); }, GConnectFlags(0));
+  return button;
 }
 GtkWidget *Row(int spacing) {
   return gtk_box_new(GTK_ORIENTATION_HORIZONTAL, spacing);
@@ -299,6 +357,15 @@ GtkWidget *Icon(const std::string &name, int size) {
                  12 + 10 * sin(a));
           }
           cairo_arc(cr, 12, 12, 7, 0, 2 * M_PI);
+        } else if (icon == "ellipsis") {
+          for (int x : {5, 12, 19}) {
+            cairo_new_sub_path(cr);
+            cairo_arc(cr, x, 12, 1.35, 0, 2 * M_PI);
+            cairo_fill(cr);
+          }
+        } else if (icon == "magnifyingglass") {
+          cairo_arc(cr, 10, 10, 6.5, 0, 2 * M_PI);
+          line(15, 15, 21, 21);
         } else if (icon == "xmark") {
           line(6, 6, 18, 18);
           line(18, 6, 6, 18);
@@ -312,6 +379,9 @@ GtkWidget *Icon(const std::string &name, int size) {
           cairo_line_to(cr, 9, 14);
           line(3, 9, 15, 9);
           cairo_curve_to(cr, 24, 9, 24, 21, 15, 21);
+        } else if (icon == "checkmark") {
+          line(5, 12, 10, 18);
+          cairo_line_to(cr, 20, 5);
         } else if (icon == "doc.on.doc") {
           cairo_rectangle(cr, 3, 3, 12, 14);
           cairo_rectangle(cr, 8, 8, 13, 14);
@@ -346,8 +416,26 @@ GtkWidget *Icon(const std::string &name, int size) {
             const double h = (i == 2 ? 19 : i % 2 ? 11 : 6);
             line(4 + i * 4, 12 - h / 2, 4 + i * 4, 12 + h / 2);
           }
-        } else if (icon == "character.book.closed" || icon == "note.text" ||
-                   icon == "books.vertical") {
+        } else if (icon == "clock.arrow.circlepath") {
+          cairo_arc(cr, 12, 12, 9, -2.5, 2.7);
+          line(3, 6, 2, 12); cairo_line_to(cr, 7, 10);
+          line(12, 6, 12, 12); cairo_line_to(cr, 16, 16);
+        } else if (icon == "camera.viewfinder") {
+          for (int x : {3, 21}) for (int y : {3, 21}) {
+            line(x, y + (y == 3 ? 5 : -5), x, y); cairo_line_to(cr, x + (x == 3 ? 5 : -5), y);
+          }
+          cairo_new_sub_path(cr); cairo_arc(cr, 12, 12, 4, 0, 2 * M_PI);
+        } else if (icon == "lock") {
+          cairo_rectangle(cr, 5, 10, 14, 12);
+          cairo_move_to(cr, 8, 10); cairo_line_to(cr, 8, 6);
+          cairo_arc(cr, 12, 6, 4, M_PI, 2 * M_PI); cairo_line_to(cr, 16, 10);
+        } else if (icon == "note.text") {
+          cairo_rectangle(cr, 3, 4, 18, 16);
+          line(6, 8, 18, 8); line(6, 12, 18, 12); line(6, 16, 13, 16);
+        } else if (icon == "books.vertical") {
+          cairo_rectangle(cr, 2, 5, 4, 16); cairo_rectangle(cr, 8, 2, 4, 19);
+          line(14, 4, 18, 3); cairo_line_to(cr, 22, 20); cairo_line_to(cr, 18, 21); cairo_close_path(cr);
+        } else if (icon == "character.book.closed") {
           cairo_rectangle(cr, 5, 3, 15, 18);
           line(8, 3, 8, 21);
           line(11, 7, 16, 7);

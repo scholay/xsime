@@ -1,0 +1,458 @@
+{
+  "bullets" : [
+    {
+      "indent" : "  - [ ] task",
+      "line" : "- [ ] task",
+      "outdent" : "- [ ] task",
+      "toggle" : "- [x] task"
+    },
+    {
+      "indent" : "    - [x] task",
+      "line" : "  - [x] task",
+      "outdent" : "- [x] task",
+      "toggle" : "  - [ ] task"
+    },
+    {
+      "indent" : "  \t- [X] task",
+      "line" : "\t- [X] task",
+      "outdent" : "- [X] task",
+      "toggle" : "\t- [ ] task"
+    },
+    {
+      "indent" : "  plain",
+      "line" : "plain",
+      "outdent" : "plain",
+      "toggle" : null
+    }
+  ],
+  "characters" : [
+    {
+      "count" : 2,
+      "prefix" : "中",
+      "text" : "中文"
+    },
+    {
+      "count" : 1,
+      "prefix" : "é",
+      "text" : "é"
+    },
+    {
+      "count" : 1,
+      "prefix" : "👩🏽‍💻",
+      "text" : "👩🏽‍💻"
+    },
+    {
+      "count" : 1,
+      "prefix" : "🇯🇵",
+      "text" : "🇯🇵"
+    },
+    {
+      "count" : 1,
+      "prefix" : "\r\n",
+      "text" : "\r\n"
+    },
+    {
+      "count" : 256,
+      "prefix" : "标",
+      "text" : "标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标标"
+    }
+  ],
+  "grammar" : [
+    {
+      "body" : "## 登录\n- 用户名：isaac\n- 密码: hidden\n- https://example.com\n普通一行\n> 引用\n",
+      "sections" : [
+        {
+          "heading" : "登录",
+          "rows" : [
+            {
+              "label" : "用户名",
+              "secret" : false,
+              "type" : "field",
+              "value" : "isaac"
+            },
+            {
+              "label" : "密码",
+              "secret" : true,
+              "type" : "field",
+              "value" : "hidden"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "https://example.com"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "普通一行"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "引用"
+            }
+          ]
+        }
+      ],
+      "summary" : "用户名 isaac"
+    },
+    {
+      "body" : "- [ ] 未完成\n  - [x] 已完成\n1. 有序\n002) 标签: value\n1000. 不去标记\n",
+      "sections" : [
+        {
+          "heading" : "",
+          "rows" : [
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "未完成"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "已完成"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "有序"
+            },
+            {
+              "label" : "标签",
+              "secret" : false,
+              "type" : "field",
+              "value" : "value"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "1000. 不去标记"
+            }
+          ]
+        }
+      ],
+      "summary" : "未完成"
+    },
+    {
+      "body" : "# 标题\n```swift\nlet a = 1\nlet b = 2\n```\n## 尾组\n",
+      "sections" : [
+        {
+          "heading" : "标题",
+          "rows" : [
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "code",
+              "value" : "let a = 1\nlet b = 2"
+            }
+          ]
+        },
+        {
+          "heading" : "尾组",
+          "rows" : [
+
+          ]
+        }
+      ],
+      "summary" : "标题"
+    },
+    {
+      "body" : "~~~\nfirst\n\n",
+      "sections" : [
+        {
+          "heading" : "",
+          "rows" : [
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "code",
+              "value" : "first\n\n"
+            }
+          ]
+        }
+      ],
+      "summary" : null
+    },
+    {
+      "body" : "- 标标标标标标标标标标标标标标标标标标标标标标标标：值\n- 标标标标标标标标标标标标标标标标标标标标标标标标标：句子\n",
+      "sections" : [
+        {
+          "heading" : "",
+          "rows" : [
+            {
+              "label" : "标标标标标标标标标标标标标标标标标标标标标标标标",
+              "secret" : false,
+              "type" : "field",
+              "value" : "值"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "标标标标标标标标标标标标标标标标标标标标标标标标标：句子"
+            }
+          ]
+        }
+      ],
+      "summary" : "标标标标标标标标标标标标标标标标标标标标标标标标 值"
+    },
+    {
+      "body" : "- keyboard: safe\n- API key: secret\n- 密码：\n- [X] done\r\n中文\r\n",
+      "sections" : [
+        {
+          "heading" : "",
+          "rows" : [
+            {
+              "label" : "keyboard",
+              "secret" : false,
+              "type" : "field",
+              "value" : "safe"
+            },
+            {
+              "label" : "API key",
+              "secret" : true,
+              "type" : "field",
+              "value" : "secret"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "密码："
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "done"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "中文"
+            }
+          ]
+        }
+      ],
+      "summary" : "keyboard safe"
+    },
+    {
+      "body" : "- 标签： é 👩🏽‍💻 \n",
+      "sections" : [
+        {
+          "heading" : "",
+          "rows" : [
+            {
+              "label" : "标签",
+              "secret" : false,
+              "type" : "field",
+              "value" : "é 👩🏽‍💻"
+            }
+          ]
+        }
+      ],
+      "summary" : "标签 é 👩🏽‍💻"
+    },
+    {
+      "body" : "```\n```",
+      "sections" : [
+        {
+          "heading" : "",
+          "rows" : [
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "code",
+              "value" : ""
+            }
+          ]
+        }
+      ],
+      "summary" : null
+    },
+    {
+      "body" : "````\ncode\n````",
+      "sections" : [
+        {
+          "heading" : "",
+          "rows" : [
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "code",
+              "value" : "code"
+            }
+          ]
+        }
+      ],
+      "summary" : null
+    },
+    {
+      "body" : "١٢. Arabic\nⅣ) Roman\n². superscript\n中文",
+      "sections" : [
+        {
+          "heading" : "",
+          "rows" : [
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "Arabic"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "Roman"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "superscript"
+            },
+            {
+              "label" : "",
+              "secret" : false,
+              "type" : "line",
+              "value" : "中文"
+            }
+          ]
+        }
+      ],
+      "summary" : "Arabic"
+    }
+  ],
+  "headers" : [
+    {
+      "fields" : [
+        {
+          "label" : "owner",
+          "secret" : false,
+          "value" : "O'Brien"
+        },
+        {
+          "label" : "项目名",
+          "secret" : false,
+          "value" : "demo"
+        }
+      ],
+      "lines" : [
+        "tags:",
+        "  - work",
+        "  - 中文",
+        "owner: 'O''Brien'",
+        "\"项目名\": demo # note",
+        "nested:",
+        "  name: sample",
+        "  key: value"
+      ],
+      "preserved" : [
+        "tags:",
+        "  - work",
+        "  - 中文",
+        "owner: 'O''Brien'",
+        "\"项目名\": demo # note",
+        "nested:",
+        "  name: sample",
+        "  key: value"
+      ],
+      "valid" : true
+    },
+    {
+      "lines" : [
+        "owner: first",
+        "owner: second"
+      ],
+      "valid" : false
+    },
+    {
+      "lines" : [
+        "- orphan"
+      ],
+      "valid" : false
+    },
+    {
+      "fields" : [
+
+      ],
+      "lines" : [
+        "description: |",
+        "  first",
+        "  second"
+      ],
+      "preserved" : [
+        "description: |",
+        "  first",
+        "  second"
+      ],
+      "valid" : true
+    },
+    {
+      "fields" : [
+        {
+          "label" : "网址",
+          "secret" : false,
+          "value" : "https://example.com"
+        },
+        {
+          "label" : "密码",
+          "secret" : true,
+          "value" : "test"
+        }
+      ],
+      "lines" : [
+        "aliases: [a, b]",
+        "网址: https://example.com",
+        "密码: test"
+      ],
+      "preserved" : [
+        "aliases: [a, b]",
+        "网址: https://example.com",
+        "密码: test"
+      ],
+      "valid" : true
+    }
+  ],
+  "rich" : [
+    {
+      "asset" : "cnRmZAAAAAADAAAAAgAAAAcAAABUWFQucnRmAQAAAC6NAgAAKwAAAAEAAACFAgAAe1xydGYxXGFuc2lcYW5zaWNwZzEyNTJcY29jb2FydGYyOTA3Clxjb2NvYXRleHRzY2FsaW5nMFxjb2NvYXBsYXRmb3JtMHtcZm9udHRibFxmMFxmbmlsXGZjaGFyc2V0MCAuQXBwbGVTeXN0ZW1VSUZvbnRNb25vc3BhY2VkLVJlZ3VsYXI7XGYxXGZuaWxcZmNoYXJzZXQwIEhlbHZldGljYU5ldWUtQm9sZDtcZjJcZm5pbFxmY2hhcnNldDAgLkFwcGxlU3lzdGVtVUlGb250TW9ub3NwYWNlZC1SZWd1bGFySXRhbGljOwp9CntcY29sb3J0Ymw7XHJlZDI1NVxncmVlbjI1NVxibHVlMjU1O30Ke1wqXGV4cGFuZGVkY29sb3J0Ymw7O30KXHBhcmRcdHg1NjBcdHgxMTIwXHR4MTY4MFx0eDIyNDBcdHgyODAwXHR4MzM2MFx0eDM5MjBcdHg0NDgwXHR4NTA0MFx0eDU2MDBcdHg2MTYwXHR4NjcyMFxwYXJkaXJuYXR1cmFsXHBhcnRpZ2h0ZW5mYWN0b3IwCgpcZjBcZnMyNCBcY2YwIFx1YzBcdTIwMDEzIFx1MjU5OTEgIEhlbGxvXAoKXGYxXGIgQm9sZApcZjJcaVxiMCAgaXRhbGlje1xmaWVsZHtcKlxmbGRpbnN0e0hZUEVSTElOSyAiaHR0cHM6Ly9leGFtcGxlLmNvbS9wYXRoP3E9MSJ9fXtcZmxkcnNsdCAKXGYwXGkwICBcdWMwXHU1NTM1NyBcdTU2NDI1IFx1NTUzNTYgXHU1NzM0MSBcdTgyMDUgXHU1NTM1NyBcdTU2NTA3ICBcJ2U5XApMaW5rfX19AQAAACMAAAABAAAABwAAAFRYVC5ydGYQAAAAuKrTarYBAAAAAAAAAAAAAA==",
+      "markdown" : "中文 Hello\n**Bold*** italic*[ 👩🏽‍💻 é\nLink](https://example.com/path?q=1)",
+      "name" : "text",
+      "text" : "中文 Hello\nBold italic 👩🏽‍💻 é\nLink"
+    },
+    {
+      "asset" : "cnRmZAAAAAADAAAAAwAAAAcAAABUWFQucnRmAQAAAC4QAAAA56S65L6LIGltYWdlLnBuZ/0BAABTAAAAwwAAAAEAAAD1AQAAe1xydGYxXGFuc2lcYW5zaWNwZzEyNTJcY29jb2FydGYyOTA3Clxjb2NvYXRleHRzY2FsaW5nMFxjb2NvYXBsYXRmb3JtMHtcZm9udHRibFxmMFxmbmlsXGZjaGFyc2V0MCAuQXBwbGVTeXN0ZW1VSUZvbnRNb25vc3BhY2VkLVJlZ3VsYXI7XGYxXGZzd2lzc1xmY2hhcnNldDAgSGVsdmV0aWNhO30Ke1xjb2xvcnRibDtccmVkMjU1XGdyZWVuMjU1XGJsdWUyNTU7fQp7XCpcZXhwYW5kZWRjb2xvcnRibDs7fQpccGFyZFx0eDU2MFx0eDExMjBcdHgxNjgwXHR4MjI0MFx0eDI4MDBcdHgzMzYwXHR4MzkyMFx0eDQ0ODBcdHg1MDQwXHR4NTYwMFx0eDYxNjBcdHg2NzIwXHBhcmRpcm5hdHVyYWxccGFydGlnaHRlbmZhY3RvcjAKClxmMFxmczI0IFxjZjAgVGl0bGVcCgpcZjEge3tcTmVYVEdyYXBoaWMg56S65L6LIGltYWdlLnBuZyBcd2lkdGg2NDAgXGhlaWdodDQ4MCBcYXBwbGVhdHRhY2htZW50cGFkZGluZzAgXGFwcGxlZW1iZWR0eXBlMCBcYXBwbGVhcWMKfax9ClxmMCBcCkNhcHRpb259AQAAAEsAAAACAAAABwAAAFRYVC5ydGYQAAAA56S65L6LIGltYWdlLnBuZxAAAAAQAAAAuKrTarYBAAAAAAAAAAAAALiq02q2AQAAAAAAAAAAAAABAAAAuwAAAIlQTkcNChoKAAAADUlIRFIAAAAgAAAAGAgGAAAAm1P/NAAAAAFzUkdCAK7OHOkAAAA4ZVhJZk1NACoAAAAIAAGHaQAEAAAAAQAAABoAAAAAAAKgAgAEAAAAAQAAACCgAwAEAAAAAQAAABgAAAAAHh+zjgAAADFJREFUSA1jlNpc/J9hAAHTANoNtnrUAaMhMBoCoyEwGgKjITAaAqMhMBoCoyEwGgIAUw8Cb6JKKQUAAAAASUVORK5CYII=",
+      "markdown" : "Title\n[内嵌图片保存在富文本资产中]\nCaption",
+      "name" : "image",
+      "text" : "Title\n￼\nCaption"
+    }
+  ],
+  "sources" : {
+    "CapsuleBulletEditor.swift" : "45728236364c70a2dc5ec188d82cac8e61fcacc847521f6a2fc75047cb34e6ff",
+    "CapsuleRichTextProjection.swift" : "307fb66d5017c73aa2fd96f977892f85add9c38868f7d38196bd48d6b45428f5",
+    "CapsuleStructure.swift" : "9465408462687fe52d20264b732ccd01dde3da242b5140386b5522b1c6ead64f"
+  },
+  "summaries" : [
+    {
+      "input" : " first   line \n second\tpart ",
+      "normalized" : "first   line second\tpart"
+    },
+    {
+      "input" : "  中文  line ",
+      "normalized" : "中文 line"
+    },
+    {
+      "input" : "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "normalized" : "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+    }
+  ]
+}

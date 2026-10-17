@@ -17,11 +17,16 @@ VERSION=$(dpkg-deb -f "$DEB" Version)
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 DATA="$WORK/user-data/rimes"
-mkdir -p "$DATA/rime_ice.userdb" "$DATA/schemes/learning/custom.userdb" "$DATA/capsule" "$DATA/translation/cache"
+mkdir -p "$DATA/rime_ice.userdb" "$DATA/schemes/learning/custom.userdb" "$DATA/capsule/clipboard" "$DATA/capsule/assets" "$DATA/capsule/captures/fixture" "$DATA/translation/cache"
 printf '%s\n' 'keep learned dictionary' > "$DATA/rime_ice.userdb/CURRENT"
 printf '%s\n' 'keep imported learning' > "$DATA/schemes/learning/custom.userdb/CURRENT"
 printf '%s\n' 'keep notes' > "$DATA/capsule/note.md"
+printf '%s\n' 'keep original MIME history and favorites' > "$DATA/capsule/clipboard/history-v1.sqlite3"
 printf '%s\n' 'keep downloaded model' > "$DATA/translation/cache/model.argosmodel"
+printf '%s\n' 'keep imported reference attachment' > "$DATA/capsule/assets/reference.asset"
+printf '%s\n' 'apa7' > "$DATA/capsule/reference-style-v1"
+printf '%s\n' 'keep capture metadata' > "$DATA/capsule/captures/fixture/record.json"
+printf '%s\n' 'keep original screen recording' > "$DATA/capsule/captures/fixture/original.webm"
 (cd "$DATA" && find . -type f -exec sha256sum {} +) > "$WORK/user-data.sha256"
 
 sudo env XDG_DATA_HOME="$WORK/user-data" apt-get install -y "$DEB"
@@ -34,7 +39,7 @@ RIMES_USER_DIR="$WORK/resource-status" /usr/bin/rimes-translation --status | pyt
 [[ -f /usr/share/applications/org.scholay.rimes.settings.desktop ]]
 /usr/bin/rimes-settings --help
 [[ -f /usr/share/rimes/data/default.yaml ]]
-for program in /usr/bin/rimes-schemes /usr/bin/rimes-buffer /usr/bin/rimes-capsule /usr/bin/rimes-settings /usr/bin/rimes-plugins /usr/bin/rimes-translation; do
+for program in /usr/bin/rimes-schemes /usr/bin/rimes-buffer /usr/bin/rimes-capsule /usr/bin/rimes-settings /usr/bin/rimes-plugins /usr/bin/rimes-translation /usr/libexec/rimes/rimes-capsule-preview /usr/libexec/rimes/rimes-capsule-capture; do
     ldd "$program" > "$WORK/ldd.txt"
     if grep -q 'not found' "$WORK/ldd.txt"; then
         cat "$WORK/ldd.txt" >&2

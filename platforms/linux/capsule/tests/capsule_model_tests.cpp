@@ -43,9 +43,10 @@ int main() {
     model.backspace_query();
     Expect(model.cards().size() == 2, "clear search");
 
+    model.EnableModule(rimes::capsule::Module::Temporary, true);
     model.set_tab(rimes::capsule::Tab::Recent);
-    Expect(model.cards().empty(), "unported tab empty");
-    Expect(model.hint().find("not ported") != std::string::npos, "unported hint");
+    Expect(model.cards().empty(), "empty temporary module");
+    Expect(model.module() == rimes::capsule::Module::Temporary, "legacy tab selects module");
     model.set_tab(rimes::capsule::Tab::Note);
 
     model.set_visible(true);

@@ -113,9 +113,10 @@
         "语言和连续翻译配置生效；原文编辑、取消、重试及部分结果有清楚反馈。",
         "验证快速连续输入、中文标点、多段粘贴、修改前段/尾段、错误重试和迟到结果。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 156,
-      "url": "https://github.com/scholay/xsime/issues/156"
+      "url": "https://github.com/scholay/xsime/issues/156",
+      "visual_status": "pending"
     },
     {
       "order": 7,
@@ -132,9 +133,10 @@
         "翻译单元首个子块交付后原子退休精确原文，其余译文不可变且不被重复翻译。",
         "可选自动发送采用单调时间，隐藏/暂停/保护不计龄；不强制收束组字，不重复投递，失败保留。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 157,
-      "url": "https://github.com/scholay/xsime/issues/157"
+      "url": "https://github.com/scholay/xsime/issues/157",
+      "visual_status": "pending"
     },
     {
       "order": 8,
@@ -152,9 +154,10 @@
         "网络任务不阻塞 Fcitx；支持 SSE 流式、取消、超时、鉴权失败、限流和有界响应。",
         "使用隔离协议服务器覆盖真实传输、碎片流、错误及失效任务；联通实际可用渠道时记录独立验收。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 158,
-      "url": "https://github.com/scholay/xsime/issues/158"
+      "url": "https://github.com/scholay/xsime/issues/158",
+      "visual_status": "pending"
     },
     {
       "order": 9,
@@ -172,9 +175,10 @@
         "焦点、输入源和 IC 退役立即撤销授权；恢复后不能复用旧任务/旧输入框。",
         "覆盖 Firefox 禁用 IM 的密码框、同 IC 换框、进程退出和锁屏恢复，记录平台可检测边界。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 159,
-      "url": "https://github.com/scholay/xsime/issues/159"
+      "url": "https://github.com/scholay/xsime/issues/159",
+      "visual_status": "pending"
     },
     {
       "order": 10,
@@ -191,9 +195,10 @@
         "跨输入法显式唤出时选择 XSIME 并等待新鲜焦点；关闭不切回旧输入法，尊重用户随后切换。",
         "采用 X11/Wayland 各自支持的注册机制，冲突与不支持时给出可操作入口；验证登录和重启恢复。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 160,
-      "url": "https://github.com/scholay/xsime/issues/160"
+      "url": "https://github.com/scholay/xsime/issues/160",
+      "visual_status": "pending"
     },
     {
       "order": 11,
@@ -211,9 +216,10 @@
         "实现 X11 与支持 layer-shell 的 Wayland 放置、多屏缩放及位置恢复；GNOME/KDE 提供明确可用的降级行为。",
         "验证拖动、首击、跨屏、全屏、缩放和遮挡；候选与 Buffer 不相互覆盖且目标身份不伪造。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 161,
-      "url": "https://github.com/scholay/xsime/issues/161"
+      "url": "https://github.com/scholay/xsime/issues/161",
+      "visual_status": "comparison_requires_review"
     },
     {
       "order": 12,
@@ -232,9 +238,10 @@
         "扩展持久化类型及可靠附件存储，兼容既有 Markdown/UUID/revision；停用不删除用户数据。",
         "保持精确目标插入及复制分离，覆盖键鼠导航、关闭、重启和跨框失效。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 162,
-      "url": "https://github.com/scholay/xsime/issues/162"
+      "url": "https://github.com/scholay/xsime/issues/162",
+      "visual_status": "comparison_requires_review"
     },
     {
       "order": 13,
@@ -250,9 +257,10 @@
         "保留非本产品拥有的 front matter，坏记录单条降级，并发修订冲突不覆盖。",
         "卡片详情支持逐行复制/插入，整条插入仍可用；覆盖外部编辑冲突、资产哈希及迁移。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 163,
-      "url": "https://github.com/scholay/xsime/issues/163"
+      "url": "https://github.com/scholay/xsime/issues/163",
+      "visual_status": "comparison_requires_review"
     },
     {
       "order": 14,
@@ -269,9 +277,10 @@
         "保护期间停止读取，恢复只建基线；机密/临时及本产品敏感复制不得进入历史。",
         "X11 与 Wayland 使用各自支持的读取/恢复机制；文本经原生输入提交，其他类型仅显式恢复剪贴板。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 164,
-      "url": "https://github.com/scholay/xsime/issues/164"
+      "url": "https://github.com/scholay/xsime/issues/164",
+      "visual_status": "comparison_requires_review"
     },
     {
       "order": 15,
@@ -288,9 +297,10 @@
         "提供有界图片/文本/PDF 预览、导入与文件复制；引用元数据及单条文献格式与 macOS 当前范围对齐。",
         "验证丢失文件、路径/链接限制、附件持久化、搜索、备份恢复和旧 PDF/Skill 兼容。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 165,
-      "url": "https://github.com/scholay/xsime/issues/165"
+      "url": "https://github.com/scholay/xsime/issues/165",
+      "visual_status": "comparison_requires_review"
     },
     {
       "order": 16,
@@ -307,9 +317,10 @@
         "图片/视频保存到私有内容库，支持预览、复制、收藏和来源标注；收藏不受临时清理影响。",
         "覆盖 X11 与 Wayland portal，验证取消/锁屏/失败的资源释放、声音和格式能力边界。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 166,
-      "url": "https://github.com/scholay/xsime/issues/166"
+      "url": "https://github.com/scholay/xsime/issues/166",
+      "visual_status": "comparison_requires_review"
     },
     {
       "order": 17,

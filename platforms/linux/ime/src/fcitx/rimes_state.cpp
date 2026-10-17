@@ -1,3 +1,4 @@
+#include "session/protected_input.hpp"
 #include "rimes_state.hpp"
 
 #include <cstdint>
@@ -221,7 +222,7 @@ bool RimesState::HandleCandidateKey(KeyEvent& event) {
         return false;
     }
     const auto modifiers = ModifierMask(event) & ~rimes::linuxime::kLockMask;
-    if (modifiers || navigation_.empty() || !ic_->hasFocus() || ic_->capabilityFlags().test(CapabilityFlag::Password)) return false;
+    if (modifiers || navigation_.empty() || !ic_->hasFocus() || ProtectedInput(ic_->capabilityFlags())) return false;
     const bool expanded = navigation_.expanded();
     const bool arrow = key == FcitxKey_Left || key == FcitxKey_Right || key == FcitxKey_Up || key == FcitxKey_Down;
     const bool paging = expanded && (key == FcitxKey_Page_Up || key == FcitxKey_Page_Down || key == '-' || key == '=');

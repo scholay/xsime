@@ -35,12 +35,9 @@ struct Child {
     ~Child() {
         if (pid > 0 && !reaped) {
             kill(-pid, SIGTERM);
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-            while (std::chrono::steady_clock::now() < deadline) {
-                const auto waited = waitpid(pid, nullptr, WNOHANG);
-                if (waited == pid || (waited < 0 && errno == ECHILD)) return;
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            }
+            // Keep the leader unreaped so its PID/process-group identity cannot
+            // be reused while descendants receive their cleanup grace period.
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
             kill(-pid, SIGKILL);
             while (waitpid(pid, nullptr, 0) < 0 && errno == EINTR) {}
         }
@@ -91,9 +88,10 @@ ProcessResult RunProcess(const std::vector<std::string>& command, std::string_vi
     Nonblocking(writer.value); Nonblocking(reader.value);
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     std::size_t sent = 0;
-    int exit_status = 0;
-    bool exceeded = false;
-    while (reader.value >= 0 || !child.reaped) {
+    siginfo_t exit_info{};
+    bool exited = false;
+    bool exceeded = false, transport_failed = false;
+    while (reader.value >= 0 || !exited) {
         if (cancelled.load() || std::chrono::steady_clock::now() >= deadline) {
             result.cancelled = cancelled.load();
             result.timed_out = !result.cancelled;
@@ -101,13 +99,13 @@ ProcessResult RunProcess(const std::vector<std::string>& command, std::string_vi
         }
         if (sent == input.size()) writer.Reset();
         pollfd fds[] = {{reader.value, POLLIN, 0}, {writer.value, POLLOUT, 0}};
-        if (poll(fds, 2, 20) < 0 && errno != EINTR) break;
+        if (poll(fds, 2, 20) < 0 && errno != EINTR) { transport_failed = true; break; }
         if (reader.value >= 0) {
             std::array<char, 16384> buffer{};
             for (;;) {
                 const auto got = read(reader.value, buffer.data(), buffer.size());
                 if (got == 0) { reader.Reset(); break; }
-                if (got < 0) { if (errno == EINTR) continue; if (errno != EAGAIN) reader.Reset(); break; }
+                if (got < 0) { if (errno == EINTR) continue; if (errno != EAGAIN) { transport_failed = true; reader.Reset(); } break; }
                 const auto size = static_cast<std::size_t>(got);
                 if (size > limit - result.output.size()) { exceeded = true; break; }
                 result.output.append(buffer.data(), size);
@@ -120,16 +118,26 @@ ProcessResult RunProcess(const std::vector<std::string>& command, std::string_vi
             if (written > 0) sent += static_cast<std::size_t>(written);
             else if (written < 0 && errno != EINTR && errno != EAGAIN) writer.Reset();
         }
-        if (!child.reaped) {
-            const auto waited = waitpid(child.pid, &exit_status, WNOHANG);
-            if (waited == child.pid) child.reaped = true;
+        if (!exited) {
+            const auto waited = waitid(P_PID, child.pid, &exit_info, WEXITED | WNOHANG | WNOWAIT);
+            if (waited == 0 && exit_info.si_pid == child.pid) exited = true;
             else if (waited < 0 && errno != EINTR) break;
         }
     }
     // Close pipes before killing a cancelled producer. Never return partial
     // output as a successful result, even if its process exits with status 0.
-    result.success = !exceeded && !result.cancelled && !result.timed_out && child.reaped &&
-                     sent == input.size() && WIFEXITED(exit_status) && WEXITSTATUS(exit_status) == 0;
+    result.success = !exceeded && !transport_failed && reader.value < 0 && !result.cancelled && !result.timed_out && exited &&
+                     sent == input.size() && exit_info.si_code == CLD_EXITED && exit_info.si_status == 0;
+    if (result.success) {
+        // A finished one-shot helper may not leave background descendants.
+        // Its unreaped leader still reserves this exact process group.
+        kill(-child.pid, SIGKILL);
+        int status = 0;
+        pid_t waited;
+        do { waited = waitpid(child.pid, &status, 0); } while (waited < 0 && errno == EINTR);
+        child.reaped = waited == child.pid;
+        result.success = child.reaped && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    }
     if (!result.success) result.output.clear();
     return result;
 }

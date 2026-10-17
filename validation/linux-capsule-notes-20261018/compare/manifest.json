@@ -1,0 +1,15 @@
+[
+  {
+    "page": "note-detail",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1880,
+      416
+    ],
+    "changed_pixel_fraction": 0.998293013502455,
+    "mean_absolute_channel_error": 5.541063147845063,
+    "pair": "note-detail-pair.png",
+    "difference_4x": "note-detail-diff.png"
+  }
+]

@@ -40,6 +40,16 @@ int main() {
   Check(workspace.CopyText() == "Hello world.", "ready output missing");
   workspace.MoveResult(1);
   Check(workspace.CopyText() == "Hi world.", "alternative selection");
+  const auto selected_id = workspace.SelectedResult()->id;
+  Check(!workspace.ConsumePrefix(job, true, first_id, "Hi "), "unselected alternative delivered");
+  Check(!workspace.ConsumePrefix(job, false, selected_id, "Hi "), "revoked delivery accepted");
+  Check(!workspace.ConsumePrefix(job, true, selected_id, "Hi" "!"), "mismatched output consumed");
+  Check(workspace.ConsumePrefix(job, true, selected_id, "Hi "), "ready first child not consumed");
+  Check(workspace.CopyText() == "world." && workspace.Results().size() == 1 &&
+        workspace.SelectedResult()->id != selected_id, "partial delivery retained alternatives or stale identity");
+  Check(!workspace.ConsumePrefix(job, true, selected_id, "world."), "stale result duplicated delivery");
+  Check(workspace.ConsumePrefix(job, true, workspace.SelectedResult()->id, "world.") &&
+        workspace.CopyText().empty(), "final child not consumed");
   workspace.ReturnToEdit();
   Check(workspace.Results().empty() && workspace.CanGenerate(),
         "return to edit lost source");

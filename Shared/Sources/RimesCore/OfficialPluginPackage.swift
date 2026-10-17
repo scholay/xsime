@@ -54,7 +54,7 @@ public struct OfficialPluginPackage: Codable, Equatable {
               package.runtime == "host-interpreted" else {
             throw PluginPackageError.unsupported
         }
-        let supported = Set(["macos", "ios", "android", "windows"])
+        let supported = Set(["macos", "ios", "android", "windows", "linux"])
         guard !package.platforms.isEmpty,
               Set(package.platforms.keys).isSubset(of: supported),
               package.platforms[platform] != nil else {

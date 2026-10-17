@@ -3,8 +3,9 @@
 `rimes-plugins --list` returns the pinned official catalog with `available`,
 `installed`, `enabled`, `bundled`, `grant` and a user-facing error for each entry.
 Only an explicit Linux platform declaration **and** a compiled adapter make an
-entry available. The current pin has no Linux declarations; existing legacy
-Capsule notes remain controlled by Fcitx configuration until their module port.
+entry available. The local translation adapter is bundled and enabled on first
+installation; model downloads remain explicit. Existing legacy Capsule notes
+remain controlled by Fcitx configuration until their module port.
 
 `rimes-plugins --request` reads one JSON object from standard input and returns
 one JSON result. This companion keeps downloads outside the input-method event loop. Requests contain `op`, `id`, and the `grant`
@@ -116,8 +117,19 @@ Windows. No pip dependency resolution runs on the user's machine.
 Private resources live in `$RIMES_USER_DIR/translation`, or the default XDG
 user directory. Source uninstall and `apt remove` remove the installed helper,
 not downloaded models, dictionaries or learning data. The resource backend is
-implemented independently of the Buffer adapter; check the parity tracker for
-its current runtime and visual acceptance status.
+connected to the Buffer adapter. Select **实时翻译** to translate continuous
+input, or disable **连续翻译** and generate explicitly. The source stays intact
+until a separately validated delivery. Check the parity tracker for remaining
+delivery and visual acceptance work.
+
+Translation owns byte-exact sentence slices across Buffer block boundaries.
+It uses the macOS refresh policy (300 ms debounce / 900 ms maximum wait), keeps
+ready prefixes while the tail changes and rejects responses for edited slices,
+cancelled requests, stale configuration or lost authorization. Failed sentences
+can be retried without regenerating successful ones. The bounded tokenizer
+preserves punctuation, paragraph whitespace and Unicode; language-specific
+sentence-boundary differences from macOS NaturalLanguage remain part of parity
+acceptance. Local input and results never enter a remote provider.
 
 The opt-in integration test downloads and runs the real model in a disposable
 profile, checks both directions, refuses damaged resources and repairs them

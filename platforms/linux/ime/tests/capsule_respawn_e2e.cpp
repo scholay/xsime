@@ -301,7 +301,21 @@ int main(int argc, char** argv) {
                             if (CountUiProcesses(stub_path) != 1) {
                                 Die("expected exactly one UI process before kill");
                             }
-                            std::cout << "ok: first Capsule UI connected\n";
+                            // This suite exercises note-copy replay. The first
+                            // enabled module may be Temporary after startup.
+                            const auto current = ReadDump(dump_path);
+                            if (current.find("\"module\":\"notes\"") == std::string::npos) {
+                                SendKey(frontend, uuid, "Tab");
+                                poll->setTime(fcitx::now(CLOCK_MONOTONIC) + 50000);
+                                poll->setOneShot();
+                                return true;
+                            }
+                            if (current.find("\"loading\":true") != std::string::npos) {
+                                poll->setTime(fcitx::now(CLOCK_MONOTONIC) + 50000);
+                                poll->setOneShot();
+                                return true;
+                            }
+                            std::cout << "ok: first Capsule UI connected with notes loaded\n";
                             SendKey(frontend, uuid, "Control+c");
                             if (ReadDump(dump_path).find("\"copy_seq\":1") == std::string::npos) {
                                 Die("Ctrl+C did not increment copy_seq");

@@ -172,6 +172,15 @@ Json PackageStore::Package(const std::string& id) const {
     return Verified(id, Bytes(id, state));
 }
 
+void PackageStore::WithEnabledGrant(const std::string& id, const std::string& grant,
+                                    const std::function<void()>& action) const {
+    auto lock = files_.Lock();
+    const auto state = CheckedState(id, grant);
+    if (!state.at("enabled").get<bool>()) throw std::runtime_error("Plugin is disabled");
+    (void)Verified(id, Bytes(id, state));
+    action();
+}
+
 Json PackageStore::CheckedState(const std::string& id, const std::string& expected_grant) const {
     auto state = State(id);
     if (state.at("grant") != expected_grant) throw std::runtime_error("Plugin changed; refresh and retry");
