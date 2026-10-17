@@ -98,6 +98,9 @@ void Theme(const std::string &name, GdkScreen *screen) {
       ".sidebar-heading { font-size: 10px; font-weight: 600; color: " +
       c("textMuted") +
       "; }"
+      ".gateway-config { font-family: monospace; font-size: 10px; padding: 2px; border: 0.5px solid " + c("border") + "; background: " + (theme == "day" ? "#FFFFFF" : "#34373D") + "; }"
+      ".gateway-detail { font-size: 11px; } .gateway-tabs button { font-size: 13px; } .gateway-copy { font-size: 12px; }"
+      ".gateway-icon-tile { border-radius: 8px; border: 0.5px solid " + c("border") + "; background: " + c("surfaceTertiary") + "; }"
       ".caption { font-size: 10px; color: " +
       c("textMuted") + "; } .tiny { font-size: 9px; color: " + c("textMuted") +
       "; }"

@@ -15,7 +15,7 @@ import tempfile
 REPO_ROOT = Path(__file__).resolve().parents[4]
 RECEIPT = "share/rimes/ime-install-manifest.json"
 PROGRAMS = {"rimes-buffer", "rimes-buffer-ctl", "rimes-capsule",
-            "rimes-capsule-ctl", "rimes-schemes", "rimes-plugins", "rimes-settings", "rimes-mailbox", "rimes-translation", "rimes-launch"}
+            "rimes-capsule-ctl", "rimes-schemes", "rimes-plugins", "rimes-settings", "rimes-mailbox", "rimes-gateway", "rimes-translation", "rimes-launch"}
 
 
 def managed_path(raw):

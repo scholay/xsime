@@ -23,6 +23,7 @@
 #include "configuration.hpp"
 #include "local_translation.hpp"
 #include "ai_api.hpp"
+#include "gateway_server.hpp"
 #include "session/session_monitor.hpp"
 #include "desktop/workspace_launcher.hpp"
 #include "desktop/desktop_shortcuts.hpp"
@@ -83,6 +84,7 @@ private:
     std::shared_ptr<std::atomic<bool>> alive_;
     std::unique_ptr<BufferService> buffer_;
     std::unique_ptr<CapsuleService> capsule_;
+    std::unique_ptr<rimes::mailbox::GatewayServer> gateway_;
     std::unique_ptr<HandlerTableEntry<EventHandler>> destroy_watch_;
     std::unique_ptr<HandlerTableEntry<EventHandler>> capability_watch_;
     std::unique_ptr<HandlerTableEntry<EventHandler>> focus_watch_;

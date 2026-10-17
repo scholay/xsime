@@ -46,12 +46,20 @@ int main() {
     PrivateDirectory prefs(root / "settings");
     auto legacy = store.Load();
     legacy.erase("autoSendSeconds");
+    legacy.erase("gatewayEnabled"); legacy.erase("gatewayPort"); legacy.erase("gatewayBlockedSources");
     legacy.erase("shortcuts"); legacy.erase("globalShortcuts");
     prefs.Write("preferences.json", legacy.dump());
     Check(store.Load().at("autoSendSeconds") == 1 &&
           store.Load().at("revision") == legacy.at("revision"), "legacy auto-send migration lost revision");
     Check(store.Load().at("shortcuts") == DefaultShortcuts() && store.Load().at("globalShortcuts") == true,
           "legacy shortcut migration failed");
+    Check(store.Load().at("gatewayEnabled") == true && store.Load().at("gatewayPort") == 47700 && store.Load().at("gatewayBlockedSources").empty(), "legacy gateway migration failed");
+    for (const auto& invalid : std::vector<Json>{Json{{"gatewayPort", 80}}, Json{{"gatewayPort", 65536}}, Json{{"gatewayEnabled", "yes"}}, Json{{"gatewayBlockedSources", {"bad:source"}}}, Json{{"gatewayBlockedSources", {"http:one", "http:one"}}}}) {
+      auto candidate = store.Load(); candidate.update(invalid);
+      const auto original = store.Load();
+      Reject([&] { store.Save(candidate, candidate.at("revision")); });
+      Check(store.Load() == original, "invalid gateway settings changed durable data");
+    }
     ValidateShortcuts(DefaultShortcuts());
     for (const auto* chord : {"b", "SHIFT+b", "CTRL+a", "CTRL+v", "LOGO+v", "CTRL+CTRL+b", "CTRL+SHIFT+B", "SHIFT+CTRL+b", "CTRL+bad", "CTRL+b\n"})
       Reject([&] { ParseShortcut(chord); });

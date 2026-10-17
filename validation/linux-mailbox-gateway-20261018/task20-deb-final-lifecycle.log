@@ -1,0 +1,209 @@
+fcitx5-rimes_1.1.5_arm64.deb: OK
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following NEW packages will be installed:
+  fcitx5-rimes
+0 upgraded, 1 newly installed, 0 to remove and 16 not upgraded.
+Need to get 0 B/22.3 MB of archives.
+After this operation, 98.2 MB of additional disk space will be used.
+Get:1 /tmp/task20-gateway-final-deb/fcitx5-rimes_1.1.5_arm64.deb fcitx5-rimes arm64 1.1.5 [22.3 MB]
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package fcitx5-rimes.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 74994 files and directories currently installed.)
+Preparing to unpack .../fcitx5-rimes_1.1.5_arm64.deb ...
+Unpacking fcitx5-rimes (1.1.5) ...
+Setting up fcitx5-rimes (1.1.5) ...
+Processing triggers for hicolor-icon-theme (0.17-2) ...
+XSIME Mailbox 1.1.5
+Usage: rimes-settings [--render DIRECTORY | --render-gateway DIRECTORY | --smoke]
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.xfce.Xfconf' requested by ':1.0' (uid=0 pid=38613 comm="xfwm4 --compositor=off")
+dbus-daemon[38598]: [session uid=0 pid=38598] Successfully activated service 'org.xfce.Xfconf'
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.2' (uid=0 pid=38630 comm="/usr/bin/rimes-mailbox --thread 379b1501-c52f-4c4c")
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.portal.Documents' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.4' (uid=0 pid=38642 comm="/usr/libexec/xdg-document-portal")
+dbus-daemon[38598]: [session uid=0 pid=38598] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
+dbus-daemon[38598]: [session uid=0 pid=38598] Successfully activated service 'org.freedesktop.portal.Documents'
+fusermount3: fuse device not found, try 'modprobe fuse' first
+error: fuse init failed: Can't mount path /root/.cache/doc
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.072: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.072: The preferred method to match portal implementations to desktop environments is to use the portals.conf(5) configuration file
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38657): Gtk-WARNING **: 23:55:13.076: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.080: Failed to create RealtimeKit proxy: Could not connect: No such file or directory
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.080: No skeleton to export
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.080: Choosing gtk.portal for org.freedesktop.impl.portal.FileChooser as a last-resort fallback
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38661): Gtk-WARNING **: 23:55:13.084: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.084: Failed to create file chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.084: No skeleton to export
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.084: Choosing gtk.portal for org.freedesktop.impl.portal.AppChooser as a last-resort fallback
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38663): Gtk-WARNING **: 23:55:13.088: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.088: Failed to create app chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.088: No skeleton to export
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.088: Choosing gtk.portal for org.freedesktop.impl.portal.Print as a last-resort fallback
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38666): Gtk-WARNING **: 23:55:13.092: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.092: Failed to create print proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.092: No skeleton to export
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.092: Choosing gtk.portal for org.freedesktop.impl.portal.Notification as a last-resort fallback
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38668): Gtk-WARNING **: 23:55:13.095: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.096: Failed to create notification proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.096: No skeleton to export
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.096: Choosing gtk.portal for org.freedesktop.impl.portal.Inhibit as a last-resort fallback
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38670): Gtk-WARNING **: 23:55:13.099: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.100: Failed to create inhibit proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.100: No skeleton to export
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.100: Choosing gtk.portal for org.freedesktop.impl.portal.Access as a last-resort fallback
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38672): Gtk-WARNING **: 23:55:13.103: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.103: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.103: No skeleton to export
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38674): Gtk-WARNING **: 23:55:13.107: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38676): Gtk-WARNING **: 23:55:13.110: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.111: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.111: No skeleton to export
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.112: Failed connect to PipeWire: Couldn't connect to PipeWire
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.112: Choosing gtk.portal for org.freedesktop.impl.portal.Account as a last-resort fallback
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38679): Gtk-WARNING **: 23:55:13.115: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.116: Failed to create account proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.116: No skeleton to export
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.116: Choosing gtk.portal for org.freedesktop.impl.portal.Email as a last-resort fallback
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38681): Gtk-WARNING **: 23:55:13.119: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.120: Failed to create email proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.120: No skeleton to export
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.120: Choosing gtk.portal for org.freedesktop.impl.portal.DynamicLauncher as a last-resort fallback
+dbus-daemon[38598]: [session uid=0 pid=38598] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.3' (uid=0 pid=38636 comm="/usr/libexec/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:38684): Gtk-WARNING **: 23:55:13.123: cannot open display: 
+dbus-daemon[38598]: [session uid=0 pid=38598] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.124: Failed to create dynamic_launcher proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/libexec/xdg-desktop-portal:38636): xdg-desktop-portal-WARNING **: 23:55:13.124: No skeleton to export
+dbus-daemon[38598]: [session uid=0 pid=38598] Successfully activated service 'org.freedesktop.portal.Desktop'
+Mailbox process: one window/profile, deep links, notification action, hide/reopen, geometry and cross-bus ownership passed
+
+(xfconfd:38622): xfconfd-WARNING **: 23:55:13.909: Name org.xfce.Xfconf lost on the message dbus, exiting.
+Reading package lists...
+Building dependency tree...
+Reading state information...
+0 upgraded, 0 newly installed, 1 reinstalled, 0 to remove and 16 not upgraded.
+Need to get 0 B/22.3 MB of archives.
+After this operation, 0 B of additional disk space will be used.
+Get:1 /tmp/task20-gateway-final-deb/fcitx5-rimes_1.1.5_arm64.deb fcitx5-rimes arm64 1.1.5 [22.3 MB]
+debconf: delaying package configuration, since apt-utils is not installed
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 75120 files and directories currently installed.)
+Preparing to unpack .../fcitx5-rimes_1.1.5_arm64.deb ...
+Unpacking fcitx5-rimes (1.1.5) over (1.1.5) ...
+Setting up fcitx5-rimes (1.1.5) ...
+Processing triggers for hicolor-icon-theme (0.17-2) ...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following packages were automatically installed and are no longer required:
+  fcitx5 fcitx5-config-qt fcitx5-frontend-all fcitx5-frontend-gtk3
+  fcitx5-frontend-gtk4 fcitx5-frontend-qt5 fcitx5-frontend-qt6 im-config
+  libadwaita-1-0 libappstream5 libb2-1 libboost-iostreams1.83.0
+  libdouble-conversion3 libfcitx5-qt-data libfcitx5-qt1 libfcitx5-qt6-1
+  libfcitx5gclient2 libime-bin libime-data libime-data-language-model
+  libimecore0 libimepinyin0 libimetable0 libkf5itemviews-data libkf5itemviews5
+  libkf5widgetsaddons-data libkf5widgetsaddons5 libmd4c0 libqt5core5t64
+  libqt5dbus5t64 libqt5gui5t64 libqt5network5t64 libqt5qml5 libqt5qmlmodels5
+  libqt5quick5 libqt5svg5 libqt5waylandclient5 libqt5waylandcompositor5
+  libqt5widgets5t64 libqt5x11extras5 libqt6core6t64 libqt6dbus6t64
+  libqt6gui6t64 libqt6network6t64 libqt6opengl6t64 libqt6qml6 libqt6qmlmodels6
+  libqt6quick6 libqt6waylandclient6 libqt6waylandcompositor6
+  libqt6waylandeglclienthwintegration6
+  libqt6waylandeglcompositorhwintegration6 libqt6widgets6t64
+  libqt6wlshellintegration6 libstemmer0d libts0t64 libxcb-image0 libxmlb2
+  libyaml-0-2 qt5-gtk-platformtheme qt6-gtk-platformtheme qt6-qpa-plugins
+  qt6-translations-l10n qt6-wayland qttranslations5-l10n qtwayland5 zenity
+  zenity-common
+Use 'sudo apt autoremove' to remove them.
+The following packages will be REMOVED:
+  fcitx5-rimes
+0 upgraded, 0 newly installed, 1 to remove and 16 not upgraded.
+After this operation, 98.2 MB disk space will be freed.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 75120 files and directories currently installed.)
+Removing fcitx5-rimes (1.1.5) ...
+Processing triggers for hicolor-icon-theme (0.17-2) ...
+./mailbox/images/fixture.png: OK
+./mailbox/mailbox.json: OK
+./mailbox/window.json: OK
+./schemes/learning/custom.userdb/CURRENT: OK
+./gateway/token: OK
+./translation/cache/model.argosmodel: OK
+./capsule/captures/fixture/original.webm: OK
+./capsule/captures/fixture/record.json: OK
+./capsule/reference-style-v1: OK
+./capsule/assets/mailbox-copy.png: OK
+./capsule/assets/reference.asset: OK
+./capsule/note.md: OK
+./capsule/clipboard/history-v1.sqlite3: OK
+./capsule/reveal-credential-v1: OK
+./capsule/passwords/fixture.md: OK
+./capsule/master-key: OK
+./rime_ice.userdb/CURRENT: OK
+deb install/reinstall/remove passed; user dictionaries, learning and notes preserved.

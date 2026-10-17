@@ -24,6 +24,7 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../../THIRD_PARTY_NOTICES.md"
 
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 pkg_check_modules(Rime REQUIRED IMPORTED_TARGET rime>=1.7.0)
 
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../Shared/SchemeImport" "scheme-import")
@@ -91,18 +92,44 @@ set_target_properties(RimesCapsuleCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 rimes_harden(RimesCapsuleCore)
 
 set(RIMES_MAILBOX_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../mailbox")
-add_library(RimesMailboxCore STATIC "${RIMES_MAILBOX_ROOT}/core/mailbox_store.cpp" "${RIMES_MAILBOX_ROOT}/core/inbox_actions.cpp" "${RIMES_MAILBOX_ROOT}/core/mailbox_buffer_client.cpp")
-target_include_directories(RimesMailboxCore PUBLIC "${RIMES_MAILBOX_ROOT}/core")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${RIMES_MAILBOX_ROOT}/resources/native-gateway.json"
+    "${RIMES_MAILBOX_ROOT}/resources/native-gateway-settings.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../Sources/RimeBuffer/SettingsWindow.swift"
+    "${RIMES_MAILBOX_ROOT}/verify_gateway_contract.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../Sources/RimeBuffer/Inbound/LocalGateway.swift"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../Sources/RimeBuffer/Inbound/InboundBus.swift"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../Sources/RimeBuffer/Inbound/GatewayToken.swift")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${RIMES_MAILBOX_ROOT}/verify_gateway_contract.py"
+    --output "${CMAKE_BINARY_DIR}/generated/native_gateway_contract.hpp" RESULT_VARIABLE RIMES_GATEWAY_CONTRACT)
+if(NOT RIMES_GATEWAY_CONTRACT EQUAL 0)
+    message(FATAL_ERROR "Regenerate and review the native gateway contract")
+endif()
+add_custom_target(RimesGatewayContract COMMAND "${Python3_EXECUTABLE}" "${RIMES_MAILBOX_ROOT}/verify_gateway_contract.py")
+add_library(RimesMailboxCore STATIC "${RIMES_MAILBOX_ROOT}/core/mailbox_store.cpp" "${RIMES_MAILBOX_ROOT}/core/inbox_actions.cpp" "${RIMES_MAILBOX_ROOT}/core/mailbox_buffer_client.cpp" "${RIMES_MAILBOX_ROOT}/core/gateway_protocol.cpp" "${RIMES_MAILBOX_ROOT}/core/gateway_server.cpp")
+target_include_directories(RimesMailboxCore PUBLIC "${RIMES_MAILBOX_ROOT}/core" PRIVATE "${CMAKE_BINARY_DIR}/generated")
+add_dependencies(RimesMailboxCore RimesGatewayContract)
 target_link_libraries(RimesMailboxCore PUBLIC RimesCapsuleCore)
 set_target_properties(RimesMailboxCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(RimesMailboxCore PUBLIC RIMES_PRODUCT_VERSION="${RIMES_PRODUCT_VERSION}")
 rimes_harden(RimesMailboxCore)
+add_executable(rimes-gateway "${RIMES_MAILBOX_ROOT}/ctl/gateway_ctl.cpp")
+target_link_libraries(rimes-gateway PRIVATE RimesMailboxCore)
+rimes_harden(rimes-gateway)
+install(TARGETS rimes-gateway DESTINATION "${CMAKE_INSTALL_BINDIR}")
+
 if(BUILD_TESTING)
     add_executable(rimes-mailbox-store-tests "${RIMES_MAILBOX_ROOT}/tests/mailbox_store_tests.cpp")
     target_link_libraries(rimes-mailbox-store-tests PRIVATE RimesMailboxCore)
     target_compile_definitions(rimes-mailbox-store-tests PRIVATE RIMES_MAILBOX_FIXTURE="${RIMES_MAILBOX_ROOT}/tests/fixtures/native-mailbox.json")
     rimes_harden(rimes-mailbox-store-tests)
     add_test(NAME mailbox-store COMMAND rimes-mailbox-store-tests)
+    add_executable(rimes-gateway-tests "${RIMES_MAILBOX_ROOT}/tests/gateway_tests.cpp")
+    target_link_libraries(rimes-gateway-tests PRIVATE RimesMailboxCore)
+    rimes_harden(rimes-gateway-tests)
+    add_test(NAME mailbox-gateway COMMAND rimes-gateway-tests)
+    set_tests_properties(mailbox-gateway PROPERTIES TIMEOUT 35)
+    add_test(NAME mailbox-gateway-native-contract COMMAND "${Python3_EXECUTABLE}" "${RIMES_MAILBOX_ROOT}/verify_gateway_contract.py")
 endif()
 
 add_library(RimesEngine STATIC
@@ -292,6 +319,8 @@ if(RIMES_BUILD_FCITX5)
             target_link_libraries(RimesMailboxUI PUBLIC RimesClipboardDesktop)
         endif()
         rimes_harden(RimesClipboardDesktop)
+        target_link_libraries(rimes-settings PRIVATE RimesClipboardDesktop)
+        target_compile_definitions(rimes-settings PRIVATE RIMES_GATEWAY_CLIPBOARD=1)
 
         pkg_check_modules(CapsuleCapture REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0 libportal gio-unix-2.0 x11)
         add_executable(rimes-capsule-capture "${RIMES_CAPSULE_ROOT}/ui/capsule_capture_main.cpp")
@@ -707,6 +736,10 @@ if(RIMES_BUILD_TESTS)
         )
         rimes_harden(rimes-buffer-respawn-e2e)
 
+        add_executable(rimes-gateway-fcitx-e2e tests/gateway_fcitx_e2e.cpp)
+        target_include_directories(rimes-gateway-fcitx-e2e PRIVATE "${RIMES_MAILBOX_ROOT}/tests")
+        target_link_libraries(rimes-gateway-fcitx-e2e PRIVATE Fcitx5::Core Fcitx5::Module::TestFrontend RimesEngine RimesMailboxCore)
+        rimes_harden(rimes-gateway-fcitx-e2e)
         add_executable(rimes-capsule-fcitx-e2e tests/capsule_fcitx_e2e.cpp)
         target_link_libraries(rimes-capsule-fcitx-e2e PRIVATE
             Fcitx5::Core

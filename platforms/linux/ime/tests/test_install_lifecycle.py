@@ -38,6 +38,7 @@ install(PROGRAMS program DESTINATION bin RENAME rimes-settings)
 install(PROGRAMS program DESTINATION bin RENAME rimes-translation)
 install(PROGRAMS program DESTINATION bin RENAME rimes-launch)
 install(PROGRAMS program DESTINATION bin RENAME rimes-mailbox)
+install(PROGRAMS program DESTINATION bin RENAME rimes-gateway)
 install(FILES program DESTINATION libexec/rimes/translation RENAME runtime.py)
 install(FILES program DESTINATION libexec/rimes/translation RENAME translation_core.py)
 install(FILES program DESTINATION libexec/rimes/translation RENAME resources.lock.json)
@@ -96,6 +97,7 @@ install(FILES program DESTINATION share/applications RENAME org.scholay.rimes.ma
             "share/rimes/capsule/clipboard/history-v1.sqlite3",
             "share/rimes/capsule/master-key", "share/rimes/capsule/reveal-credential-v1",
             "share/rimes/capsule/passwords/fixture.md",
+            "share/rimes/gateway/token", "share/rimes/gateway/status.json",
             "share/rimes/mailbox/mailbox.json", "share/rimes/mailbox/images/fixture.png", "share/rimes/mailbox/window.json",
             "share/rimes/capsule/captures/example/record.json", "share/rimes/capsule/captures/example/original.webm",
             "share/rimes/capsule/assets/reference.asset", "share/rimes/capsule/reference-style-v1",
@@ -115,6 +117,7 @@ install(FILES program DESTINATION share/applications RENAME org.scholay.rimes.ma
         self.assertTrue(os.access(self.target / "bin/rimes-translation", os.X_OK))
         self.assertTrue(os.access(self.target / "bin/rimes-launch", os.X_OK))
         self.assertTrue(os.access(self.target / "bin/rimes-mailbox", os.X_OK))
+        self.assertTrue(os.access(self.target / "bin/rimes-gateway", os.X_OK))
         self.assertIn("share/applications/org.scholay.rimes.mailbox.desktop", installed)
         self.assertIn("share/applications/org.scholay.rimes.buffer.desktop", installed)
         self.assertIn("share/applications/org.scholay.rimes.capsule.desktop", installed)

@@ -1,5 +1,6 @@
 #pragma once
 #include "plugin_store.hpp"
+#include <functional>
 
 namespace rimes::runtime {
 using Json = plugins::Json;
@@ -28,7 +29,7 @@ struct RequestConfiguration {
 // private, separately owned files; preferences contain opaque references only.
 class ConfigurationStore {
 public:
-  explicit ConfigurationStore(const std::filesystem::path &root);
+  explicit ConfigurationStore(const std::filesystem::path &root, bool wait_for_seed = true);
   Json Load() const;
   // False means preferences committed but a retired credential could not be
   // removed. A caller must not report that the transaction rolled back.
@@ -36,6 +37,7 @@ public:
             const std::map<std::string, std::string> &credential_changes = {});
   RequestConfiguration Freeze(std::string_view plugin_id) const;
   Json Plugin(std::string_view plugin_id) const;
+  void WithGateway(const std::string& revision, const std::function<void()>& action) const;
   const std::filesystem::path &Path() const { return files_.Path(); }
   static Json Defaults();
   static Json NormalizePlugin(std::string_view id, const Json &value);

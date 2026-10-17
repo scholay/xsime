@@ -31,6 +31,11 @@ class Store {
     Json Get(const std::string& id) const;
     Json Create(const Json& source, const std::string& title, const std::string& body,
                 const std::string& module = "inbox", const std::string& png = "");
+    // A gateway nonce is optional; when present it is scoped to the bearer and
+    // persists with the receipt, so retries across a restart cannot duplicate it.
+    Json ReceiveGateway(const Json& source, const std::string& title, const std::string& body,
+                        const std::string& format, const std::string& nonce = "",
+                        const std::string& digest = "");
     std::optional<std::string> Image(const std::string& filename) const;
     Json AddNote(const std::string& id, const std::string& expected, const std::string& body);
     Json Rename(const std::string& id, const std::string& expected, const std::string& title);
@@ -47,14 +52,17 @@ class Store {
     void RecoverBufferTransfers();
     // Holds the source writer lock and checks the displayed revision and exact
     // message identity before the caller publishes an explicit export/copy.
-    void WithMessage(const std::string& id, const std::string& expected,
-                     const std::string& message,
-                     const std::function<void(const Json&, const Json&, const Commit&)>& action) const;
+    void
+    WithMessage(const std::string& id, const std::string& expected, const std::string& message,
+                const std::function<void(const Json&, const Json&, const Commit&)>& action) const;
     // Call only after the process has acquired exclusive primary-instance ownership.
     bool RecoverInterrupted();
     const std::filesystem::path& Root() const { return files_.Path(); }
 
   private:
+    Json CreateReceipt(const Json& source, const std::string& title, const std::string& body,
+                       const std::string& module, const std::string& png, const std::string& format,
+                       const Json& gateway);
     Snapshot Load() const;
     void Save(Json document) const;
     Json Change(const std::string& id, const std::string& expected,

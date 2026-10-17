@@ -1,3 +1,4 @@
+import CryptoKit
 import Cocoa
 import InputMethodKit
 import Carbon
@@ -76,6 +77,7 @@ private enum StandaloneRimeCommandRules {
     private static let engineHostingCommands: Set<String> = [
         "settings-preview",
         "settings-render",
+        "gateway-settings-render",
     ]
 
     static func requiresIsolatedUserDir(arguments: [String]) -> Bool {
@@ -624,6 +626,27 @@ if let index = CommandLine.arguments.firstIndex(where: { $0 == "capsule-password
         }
         exit(0)
     } catch { fputs("Public password fixture operation failed\n", stderr); exit(1) }
+}
+
+if let index = CommandLine.arguments.firstIndex(of: "gateway-linux-fixtures"),
+   CommandLine.arguments.indices.contains(index + 1) {
+    do {
+        let output = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        var contract = LocalGateway.linuxContract()
+        var hashes: [String: String] = [:]
+        for path in ["Sources/RimeBuffer/Inbound/LocalGateway.swift",
+                     "Sources/RimeBuffer/Inbound/InboundBus.swift",
+                     "Sources/RimeBuffer/Inbound/GatewayToken.swift"] {
+            let data = try Data(contentsOf: root.appendingPathComponent(path))
+            hashes[path] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        }
+        contract["sources"] = hashes
+        let data = try JSONSerialization.data(withJSONObject: contract, options: [.prettyPrinted, .sortedKeys])
+        try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: output, options: .atomic)
+        exit(0)
+    } catch { fputs("gateway contract export failed: \(error)\n", stderr); exit(1) }
 }
 
 if let index = CommandLine.arguments.firstIndex(where: { $0 == "mailbox-linux-fixtures" || $0 == "mailbox-linux-verify" }),
@@ -1308,6 +1331,13 @@ if CommandLine.arguments.contains("settings-preview") {
     SettingsWindowController.shared.show()
     app.activate(ignoringOtherApps: true)
     app.run()
+}
+if let i = CommandLine.arguments.firstIndex(of: "gateway-settings-render"), i + 1 < CommandLine.arguments.count {
+    isolatePreviewUserDir()
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    app.finishLaunching()
+    exit(SettingsWindowController.shared.renderGatewayForPreview(to: CommandLine.arguments[i + 1]) ? 0 : 1)
 }
 // Dev-only: render every stable route/subpage plus manifest.json.
 if let i = CommandLine.arguments.firstIndex(of: "settings-render"),

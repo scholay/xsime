@@ -1,0 +1,106 @@
+[
+  {
+    "page": "gateway-claudeCode-disabled",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1960,
+      1360
+    ],
+    "changed_pixel_fraction": 0.27167279411764705,
+    "mean_absolute_channel_error": 3.4190848839535817,
+    "pair": "gateway-claudeCode-disabled-pair.png",
+    "difference_4x": "gateway-claudeCode-disabled-diff.png"
+  },
+  {
+    "page": "gateway-claudeCode-enabled",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1960,
+      1360
+    ],
+    "changed_pixel_fraction": 0.23619560324129651,
+    "mean_absolute_channel_error": 5.110777686074429,
+    "pair": "gateway-claudeCode-enabled-pair.png",
+    "difference_4x": "gateway-claudeCode-enabled-diff.png"
+  },
+  {
+    "page": "gateway-codex-disabled",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1960,
+      1360
+    ],
+    "changed_pixel_fraction": 0.1788783013205282,
+    "mean_absolute_channel_error": 3.137889030612245,
+    "pair": "gateway-codex-disabled-pair.png",
+    "difference_4x": "gateway-codex-disabled-diff.png"
+  },
+  {
+    "page": "gateway-codex-enabled",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1960,
+      1360
+    ],
+    "changed_pixel_fraction": 0.23006152460984394,
+    "mean_absolute_channel_error": 4.707115596238496,
+    "pair": "gateway-codex-enabled-pair.png",
+    "difference_4x": "gateway-codex-enabled-diff.png"
+  },
+  {
+    "page": "gateway-cursor-disabled",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1960,
+      1360
+    ],
+    "changed_pixel_fraction": 0.2337983943577431,
+    "mean_absolute_channel_error": 2.452296043417367,
+    "pair": "gateway-cursor-disabled-pair.png",
+    "difference_4x": "gateway-cursor-disabled-diff.png"
+  },
+  {
+    "page": "gateway-cursor-enabled",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1960,
+      1360
+    ],
+    "changed_pixel_fraction": 0.18273334333733493,
+    "mean_absolute_channel_error": 3.2376883253301316,
+    "pair": "gateway-cursor-enabled-pair.png",
+    "difference_4x": "gateway-cursor-enabled-diff.png"
+  },
+  {
+    "page": "gateway-genericMCP-disabled",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1960,
+      1360
+    ],
+    "changed_pixel_fraction": 0.23382540516206482,
+    "mean_absolute_channel_error": 2.452750725290116,
+    "pair": "gateway-genericMCP-disabled-pair.png",
+    "difference_4x": "gateway-genericMCP-disabled-diff.png"
+  },
+  {
+    "page": "gateway-genericMCP-enabled",
+    "status": "requires_review",
+    "comparison_color_space": "sRGB (embedded ICC profiles converted)",
+    "size": [
+      1960,
+      1360
+    ],
+    "changed_pixel_fraction": 0.18271833733493398,
+    "mean_absolute_channel_error": 3.242325930372149,
+    "pair": "gateway-genericMCP-enabled-pair.png",
+    "difference_4x": "gateway-genericMCP-enabled-diff.png"
+  }
+]

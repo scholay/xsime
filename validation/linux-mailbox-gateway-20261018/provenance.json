@@ -1,0 +1,52 @@
+{
+  "purpose": "public-gateway-parity",
+  "generatedAt": "2026-10-17T23:47:48.118241+00:00",
+  "baseCommit": "e4d6b7fafbca140177823d3e099a20775d621277",
+  "nativeCommand": "RIMEBUFFER_APPEARANCE_MODE=THEME RimeBuffer gateway-settings-render OUTPUT",
+  "linuxCommand": "RIMES_USER_DIR=ISOLATED_ROOT xvfb-run -a rimes-settings --render-gateway OUTPUT",
+  "nativeBuild": "isolated debug binary, not installed",
+  "linuxEnvironment": "Ubuntu 24.04 arm64, GTK 3.24.41, Xvfb",
+  "logicalSize": [
+    980,
+    680
+  ],
+  "scale": 2,
+  "states": 16,
+  "visualStatus": "requires_review",
+  "sources": {
+    "Sources/RimeBuffer/SettingsWindow.swift": "1c7033c5b4b8f500ef706b554556ba0985845cc390f2d184b64511c0f03dbcff",
+    "Sources/RimeBuffer/main.swift": "9205a32a1df109feae7ca76c11479648f60a474d2311ea95a0baa7befd35187a",
+    "platforms/linux/runtime/ui/settings.cpp": "0b5cd5a4b4e75d4714327013596ad9a1a6d70ddc9331bb95d25dc4e3a540577c",
+    "platforms/linux/runtime/ui/desktop.cpp": "7e279123186efb7e89874d23f4d55157c174129ca58fc6542bfa2fff61265f4d",
+    "platforms/linux/runtime/core/gateway_access.cpp": "629e926b0b17b8d5880bb4055465ed4c06e2a88332e50715489939f6006ed3f5",
+    "platforms/linux/mailbox/core/gateway_protocol.cpp": "5e4971df9f202a9e566f5ff840642153074a5c5007485152d71631fbf884a140",
+    "platforms/linux/mailbox/core/gateway_server.cpp": "27966c471c404686be48d02c0cedabdd1910a10b09c46c2fc9f9c20e4d9739e9",
+    "platforms/linux/ime/src/fcitx/rimes_ime.cpp": "b123cc47bfd8a6e8a4b72d379c677f497d9d89e6523e1e03e52a1c60a17e190d",
+    "platforms/linux/mailbox/resources/native-gateway.json": "ea9d3e19759cfc86cb8c38923879fae4e0e064b3a955500cd2ad967584f9e23e",
+    "platforms/linux/mailbox/resources/native-gateway-settings.json": "6a6e65c9d60cd9d77a94da062985555004c8fa807a679251a7bb9e6edfd2df8d"
+  },
+  "nativeBinarySHA256": "c2a54a606458081029ce3121fdc524fe0840a08fddb9065f589d440b0454ea8f",
+  "linuxBinaries": [
+    "a4db239dc351ab26d40c6bd3c0de8909f71222376e3ebe68b6c6873e2441430a  /tmp/xsime-ime-build/runtime/rimes-settings",
+    "e2150cca4c946f33ef7177e819d18041489f6cdfbd82e0c29027e858de5efaba  /tmp/xsime-ime-build/rimes-gateway-tests",
+    "8fafef4a498031900d0db498baa886b72b76a50b9a5b9f7d1c377566c3b9d7c8  /tmp/xsime-ime-build/rimes.so"
+  ],
+  "finalValidation": {
+    "packageSHA256": "e0bb3ffb59fc987508aeea4c78d4694be9e09ec68bbd8045ba399736f6d6ff0d",
+    "packagePublished": false,
+    "ctest": {
+      "passed": 70,
+      "total": 70,
+      "seconds": 79.44
+    },
+    "actualFcitxGateway": "passed",
+    "debLifecycle": "install/reinstall/remove passed; 17 preserved user data sentinels",
+    "parentFixCommit": "9599879804cfe7055d5488523ff73456af1dc486",
+    "sources": {
+      "platforms/linux/mailbox/core/gateway_protocol.cpp": "6c06a951d62b53e047537c60901b3c8e45e19e961d64099bc2f9606293a947bd",
+      "platforms/linux/mailbox/tests/gateway_tests.cpp": "d050dfc6c77cb679406af196f6ded229e1220b1aa068dbc73540e35e34333e74",
+      "platforms/linux/capsule/core/capsule_password.cpp": "a898db08d1b1ec07db9d102a521cde06557fd7a21befbddcac22670fdbf4b20a",
+      "platforms/linux/ime/src/capsule/capsule_service.cpp": "341228cd661b1e938df0d4304bbb060d491f4e17bb0a388704d1a6f28861259d"
+    }
+  }
+}

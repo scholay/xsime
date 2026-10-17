@@ -1,0 +1,355 @@
+I2026-10-17 23:55:11.290876 instance.cpp:1346] Override Enabled Addons: {rimes, testui, testfrontend}
+I2026-10-17 23:55:11.290899 instance.cpp:1347] Override Disabled Addons: {all}
+I2026-10-17 23:55:11.291125 addonmanager.cpp:195] Loaded addon testui
+I2026-10-17 23:55:11.291199 addonmanager.cpp:195] Loaded addon testfrontend
+I2026-10-17 23:55:11.320700 rimes_ime.cpp:66] librime background deploy started; keys pass through until ready
+I2026-10-17 23:55:11.343211 addonmanager.cpp:195] Loaded addon rimes
+I2026-10-17 23:55:11.343293 inputmethodmanager.cpp:190] Found 0 input method(s) in addon rimes
+W2026-10-17 23:55:11.343297 inputmethodmanager.cpp:186] Failed to load input method addon: testim
+I2026-10-17 23:55:11.343308 inputmethodmanager.cpp:117] No valid input method group in configuration. Building a default one
+I2026-10-17 23:55:11.343350 instance.cpp:371] Items in Default: [InputMethodGroupItem(keyboard-us,layout=)]
+I2026-10-17 23:55:11.343355 instance.cpp:376] Generated groups: [Default]
+E2026-10-17 23:55:11.343365 instance.cpp:1356] Couldn't find keyboard-us
+Preedit: 
+AuxUp: XSIME (Deploying)
+AuxDown: 
+Candidates: 
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+I2026-10-17 23:55:24.797421 rimes_ime.cpp:406] librime deploy finished
+Preedit: 
+AuxUp: XSIME
+AuxDown: 
+Candidates: 
+I2026-10-17 23:55:24.821375 testfrontend.cpp:39] Update preedit: n
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  那
+2  哪
+3  拿
+4  呐
+5  年
+6  女
+7  ♀
+8  难
+9  内
+I2026-10-17 23:55:24.821402 testfrontend.cpp:75] KeyEvent key: n isRelease: 0 accepted: 1
+I2026-10-17 23:55:24.821442 testfrontend.cpp:39] Update preedit: n
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  那
+2  哪
+3  拿
+4  呐
+5  年
+6  女
+7  ♀
+8  难
+9  内
+I2026-10-17 23:55:24.821460 testfrontend.cpp:75] KeyEvent key: n isRelease: 1 accepted: 0
+I2026-10-17 23:55:24.822325 testfrontend.cpp:39] Update preedit: ni
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你
+2  尼
+3  泥
+4  逆
+5  拟
+6  腻
+7  倪
+8  霓
+9  匿
+I2026-10-17 23:55:24.822341 testfrontend.cpp:75] KeyEvent key: i isRelease: 0 accepted: 1
+I2026-10-17 23:55:24.822360 testfrontend.cpp:39] Update preedit: ni
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你
+2  尼
+3  泥
+4  逆
+5  拟
+6  腻
+7  倪
+8  霓
+9  匿
+I2026-10-17 23:55:24.822378 testfrontend.cpp:75] KeyEvent key: i isRelease: 1 accepted: 0
+I2026-10-17 23:55:24.823069 testfrontend.cpp:39] Update preedit: ni h
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你会
+2  你回
+3  你还
+4  你好
+5  👋
+6  你和
+7  你很
+8  霓虹
+9  你喝
+I2026-10-17 23:55:24.823086 testfrontend.cpp:75] KeyEvent key: h isRelease: 0 accepted: 1
+I2026-10-17 23:55:24.823104 testfrontend.cpp:39] Update preedit: ni h
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你会
+2  你回
+3  你还
+4  你好
+5  👋
+6  你和
+7  你很
+8  霓虹
+9  你喝
+I2026-10-17 23:55:24.823122 testfrontend.cpp:75] KeyEvent key: h isRelease: 1 accepted: 0
+I2026-10-17 23:55:24.823735 testfrontend.cpp:39] Update preedit: ni ha
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你哈
+2  你
+3  尼
+4  泥
+5  逆
+6  拟
+7  腻
+8  倪
+9  霓
+I2026-10-17 23:55:24.823751 testfrontend.cpp:75] KeyEvent key: a isRelease: 0 accepted: 1
+I2026-10-17 23:55:24.823765 testfrontend.cpp:39] Update preedit: ni ha
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你哈
+2  你
+3  尼
+4  泥
+5  逆
+6  拟
+7  腻
+8  倪
+9  霓
+I2026-10-17 23:55:24.823783 testfrontend.cpp:75] KeyEvent key: a isRelease: 1 accepted: 0
+I2026-10-17 23:55:24.824344 testfrontend.cpp:39] Update preedit: ni hao
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你好
+2  👋
+3  拟好
+4  你
+5  尼
+6  泥
+7  逆
+8  拟
+9  腻
+I2026-10-17 23:55:24.824361 testfrontend.cpp:75] KeyEvent key: o isRelease: 0 accepted: 1
+I2026-10-17 23:55:24.824378 testfrontend.cpp:39] Update preedit: ni hao
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你好
+2  👋
+3  拟好
+4  你
+5  尼
+6  泥
+7  逆
+8  拟
+9  腻
+I2026-10-17 23:55:24.824396 testfrontend.cpp:75] KeyEvent key: o isRelease: 1 accepted: 0
+I2026-10-17 23:55:24.824485 testfrontend.cpp:28] Commit: 你好
+I2026-10-17 23:55:24.824489 testfrontend.cpp:39] Update preedit: 
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+I2026-10-17 23:55:24.824495 testfrontend.cpp:75] KeyEvent key: space isRelease: 0 accepted: 1
+I2026-10-17 23:55:24.824503 testfrontend.cpp:75] KeyEvent key: space isRelease: 1 accepted: 1
+I2026-10-17 23:55:24.829971 buffer_service.cpp:688] deactivate switch_im=1 capturing=0 drag=0
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+I2026-10-17 23:55:24.867244 buffer_service.cpp:638] activate token=187650483187184 capturing=0 auto=0 drag=0 pending=
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+I2026-10-17 23:55:25.050304 testfrontend.cpp:39] Update preedit: n
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  那
+2  哪
+3  拿
+4  呐
+5  年
+6  女
+7  ♀
+8  难
+9  内
+I2026-10-17 23:55:25.050356 testfrontend.cpp:75] KeyEvent key: n isRelease: 0 accepted: 1
+I2026-10-17 23:55:25.050425 testfrontend.cpp:39] Update preedit: n
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  那
+2  哪
+3  拿
+4  呐
+5  年
+6  女
+7  ♀
+8  难
+9  内
+I2026-10-17 23:55:25.050478 testfrontend.cpp:75] KeyEvent key: n isRelease: 1 accepted: 0
+I2026-10-17 23:55:25.052783 testfrontend.cpp:39] Update preedit: ni
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你
+2  尼
+3  泥
+4  逆
+5  拟
+6  腻
+7  倪
+8  霓
+9  匿
+I2026-10-17 23:55:25.052826 testfrontend.cpp:75] KeyEvent key: i isRelease: 0 accepted: 1
+I2026-10-17 23:55:25.052862 testfrontend.cpp:39] Update preedit: ni
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你
+2  尼
+3  泥
+4  逆
+5  拟
+6  腻
+7  倪
+8  霓
+9  匿
+I2026-10-17 23:55:25.052905 testfrontend.cpp:75] KeyEvent key: i isRelease: 1 accepted: 0
+I2026-10-17 23:55:25.054448 testfrontend.cpp:39] Update preedit: ni h
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你好
+2  👋
+3  你会
+4  你回
+5  你还
+6  你和
+7  你很
+8  霓虹
+9  你喝
+I2026-10-17 23:55:25.054483 testfrontend.cpp:75] KeyEvent key: h isRelease: 0 accepted: 1
+I2026-10-17 23:55:25.054514 testfrontend.cpp:39] Update preedit: ni h
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你好
+2  👋
+3  你会
+4  你回
+5  你还
+6  你和
+7  你很
+8  霓虹
+9  你喝
+I2026-10-17 23:55:25.054551 testfrontend.cpp:75] KeyEvent key: h isRelease: 1 accepted: 0
+I2026-10-17 23:55:25.056096 testfrontend.cpp:39] Update preedit: ni ha
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你哈
+2  你
+3  尼
+4  泥
+5  逆
+6  拟
+7  腻
+8  倪
+9  霓
+I2026-10-17 23:55:25.056138 testfrontend.cpp:75] KeyEvent key: a isRelease: 0 accepted: 1
+I2026-10-17 23:55:25.056176 testfrontend.cpp:39] Update preedit: ni ha
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你哈
+2  你
+3  尼
+4  泥
+5  逆
+6  拟
+7  腻
+8  倪
+9  霓
+I2026-10-17 23:55:25.056214 testfrontend.cpp:75] KeyEvent key: a isRelease: 1 accepted: 0
+I2026-10-17 23:55:25.057517 testfrontend.cpp:39] Update preedit: ni hao
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你好
+2  👋
+3  拟好
+4  你
+5  尼
+6  泥
+7  逆
+8  拟
+9  腻
+I2026-10-17 23:55:25.057551 testfrontend.cpp:75] KeyEvent key: o isRelease: 0 accepted: 1
+I2026-10-17 23:55:25.057585 testfrontend.cpp:39] Update preedit: ni hao
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+1  你好
+2  👋
+3  拟好
+4  你
+5  尼
+6  泥
+7  逆
+8  拟
+9  腻
+I2026-10-17 23:55:25.057625 testfrontend.cpp:75] KeyEvent key: o isRelease: 1 accepted: 0
+I2026-10-17 23:55:25.057814 testfrontend.cpp:28] Commit: 你好
+I2026-10-17 23:55:25.057823 testfrontend.cpp:39] Update preedit: 
+Preedit: 
+AuxUp: 
+AuxDown: 
+Candidates: 
+I2026-10-17 23:55:25.057834 testfrontend.cpp:75] KeyEvent key: space isRelease: 0 accepted: 1
+I2026-10-17 23:55:25.057846 testfrontend.cpp:75] KeyEvent key: space isRelease: 1 accepted: 1
+I2026-10-17 23:55:25.073569 addonmanager.cpp:298] Unloading addon rimes
+Actual Fcitx addon: pending receipt with no Mailbox window, normal commitString while slow client, password/session/config/plugin revocation passed
+I2026-10-17 23:55:25.098748 addonmanager.cpp:298] Unloading addon testfrontend
+I2026-10-17 23:55:25.098760 addonmanager.cpp:298] Unloading addon testui

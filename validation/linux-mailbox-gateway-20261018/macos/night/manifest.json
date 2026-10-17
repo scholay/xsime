@@ -1,0 +1,66 @@
+[
+  {
+    "client" : "cursor",
+    "enabled" : true,
+    "file" : "gateway-cursor-enabled.png",
+    "height" : 680,
+    "theme" : "night",
+    "width" : 980
+  },
+  {
+    "client" : "codex",
+    "enabled" : true,
+    "file" : "gateway-codex-enabled.png",
+    "height" : 680,
+    "theme" : "night",
+    "width" : 980
+  },
+  {
+    "client" : "claudeCode",
+    "enabled" : true,
+    "file" : "gateway-claudeCode-enabled.png",
+    "height" : 680,
+    "theme" : "night",
+    "width" : 980
+  },
+  {
+    "client" : "genericMCP",
+    "enabled" : true,
+    "file" : "gateway-genericMCP-enabled.png",
+    "height" : 680,
+    "theme" : "night",
+    "width" : 980
+  },
+  {
+    "client" : "cursor",
+    "enabled" : false,
+    "file" : "gateway-cursor-disabled.png",
+    "height" : 680,
+    "theme" : "night",
+    "width" : 980
+  },
+  {
+    "client" : "codex",
+    "enabled" : false,
+    "file" : "gateway-codex-disabled.png",
+    "height" : 680,
+    "theme" : "night",
+    "width" : 980
+  },
+  {
+    "client" : "claudeCode",
+    "enabled" : false,
+    "file" : "gateway-claudeCode-disabled.png",
+    "height" : 680,
+    "theme" : "night",
+    "width" : 980
+  },
+  {
+    "client" : "genericMCP",
+    "enabled" : false,
+    "file" : "gateway-genericMCP-disabled.png",
+    "height" : 680,
+    "theme" : "night",
+    "width" : 980
+  }
+]

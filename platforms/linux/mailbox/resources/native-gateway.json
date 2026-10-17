@@ -1,0 +1,190 @@
+{
+  "defaultPort": 47700,
+  "maxBodyBytes": 262144,
+  "maxHeaderBytes": 32768,
+  "maxPending": 50,
+  "maxPendingTextCount": 1048576,
+  "maxTextCount": 20000,
+  "mcp": {
+    "latest": "2025-06-18",
+    "tools": [
+      {
+        "annotations": {
+          "destructiveHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false,
+          "title": "送入缓冲区"
+        },
+        "description": "把一段文字送进 XSIME 的缓冲区收件箱，等用户确认后上屏。不会自动上屏。",
+        "inputSchema": {
+          "properties": {
+            "format": {
+              "description": "可选正文格式",
+              "enum": [
+                "plain",
+                "markdown",
+                "json"
+              ],
+              "type": "string"
+            },
+            "text": {
+              "description": "要送入的文字",
+              "type": "string"
+            },
+            "title": {
+              "description": "可选来源标题",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        },
+        "name": "buffer_push",
+        "title": "送入缓冲区"
+      },
+      {
+        "annotations": {
+          "destructiveHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false,
+          "title": "开始流式条目"
+        },
+        "description": "开一个流式条目，返回 stream_id。",
+        "inputSchema": {
+          "properties": {
+            "format": {
+              "enum": [
+                "plain",
+                "markdown",
+                "json"
+              ],
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "name": "buffer_stream_begin",
+        "title": "开始流式条目"
+      },
+      {
+        "annotations": {
+          "destructiveHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false,
+          "title": "追加流式内容"
+        },
+        "description": "向流式条目追加文字（原位更新，不产生新条目）。",
+        "inputSchema": {
+          "properties": {
+            "delta": {
+              "type": "string"
+            },
+            "stream_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "stream_id",
+            "delta"
+          ],
+          "type": "object"
+        },
+        "name": "buffer_stream_append",
+        "title": "追加流式内容"
+      },
+      {
+        "annotations": {
+          "destructiveHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false,
+          "title": "结束流式条目"
+        },
+        "description": "结束流式条目，使其可被接受。",
+        "inputSchema": {
+          "properties": {
+            "stream_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "stream_id"
+          ],
+          "type": "object"
+        },
+        "name": "buffer_stream_end",
+        "title": "结束流式条目"
+      }
+    ],
+    "versions": [
+      "2025-06-18",
+      "2025-03-26",
+      "2024-11-05"
+    ]
+  },
+  "origins": [
+    {
+      "allowed": true,
+      "origin": null
+    },
+    {
+      "allowed": true,
+      "origin": "http://localhost"
+    },
+    {
+      "allowed": true,
+      "origin": "http://127.0.0.1:47700"
+    },
+    {
+      "allowed": true,
+      "origin": "https://[::1]:1000"
+    },
+    {
+      "allowed": false,
+      "origin": "null"
+    },
+    {
+      "allowed": false,
+      "origin": "https://example.com"
+    },
+    {
+      "allowed": false,
+      "origin": "http://localhost/"
+    },
+    {
+      "allowed": false,
+      "origin": "http://localhost@evil.test"
+    },
+    {
+      "allowed": false,
+      "origin": "http://127.0.0.1:"
+    },
+    {
+      "allowed": false,
+      "origin": "http://localhost?x=1"
+    },
+    {
+      "allowed": false,
+      "origin": "http://%6cocalhost"
+    },
+    {
+      "allowed": false,
+      "origin": "https://localhost:65536"
+    },
+    {
+      "allowed": true,
+      "origin": " HTTP://LOCALHOST:1234 "
+    }
+  ],
+  "purpose": "public-gateway-contract",
+  "schemaVersion": 1,
+  "sources": {
+    "Sources/RimeBuffer/Inbound/GatewayToken.swift": "fec5c09755ea8c9fe4fc6cbc166248055afb11ca1aff57dbd390534a2ae5affd",
+    "Sources/RimeBuffer/Inbound/InboundBus.swift": "a3d7e6d7b8f970be12084074ca11e2192ab3964349253aed807f69877c8d2da6",
+    "Sources/RimeBuffer/Inbound/LocalGateway.swift": "e113b0bb248491d2480b8f7b2716773aa726e3cccb4ab3414b1411a5d3a54a10"
+  }
+}
