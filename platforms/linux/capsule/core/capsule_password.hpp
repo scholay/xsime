@@ -1,6 +1,7 @@
 #pragma once
 #include "capsule_model.hpp"
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <optional>
@@ -23,6 +24,8 @@ class PasswordStore {
   public:
     explicit PasswordStore(std::filesystem::path root);
     std::vector<PasswordSummary> List() const;
+    // Worker-only: bounded, cancellable retry for a concurrent Capsule writer.
+    std::vector<PasswordSummary> ListWhileActive(const std::atomic<bool>& cancelled) const;
     PasswordSummary Inspect(const std::string& id) const;
     void WithAuthorization(const std::string& id, const std::string& revision,
                            const std::string& credential,

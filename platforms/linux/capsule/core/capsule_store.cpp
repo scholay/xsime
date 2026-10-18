@@ -274,11 +274,11 @@ ContentStore::ContentStore(std::filesystem::path root)
       seed_(root_ / "content-seed-v1"),
       lock_(root_ / ".lock") {}
 
-StoreStatus ContentStore::WithLock(const std::function<StoreStatus()>& body, std::string* error) const {
+StoreStatus ContentStore::WithLock(const std::function<StoreStatus()>& body, std::string* error, bool wait) const {
     try {
         runtime::PrivateDirectory root(root_);
         runtime::PrivateDirectory entries(entries_);
-        auto lock = root.Lock();
+        auto lock = root.Lock(wait);
         return body();
     } catch (const std::exception&) { return IoFail(error, "Capsule storage is unavailable or its permissions changed"); }
 }
@@ -377,6 +377,63 @@ StoreStatus ContentStore::Put(const Record& request, std::string expected_revisi
         if (result == StoreStatus::Ok && out) return ParseFile(path, out, error);
         return result;
     }, error);
+}
+StoreStatus ContentStore::SaveReceived(const std::string& title, const std::string& body,
+                                       const std::string& png, Record* out, bool* duplicate,
+                                       std::string* error,
+                                       const std::function<void(const std::function<void()>&)>& commit) {
+    if (duplicate) *duplicate = false;
+    try {
+        if (TrimText(title).empty() || CharacterCount(title) > kMaxTitleChars ||
+            (png.empty() && (TrimText(body).empty() || CharacterCount(body) > kMaxContentChars)) ||
+            (!png.empty() && (png.size() < 24 || png.size() > 24 * 1048576 ||
+             png.compare(0, 8, std::string("\x89PNG\r\n\x1a\n", 8)) != 0)))
+            return InvalidFail(error, "invalid received content");
+    } catch (const std::exception&) { return InvalidFail(error, "invalid received content"); }
+    return WithLock([&] {
+        const auto name = png.empty() ? "" : runtime::Sha256(png) + ".png";
+        const auto content = png.empty() ? body : (root_ / "assets" / name).string();
+        const auto kind = png.empty() ? Kind::Note : Kind::Image;
+        std::vector<Record> existing;
+        const auto listed = ReadAll(&existing, error);
+        if (listed != StoreStatus::Ok) return listed;
+        for (const auto& record : existing) if (record.kind == kind && record.content == content) {
+            if (!png.empty() && runtime::PrivateDirectory(root_ / "assets").Read(name, 24 * 1048576) != std::optional<std::string>(png))
+                return InvalidFail(error, "saved image changed");
+            bool accepted = false;
+            auto reuse = [&] { if (out) *out = record; if (duplicate) *duplicate = true; accepted = true; };
+            if (commit) commit(reuse); else reuse();
+            return accepted ? StoreStatus::Ok : StoreStatus::Invalid;
+        }
+        if (existing.size() >= kMaxRecords) return InvalidFail(error, "Capsule capacity exceeded");
+        Record record; record.id = NewUuidV4(); record.kind = kind;
+        record.title = TrimText(title); record.content = content; record.updated_at = Iso8601UtcNow();
+        Record checked;
+        const auto raw = RenderMarkdown(record);
+        if (raw.size() > kMaxDocumentBytes || !ParseMarkdown(raw, &checked, error)) return StoreStatus::Invalid;
+        StoreStatus result = StoreStatus::Invalid;
+        const auto publish = [&] {
+            bool created = false;
+            if (!png.empty()) {
+                runtime::PrivateDirectory assets(root_ / "assets");
+                const auto previous = assets.Read(name, 24 * 1048576);
+                if (previous && *previous != png) { result = InvalidFail(error, "saved image changed"); return; }
+                if (!previous) { assets.Write(name, png); created = true; }
+            }
+            result = WriteRecord(record, error);
+            if (result != StoreStatus::Ok) {
+                Record published;
+                const auto visible = ParseFile(EntryPath(record.id), &published, error);
+                if (visible == StoreStatus::Ok && published.content == record.content && published.kind == record.kind)
+                    result = StoreStatus::Ok;
+                else if (visible == StoreStatus::NotFound && created)
+                    runtime::PrivateDirectory(root_ / "assets").Remove(name);
+            }
+        };
+        if (commit) commit(publish); else publish();
+        if (result == StoreStatus::Ok && out) return ParseFile(EntryPath(record.id), out, error);
+        return result;
+    }, error, false);
 }
 StoreStatus ContentStore::Remove(std::string_view id, std::string_view expected_revision, std::string* error,
     const std::function<void(const std::function<void()>&)>& commit) {

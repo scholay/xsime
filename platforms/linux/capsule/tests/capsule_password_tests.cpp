@@ -4,6 +4,7 @@
 #include "private_files.hpp"
 #include <atomic>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <sys/stat.h>
 #include <thread>
@@ -39,6 +40,39 @@ int main(int argc, char** argv) {
         for (const auto& doc : fixture.at("documents"))
             files.Write(doc.at("id").get<std::string>() + ".md",
                         doc.at("document").get<std::string>());
+        {
+            auto held = std::make_unique<rimes::runtime::FileLock>(directory.Lock(false));
+            std::atomic<bool> cancelled{false};
+            auto reading =
+                std::async(std::launch::async, [&] { return store.ListWhileActive(cancelled); });
+            const bool waited =
+                reading.wait_for(std::chrono::milliseconds(60)) == std::future_status::timeout;
+            held.reset();
+            const auto recovered = reading.get();
+            Check(waited && recovered.size() == fixture.at("documents").size(),
+                  "busy Vault read became an empty successful list");
+            held = std::make_unique<rimes::runtime::FileLock>(directory.Lock(false));
+            auto interrupted = std::async(std::launch::async, [&] {
+                try {
+                    store.ListWhileActive(cancelled);
+                    return false;
+                } catch (...) {
+                    return true;
+                }
+            });
+            cancelled.store(true);
+            const bool stopped =
+                interrupted.wait_for(std::chrono::milliseconds(200)) == std::future_status::ready;
+            held.reset();
+            Check(stopped && interrupted.get(), "cancelled Vault read waited for writer lock");
+            cancelled.store(false);
+            held = std::make_unique<rimes::runtime::FileLock>(directory.Lock(false));
+            const auto started = std::chrono::steady_clock::now();
+            Reject([&] { store.ListWhileActive(cancelled); }, "Vault retry deadline was unbounded");
+            held.reset();
+            Check(std::chrono::steady_clock::now() - started < std::chrono::seconds(2),
+                  "Vault retry exceeded deadline");
+        }
         const auto summaries = store.List();
         Check(summaries.size() == fixture.at("documents").size(), "native summaries unavailable");
         for (const auto& doc : fixture.at("documents")) {

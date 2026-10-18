@@ -1,4 +1,5 @@
 #include "capsule_hash.hpp"
+#include "capsule_resources.hpp"
 #include "capsule_text.hpp"
 #include "desktop.hpp"
 #include "mailbox_session.hpp"
@@ -32,24 +33,47 @@ int RenderFixture(const std::filesystem::path& input, const std::filesystem::pat
         gtk_init(nullptr, nullptr);
         g_object_set(gtk_settings_get_default(), "gtk-enable-animations", FALSE, nullptr);
         std::filesystem::create_directories(output);
+        auto document = sample.at("document");
+        Validate(document);
+        rimes::runtime::PrivateDirectory(std::filesystem::path(path) / "mailbox")
+            .Write("mailbox.json", document.dump());
+        if (sample.contains("images"))
+            for (const auto& [name, digest] : sample.at("images").items()) {
+                if (std::filesystem::path(name).filename().string() != name)
+                    throw std::runtime_error("invalid fixture image");
+                std::atomic<bool> cancelled{false};
+                const auto bytes = rimes::capsule::ReadResource(
+                    std::filesystem::absolute(input.parent_path() / "images" / name), 24 * 1048576,
+                    cancelled);
+                if (rimes::runtime::Sha256(bytes) != digest)
+                    throw std::runtime_error("fixture image digest differs");
+                rimes::runtime::PrivateDirectory(std::filesystem::path(path) / "mailbox/images")
+                    .Write(name, bytes);
+            }
         Json result = Json::array();
         for (const auto& theme : {"night", "day", "quiet", "rasta"})
-            for (const auto& module : {"inbox", "chat", "terminal"})
+            for (const auto& scene : {"inbox", "chat", "terminal", "image", "accepted", "rejected"})
                 for (bool compact : {false, true}) {
                     Workspace workspace(nullptr, true);
                     const int width = compact ? 680 : 1000, height = compact ? 500 : 700;
                     gtk_widget_set_size_request(workspace.Window(), width, height);
                     gtk_window_set_default_size(GTK_WINDOW(workspace.Window()), width, height);
-                    const std::string thread = std::string(module) == "inbox"
-                                                   ? sample.at("selectedInbox").get<std::string>()
-                                               : std::string(module) == "chat"
-                                                   ? sample.at("selectedChat").get<std::string>()
-                                                   : "";
+                    const std::string name = scene;
+                    const std::string module = name == "chat"       ? "chat"
+                                               : name == "terminal" ? "terminal"
+                                                                    : "inbox";
+                    const std::string thread =
+                        name == "inbox"      ? sample.at("selectedInbox").get<std::string>()
+                        : name == "chat"     ? sample.at("selectedChat").get<std::string>()
+                        : name == "image"    ? sample.at("selectedImage").get<std::string>()
+                        : name == "accepted" ? sample.at("selectedAccepted").get<std::string>()
+                        : name == "rejected" ? sample.at("selectedRejected").get<std::string>()
+                                             : "";
                     workspace.Fixture({sample.at("document"), "fixture"}, theme, module, thread);
                     gtk_widget_show(workspace.Window());
-                    Pump(180);
-                    auto filename = std::string(theme) + "-" + module +
-                                    (compact ? "-compact.png" : "-wide.png");
+                    Pump(350);
+                    auto filename =
+                        std::string(theme) + "-" + scene + (compact ? "-compact.png" : "-wide.png");
                     if (!rimes::desktop::Render(workspace.Content(), (output / filename).string(),
                                                 2))
                         throw std::runtime_error("cannot render Mailbox");

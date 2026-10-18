@@ -40,6 +40,19 @@ def main():
     resource_path = HERE/'resources/native-mailbox.json'
     fixture = json.loads((args.import_fixture or fixture_path).read_text())
     validate(fixture)
+    source = (args.import_fixture or fixture_path).parent
+    for name, digest in fixture.get('images', {}).items():
+        if Path(name).name != name or not name.endswith('.png'):
+            raise ValueError('Invalid fixture attachment name')
+        data = (source / 'images' / name).read_bytes()
+        if len(data) > 24 * 1048576 or hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError('Native attachment fixture differs')
+        if args.import_fixture:
+            target = fixture_path.parent / 'images' / name
+            target.parent.mkdir(exist_ok=True)
+            temporary = target.with_name(name + '.edit')
+            temporary.write_bytes(data)
+            temporary.replace(target)
     tokens = {key: fixture[key] for key in KEYS}
     if args.import_fixture:
         publish(fixture_path, fixture)

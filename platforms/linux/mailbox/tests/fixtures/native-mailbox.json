@@ -3,7 +3,7 @@
     {
       "filter": "all",
       "ids": [
-        "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65"
+        "b92035e1-4a65-4382-b3d1-20f6e0c6e12d"
       ],
       "module": "chat",
       "query": ""
@@ -11,7 +11,7 @@
     {
       "filter": "all",
       "ids": [
-        "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65"
+        "b92035e1-4a65-4382-b3d1-20f6e0c6e12d"
       ],
       "module": "chat",
       "query": "公开"
@@ -31,7 +31,7 @@
     {
       "filter": "unread",
       "ids": [
-        "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65"
+        "b92035e1-4a65-4382-b3d1-20f6e0c6e12d"
       ],
       "module": "chat",
       "query": ""
@@ -39,7 +39,7 @@
     {
       "filter": "unread",
       "ids": [
-        "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65"
+        "b92035e1-4a65-4382-b3d1-20f6e0c6e12d"
       ],
       "module": "chat",
       "query": "公开"
@@ -79,17 +79,17 @@
       "ids": [],
       "module": "chat",
       "query": "不存在的查询"
+    },
+    {
+      "filter": "archived",
+      "ids": [],
+      "module": "chat",
+      "query": ""
     },
     {
       "filter": "archived",
       "ids": [],
       "module": "chat",
-      "query": ""
-    },
-    {
-      "filter": "archived",
-      "ids": [],
-      "module": "chat",
       "query": "公开"
     },
     {
@@ -107,7 +107,10 @@
     {
       "filter": "all",
       "ids": [
-        "c1913f45-cd0b-459d-8e23-0560291585da"
+        "7fd4fd1c-9cac-41d4-afcb-79b39b1db5fa",
+        "97773f47-1dfe-45f7-9ab2-28d5bdcb99cb",
+        "f65d0808-d007-4d39-a2aa-7b6f880eae5e",
+        "379b1501-c52f-4c4c-8479-b403a806f036"
       ],
       "module": "inbox",
       "query": ""
@@ -115,7 +118,10 @@
     {
       "filter": "all",
       "ids": [
-        "c1913f45-cd0b-459d-8e23-0560291585da"
+        "7fd4fd1c-9cac-41d4-afcb-79b39b1db5fa",
+        "97773f47-1dfe-45f7-9ab2-28d5bdcb99cb",
+        "f65d0808-d007-4d39-a2aa-7b6f880eae5e",
+        "379b1501-c52f-4c4c-8479-b403a806f036"
       ],
       "module": "inbox",
       "query": "公开"
@@ -123,7 +129,7 @@
     {
       "filter": "all",
       "ids": [
-        "c1913f45-cd0b-459d-8e23-0560291585da"
+        "379b1501-c52f-4c4c-8479-b403a806f036"
       ],
       "module": "inbox",
       "query": "不会自动"
@@ -137,7 +143,10 @@
     {
       "filter": "unread",
       "ids": [
-        "c1913f45-cd0b-459d-8e23-0560291585da"
+        "7fd4fd1c-9cac-41d4-afcb-79b39b1db5fa",
+        "97773f47-1dfe-45f7-9ab2-28d5bdcb99cb",
+        "f65d0808-d007-4d39-a2aa-7b6f880eae5e",
+        "379b1501-c52f-4c4c-8479-b403a806f036"
       ],
       "module": "inbox",
       "query": ""
@@ -145,7 +154,10 @@
     {
       "filter": "unread",
       "ids": [
-        "c1913f45-cd0b-459d-8e23-0560291585da"
+        "7fd4fd1c-9cac-41d4-afcb-79b39b1db5fa",
+        "97773f47-1dfe-45f7-9ab2-28d5bdcb99cb",
+        "f65d0808-d007-4d39-a2aa-7b6f880eae5e",
+        "379b1501-c52f-4c4c-8479-b403a806f036"
       ],
       "module": "inbox",
       "query": "公开"
@@ -153,7 +165,7 @@
     {
       "filter": "unread",
       "ids": [
-        "c1913f45-cd0b-459d-8e23-0560291585da"
+        "379b1501-c52f-4c4c-8479-b403a806f036"
       ],
       "module": "inbox",
       "query": "不会自动"
@@ -167,7 +179,7 @@
     {
       "filter": "attention",
       "ids": [
-        "c1913f45-cd0b-459d-8e23-0560291585da"
+        "379b1501-c52f-4c4c-8479-b403a806f036"
       ],
       "module": "inbox",
       "query": ""
@@ -175,7 +187,7 @@
     {
       "filter": "attention",
       "ids": [
-        "c1913f45-cd0b-459d-8e23-0560291585da"
+        "379b1501-c52f-4c4c-8479-b403a806f036"
       ],
       "module": "inbox",
       "query": "公开"
@@ -183,7 +195,7 @@
     {
       "filter": "attention",
       "ids": [
-        "c1913f45-cd0b-459d-8e23-0560291585da"
+        "379b1501-c52f-4c4c-8479-b403a806f036"
       ],
       "module": "inbox",
       "query": "不会自动"
@@ -197,7 +209,7 @@
     {
       "filter": "archived",
       "ids": [
-        "cf6b418c-19da-4264-aa14-3a60d6060e9d"
+        "6c51ee46-5017-4c74-9ba9-eb419e8a2963"
       ],
       "module": "inbox",
       "query": ""
@@ -205,7 +217,7 @@
     {
       "filter": "archived",
       "ids": [
-        "cf6b418c-19da-4264-aa14-3a60d6060e9d"
+        "6c51ee46-5017-4c74-9ba9-eb419e8a2963"
       ],
       "module": "inbox",
       "query": "公开"
@@ -320,7 +332,7 @@
     }
   ],
   "document": {
-    "nextSequence": 4,
+    "nextSequence": 7,
     "schemaVersion": 1,
     "threads": [
       {
@@ -328,18 +340,18 @@
         "generation": {
           "expectedFormat": "plain",
           "finishedAt": 721692800,
-          "id": "0BAC9031-0F9D-4709-BA48-8A6C8DFD2F54",
+          "id": "405BD3CA-643C-4BEE-B002-6DD20108A38E",
           "phase": "succeeded",
           "startedAt": 721692800
         },
-        "id": "430AD9B1-0A57-4BA2-9501-A3DDD37B3D65",
+        "id": "B92035E1-4A65-4382-B3D1-20F6E0C6E12D",
         "messages": [
           {
             "author": "你",
             "body": "你好，这是公开样例。",
             "createdAt": 721692800,
             "format": "plain",
-            "id": "54CC2210-51B8-4F36-9FBE-80CB33B9B7F5",
+            "id": "D623AB6F-93A8-4DF7-A4AC-2133029182B5",
             "kind": "content",
             "role": "user"
           },
@@ -348,7 +360,7 @@
             "body": "## 本地工作区\n\n会话、消息和草稿各自保存。",
             "createdAt": 721692800,
             "format": "markdown",
-            "id": "F1A0A8D8-0F1F-4D32-9C97-CCC10424E9FC",
+            "id": "DEE03CB5-C5AA-4428-A265-7F5A7619A8BC",
             "kind": "content",
             "role": "inbound"
           }
@@ -367,14 +379,14 @@
       },
       {
         "createdAt": 721692800,
-        "id": "C1913F45-CD0B-459D-8E23-0560291585DA",
+        "id": "379B1501-C52F-4C4C-8479-B403A806F036",
         "messages": [
           {
             "author": "公开测试来源",
             "body": "这是公开的本地测试消息。\n\n收件不会自动回复来源。",
             "createdAt": 721692800,
             "format": "plain",
-            "id": "3050A636-37DA-4C8F-9064-D7C986566087",
+            "id": "98AE9913-8FAD-4B9F-B98B-15BB02A7FA9B",
             "kind": "content",
             "role": "inbound"
           },
@@ -383,13 +395,13 @@
             "body": "先在本机记录备注。",
             "createdAt": 721692800,
             "format": "plain",
-            "id": "E48D66FB-FA61-4716-9C6F-DF75BDBC506D",
+            "id": "C4AC03D3-18D0-47E3-BF92-E25101F93CDF",
             "kind": "localNote",
             "role": "user"
           }
         ],
         "review": {
-          "messageID": "3050A636-37DA-4C8F-9064-D7C986566087",
+          "messageID": "98AE9913-8FAD-4B9F-B98B-15BB02A7FA9B",
           "state": "pending"
         },
         "sequence": 2,
@@ -406,20 +418,20 @@
       {
         "archivedAt": 721692800,
         "createdAt": 721692800,
-        "id": "CF6B418C-19DA-4264-AA14-3A60D6060E9D",
+        "id": "6C51EE46-5017-4C74-9BA9-EB419E8A2963",
         "messages": [
           {
             "author": "公开测试客户端",
             "body": "已保留的公开历史。",
             "createdAt": 721692800,
             "format": "plain",
-            "id": "7DC860D0-1E80-4EB9-813F-D803CBE8915F",
+            "id": "7FDCA733-74E3-4A46-83A3-869AFF7644EA",
             "kind": "content",
             "role": "inbound"
           }
         ],
         "review": {
-          "messageID": "7DC860D0-1E80-4EB9-813F-D803CBE8915F",
+          "messageID": "7FDCA733-74E3-4A46-83A3-869AFF7644EA",
           "state": "pending"
         },
         "sequence": 3,
@@ -432,11 +444,119 @@
         "title": "已归档的样例",
         "unread": false,
         "updatedAt": 721692800
+      },
+      {
+        "createdAt": 721692800,
+        "id": "F65D0808-D007-4D39-A2AA-7B6F880EAE5E",
+        "messages": [
+          {
+            "author": "公开审核来源",
+            "body": "已明确接受的公开消息。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "13CEF91B-9F98-42A2-A9AE-211A6142B419",
+            "kind": "content",
+            "role": "inbound"
+          },
+          {
+            "author": "Mailbox",
+            "body": "已接受并加入 Buffer。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "21C0BF83-9869-409B-9663-F321C66673BE",
+            "kind": "status",
+            "role": "system"
+          }
+        ],
+        "review": {
+          "messageID": "13CEF91B-9F98-42A2-A9AE-211A6142B419",
+          "resolvedAt": 721692800,
+          "state": "accepted"
+        },
+        "sequence": 4,
+        "source": {
+          "displayName": "公开审核来源",
+          "identifier": "公开审核来源",
+          "kind": "http",
+          "replyCapability": "localNotesOnly"
+        },
+        "title": "已接受的收件",
+        "unread": true,
+        "updatedAt": 721692800
+      },
+      {
+        "createdAt": 721692800,
+        "id": "97773F47-1DFE-45F7-9AB2-28D5BDCB99CB",
+        "messages": [
+          {
+            "author": "公开审核来源",
+            "body": "原始消息仍然保留。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "7495E995-5AD0-4C16-8CEC-8E652C743189",
+            "kind": "content",
+            "role": "inbound"
+          },
+          {
+            "author": "Mailbox",
+            "body": "已拒绝该外部推送。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "E1BBAE36-891F-4711-A256-C57E726901E7",
+            "kind": "status",
+            "role": "system"
+          }
+        ],
+        "review": {
+          "messageID": "7495E995-5AD0-4C16-8CEC-8E652C743189",
+          "resolvedAt": 721692800,
+          "state": "rejected"
+        },
+        "sequence": 5,
+        "source": {
+          "displayName": "公开审核来源",
+          "identifier": "公开审核来源",
+          "kind": "http",
+          "replyCapability": "localNotesOnly"
+        },
+        "title": "已忽略的收件",
+        "unread": true,
+        "updatedAt": 721692800
+      },
+      {
+        "createdAt": 721692800,
+        "id": "7FD4FD1C-9CAC-41D4-AFCB-79B39B1DB5FA",
+        "messages": [
+          {
+            "author": "公开图片来源",
+            "body": "图片可以单独保存，也可以存入 Capsule。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "1F47A807-74A5-4800-9920-E4800C4D85A3",
+            "imageFileName": "A6C700D0-74CD-481D-AD9A-D02AD4B5AF5F.png",
+            "kind": "content",
+            "role": "inbound"
+          }
+        ],
+        "sequence": 6,
+        "source": {
+          "displayName": "公开图片来源",
+          "kind": "other",
+          "replyCapability": "localNotesOnly"
+        },
+        "terminalSessionID": "8270E62C-3693-45E5-A873-526D3E2D5DBE",
+        "title": "独立保存图片",
+        "unread": true,
+        "updatedAt": 721692800,
+        "workspace": "inbox"
       }
     ]
   },
+  "images": {
+    "A6C700D0-74CD-481D-AD9A-D02AD4B5AF5F.png": "1cd2fdb333687561e971297ece4327bb10dae27399d76d17c3a2e9f06b8c5357"
+  },
   "legacy": {
-    "nextSequence": 4,
+    "nextSequence": 7,
     "schemaVersion": 1,
     "threads": [
       {
@@ -444,24 +564,24 @@
         "generation": {
           "expectedFormat": "plain",
           "finishedAt": 721692800,
-          "id": "0BAC9031-0F9D-4709-BA48-8A6C8DFD2F54",
+          "id": "405BD3CA-643C-4BEE-B002-6DD20108A38E",
           "phase": "succeeded",
           "startedAt": 721692800
         },
-        "id": "430AD9B1-0A57-4BA2-9501-A3DDD37B3D65",
+        "id": "B92035E1-4A65-4382-B3D1-20F6E0C6E12D",
         "messages": [
           {
             "author": "你",
             "body": "你好，这是公开样例。",
             "createdAt": 721692800,
-            "id": "54CC2210-51B8-4F36-9FBE-80CB33B9B7F5",
+            "id": "D623AB6F-93A8-4DF7-A4AC-2133029182B5",
             "role": "user"
           },
           {
             "author": "OpenAI API",
             "body": "## 本地工作区\n\n会话、消息和草稿各自保存。",
             "createdAt": 721692800,
-            "id": "F1A0A8D8-0F1F-4D32-9C97-CCC10424E9FC",
+            "id": "DEE03CB5-C5AA-4428-A265-7F5A7619A8BC",
             "role": "inbound"
           }
         ],
@@ -479,13 +599,13 @@
       },
       {
         "createdAt": 721692800,
-        "id": "C1913F45-CD0B-459D-8E23-0560291585DA",
+        "id": "379B1501-C52F-4C4C-8479-B403A806F036",
         "messages": [
           {
             "author": "公开测试来源",
             "body": "这是公开的本地测试消息。\n\n收件不会自动回复来源。",
             "createdAt": 721692800,
-            "id": "3050A636-37DA-4C8F-9064-D7C986566087",
+            "id": "98AE9913-8FAD-4B9F-B98B-15BB02A7FA9B",
             "role": "inbound"
           },
           {
@@ -493,13 +613,13 @@
             "body": "先在本机记录备注。",
             "createdAt": 721692800,
             "format": "plain",
-            "id": "E48D66FB-FA61-4716-9C6F-DF75BDBC506D",
+            "id": "C4AC03D3-18D0-47E3-BF92-E25101F93CDF",
             "kind": "localNote",
             "role": "user"
           }
         ],
         "review": {
-          "messageID": "3050A636-37DA-4C8F-9064-D7C986566087",
+          "messageID": "98AE9913-8FAD-4B9F-B98B-15BB02A7FA9B",
           "state": "pending"
         },
         "sequence": 2,
@@ -515,18 +635,18 @@
       },
       {
         "createdAt": 721692800,
-        "id": "CF6B418C-19DA-4264-AA14-3A60D6060E9D",
+        "id": "6C51EE46-5017-4C74-9BA9-EB419E8A2963",
         "messages": [
           {
             "author": "公开测试客户端",
             "body": "已保留的公开历史。",
             "createdAt": 721692800,
-            "id": "7DC860D0-1E80-4EB9-813F-D803CBE8915F",
+            "id": "7FDCA733-74E3-4A46-83A3-869AFF7644EA",
             "role": "inbound"
           }
         ],
         "review": {
-          "messageID": "7DC860D0-1E80-4EB9-813F-D803CBE8915F",
+          "messageID": "7FDCA733-74E3-4A46-83A3-869AFF7644EA",
           "state": "pending"
         },
         "sequence": 3,
@@ -539,15 +659,122 @@
         "title": "已归档的样例",
         "unread": false,
         "updatedAt": 721692800
+      },
+      {
+        "createdAt": 721692800,
+        "id": "F65D0808-D007-4D39-A2AA-7B6F880EAE5E",
+        "messages": [
+          {
+            "author": "公开审核来源",
+            "body": "已明确接受的公开消息。",
+            "createdAt": 721692800,
+            "id": "13CEF91B-9F98-42A2-A9AE-211A6142B419",
+            "role": "inbound"
+          },
+          {
+            "author": "Mailbox",
+            "body": "已接受并加入 Buffer。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "21C0BF83-9869-409B-9663-F321C66673BE",
+            "kind": "status",
+            "role": "system"
+          }
+        ],
+        "review": {
+          "messageID": "13CEF91B-9F98-42A2-A9AE-211A6142B419",
+          "resolvedAt": 721692800,
+          "state": "accepted"
+        },
+        "sequence": 4,
+        "source": {
+          "displayName": "公开审核来源",
+          "identifier": "公开审核来源",
+          "kind": "http",
+          "replyCapability": "localNotesOnly"
+        },
+        "title": "已接受的收件",
+        "unread": true,
+        "updatedAt": 721692800
+      },
+      {
+        "createdAt": 721692800,
+        "id": "97773F47-1DFE-45F7-9AB2-28D5BDCB99CB",
+        "messages": [
+          {
+            "author": "公开审核来源",
+            "body": "原始消息仍然保留。",
+            "createdAt": 721692800,
+            "id": "7495E995-5AD0-4C16-8CEC-8E652C743189",
+            "role": "inbound"
+          },
+          {
+            "author": "Mailbox",
+            "body": "已拒绝该外部推送。",
+            "createdAt": 721692800,
+            "format": "plain",
+            "id": "E1BBAE36-891F-4711-A256-C57E726901E7",
+            "kind": "status",
+            "role": "system"
+          }
+        ],
+        "review": {
+          "messageID": "7495E995-5AD0-4C16-8CEC-8E652C743189",
+          "resolvedAt": 721692800,
+          "state": "rejected"
+        },
+        "sequence": 5,
+        "source": {
+          "displayName": "公开审核来源",
+          "identifier": "公开审核来源",
+          "kind": "http",
+          "replyCapability": "localNotesOnly"
+        },
+        "title": "已忽略的收件",
+        "unread": true,
+        "updatedAt": 721692800
+      },
+      {
+        "createdAt": 721692800,
+        "id": "7FD4FD1C-9CAC-41D4-AFCB-79B39B1DB5FA",
+        "messages": [
+          {
+            "author": "公开图片来源",
+            "body": "图片可以单独保存，也可以存入 Capsule。",
+            "createdAt": 721692800,
+            "id": "1F47A807-74A5-4800-9920-E4800C4D85A3",
+            "imageFileName": "A6C700D0-74CD-481D-AD9A-D02AD4B5AF5F.png",
+            "role": "inbound"
+          }
+        ],
+        "sequence": 6,
+        "source": {
+          "displayName": "公开图片来源",
+          "kind": "other",
+          "replyCapability": "localNotesOnly"
+        },
+        "title": "独立保存图片",
+        "unread": true,
+        "updatedAt": 721692800
       }
     ]
   },
   "metrics": {
+    "actionHeight": 28,
+    "actionIconGap": 5,
+    "actionIconSize": 14,
+    "actionSpacing": 8,
+    "bodyFontSize": 14,
+    "bodyLineSpacing": 5,
+    "bodyParagraphSpacing": 9,
+    "chatImageHeight": 240,
     "chatListWidth": 216,
     "contentInset": 16,
     "defaultHeight": 700,
     "defaultWidth": 1000,
+    "inboxImageHeight": 300,
     "inboxListWidth": 232,
+    "messageSpacing": 12,
     "minimumHeight": 500,
     "minimumWidth": 680,
     "navigationHeight": 56,
@@ -635,19 +862,22 @@
     }
   },
   "purpose": "public-parity-fixture",
-  "selectedChat": "430ad9b1-0a57-4ba2-9501-a3ddd37b3d65",
-  "selectedInbox": "c1913f45-cd0b-459d-8e23-0560291585da",
+  "selectedAccepted": "f65d0808-d007-4d39-a2aa-7b6f880eae5e",
+  "selectedChat": "b92035e1-4a65-4382-b3d1-20f6e0c6e12d",
+  "selectedImage": "7fd4fd1c-9cac-41d4-afcb-79b39b1db5fa",
+  "selectedInbox": "379b1501-c52f-4c4c-8479-b403a806f036",
+  "selectedRejected": "97773f47-1dfe-45f7-9ab2-28d5bdcb99cb",
   "sources": {
     "OfficialPlugins/plugins/mailbox.chat/plugin.json": "6f3f9391c59d6edb8251494b098638335a68f60a467e7ff843a7bf705217e1e5",
     "OfficialPlugins/plugins/mailbox.inbox/plugin.json": "91801be8a90c5e39657e807b5220c518998e4c8ad774da240857b604582fbd9d",
     "OfficialPlugins/plugins/mailbox.terminal/plugin.json": "21bd7f24002fde11d19972abe74c88fc2f7946a05ac5f22ed7e9f4db3a909088",
     "Sources/RimeBuffer/Mailbox/MailboxAdaptiveSplitView.swift": "8e3eeb75fe185faaac1ce19f410c1a3e4cdc0b428c79e1c4c92e632fee571f45",
-    "Sources/RimeBuffer/Mailbox/MailboxLinuxFixtures.swift": "02e35b4c4d7dac6b0f99d323cba6a8cecc3e626ad7b4c172553c93b72b5187de",
-    "Sources/RimeBuffer/Mailbox/MailboxMessagesWorkspace.swift": "f4974a7e63cf8aae428713f3afd768543027fc24cd75a0594f6ec3ce81509107",
+    "Sources/RimeBuffer/Mailbox/MailboxLinuxFixtures.swift": "8317e4420762a0424fc80f8ce85c421c585d677c0fcc7cf616ab2753fbcc7122",
+    "Sources/RimeBuffer/Mailbox/MailboxMessagesWorkspace.swift": "df964a68bfbfe6d64c195a66f192f2e1ff8766e357206f744d5c244a39207164",
     "Sources/RimeBuffer/Mailbox/MailboxModels.swift": "5269e2f8965235c57b01ecde28115a62882e2151a22a039c360ec63c1bd04c60",
     "Sources/RimeBuffer/Mailbox/MailboxModules.swift": "9d03fa00da11812b5aa31d8dcbcc0aeba13087c348cfc2ebc25d3b54f4b8b77f",
     "Sources/RimeBuffer/Mailbox/MailboxStore.swift": "150d1ce8224e73b7a41a69a94a270bb34447996e529d1e8300cc7ec15188c8bf",
-    "Sources/RimeBuffer/Mailbox/MailboxWorkspaceUI.swift": "a45caecf4705ef0286b0f7550f1bd6b0b1f7a69b93ca5540011e2168b9de618c",
+    "Sources/RimeBuffer/Mailbox/MailboxWorkspaceUI.swift": "9ee7f32da00695c4a0bcdb23cee36f709810982e21ed937e961cd8a520764558",
     "Sources/RimeBuffer/Mailbox/MailboxWorkspaceViewController.swift": "404bb3c78b1bc3e7468dc23f94ea1932736d1e0fc8ae7f80eda65b413c1f2d84",
     "Sources/RimeBuffer/RimeUI.swift": "80a1a1046687fd469c8627489f4e9f93ec348a4ff35e4e8228e896464a9b1516"
   }

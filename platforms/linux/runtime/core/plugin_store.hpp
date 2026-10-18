@@ -20,7 +20,7 @@ public:
     PackageStore(std::filesystem::path root, Json catalog,
                  std::map<std::string, std::string> bundled,
                  std::map<std::string, Descriptor> adapters,
-                 std::string host_version);
+                 std::string host_version, bool wait_for_seed = true);
     std::vector<PackageView> Entries() const;
     PackageView Inspect(const std::string& id) const;
     Json Package(const std::string& id) const;
@@ -45,7 +45,7 @@ private:
     Json CheckedState(const std::string& id, const std::string& expected_grant) const;
     void WriteState(const std::string& id, Json state) const;
     bool Available(const std::string& id) const;
-    void Seed();
+    void Seed(bool wait);
 
     runtime::PrivateDirectory files_;
     Json catalog_;

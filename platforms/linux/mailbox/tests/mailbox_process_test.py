@@ -64,7 +64,11 @@ with tempfile.TemporaryDirectory(prefix='xsime-mailbox-process-') as temporary:
             conflict = subprocess.run(['dbus-run-session', '--', binary, '--show'], env=env,
                                       capture_output=True, text=True, timeout=8)
             assert conflict.returncode != 0, 'a second bus acquired the same profile primary lock'
-            assert process.poll() is None and windows() == [window]
+            assert process.poll() is None, 'primary exited after the cross-bus conflict'
+            # The rejected process can still have X unmap/destroy events queued
+            # when waitpid returns. Observe the primary after the display settles.
+            wait(lambda: process.poll() is None and windows() == [window],
+                 'primary window did not survive cross-bus conflict: ' + repr(windows()), seconds=2)
             before = data.read_bytes()
             command(binary, '--quit')
             process.wait(timeout=5)

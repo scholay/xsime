@@ -62,6 +62,12 @@ public:
     StoreStatus ImportAttachment(const std::filesystem::path& source, std::string* asset, std::string* error);
     StoreStatus ReadAttachment(std::string_view asset, std::string* bytes, std::string* error) const;
     StoreStatus Get(std::string_view id, Record* out, std::string* error) const;
+    // An explicitly received note or PNG. Deduplication, independent asset
+    // publication and record creation share the Capsule writer lock.
+    StoreStatus SaveReceived(const std::string& title, const std::string& body,
+                             const std::string& png, Record* out, bool* duplicate,
+                             std::string* error,
+                             const std::function<void(const std::function<void()>&)>& commit = {});
     StoreStatus Put(const Record& request, std::string expected_revision, Record* out,
                     std::string* error);
     StoreStatus Remove(std::string_view id, std::string_view expected_revision,
@@ -69,7 +75,7 @@ public:
                        const std::function<void(const std::function<void()>&)>& commit = {});
 
 private:
-    StoreStatus WithLock(const std::function<StoreStatus()>& body, std::string* error) const;
+    StoreStatus WithLock(const std::function<StoreStatus()>& body, std::string* error, bool wait = true) const;
     StoreStatus ReadAll(std::vector<Record>* out, std::string* error) const;
     StoreStatus ParseFile(const std::filesystem::path& path, Record* out,
                           std::string* error) const;

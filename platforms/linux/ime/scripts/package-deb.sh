@@ -124,7 +124,8 @@ Homepage: https://xsime.com
 Description: XSIME input method frontend for Fcitx 5
  A librime frontend owned by XSIME. It deploys the reviewed XSIME rime-data
  set, keeps user state in ~/.local/share/rimes, and ships the Linux Buffer
- workbench, Capsule rail and scheme importer next to the Fcitx5 addon.
+ workbench, Capsule rail, Mailbox workspace and scheme importer next to
+ the Fcitx5 addon.
  A private pinned Rime/Lua runtime supports portable third-party schemes.
 EOF
 

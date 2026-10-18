@@ -91,10 +91,11 @@ set_target_properties(RimesCapsuleCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 rimes_harden(RimesCapsuleCore)
 
 set(RIMES_MAILBOX_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../mailbox")
-add_library(RimesMailboxCore STATIC "${RIMES_MAILBOX_ROOT}/core/mailbox_store.cpp")
+add_library(RimesMailboxCore STATIC "${RIMES_MAILBOX_ROOT}/core/mailbox_store.cpp" "${RIMES_MAILBOX_ROOT}/core/inbox_actions.cpp" "${RIMES_MAILBOX_ROOT}/core/mailbox_buffer_client.cpp")
 target_include_directories(RimesMailboxCore PUBLIC "${RIMES_MAILBOX_ROOT}/core")
 target_link_libraries(RimesMailboxCore PUBLIC RimesCapsuleCore)
 set_target_properties(RimesMailboxCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_compile_definitions(RimesMailboxCore PUBLIC RIMES_PRODUCT_VERSION="${RIMES_PRODUCT_VERSION}")
 rimes_harden(RimesMailboxCore)
 if(BUILD_TESTING)
     add_executable(rimes-mailbox-store-tests "${RIMES_MAILBOX_ROOT}/tests/mailbox_store_tests.cpp")
@@ -147,14 +148,14 @@ if(RIMES_BUILD_FCITX5)
         src/session/session_monitor.cpp
         src/desktop/workspace_launcher.cpp
         src/desktop/desktop_shortcuts.cpp
-        src/buffer/buffer_service.cpp
+        src/buffer/buffer_service.cpp src/buffer/buffer_mailbox.cpp
         src/buffer/buffer_translation.cpp
         src/buffer/buffer_delivery.cpp
         src/capsule/capsule_service.cpp
         src/capsule/capsule_history_service.cpp
         src/capsule/capsule_capture_service.cpp
     )
-    target_link_libraries(rimes PRIVATE Fcitx5::Core RimesEngine RimesBufferCore RimesCapsuleCore RimesPluginCore RimesLocalTranslation RimesAI)
+    target_link_libraries(rimes PRIVATE Fcitx5::Core RimesEngine RimesBufferCore RimesMailboxCore RimesCapsuleCore RimesPluginCore RimesLocalTranslation RimesAI)
     pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
     pkg_check_modules(RimesXCB REQUIRED IMPORTED_TARGET xcb)
     pkg_check_modules(GTK_LAYER_SHELL IMPORTED_TARGET gtk-layer-shell-0)
@@ -287,6 +288,9 @@ if(RIMES_BUILD_FCITX5)
         target_include_directories(RimesClipboardDesktop PUBLIC "${RIMES_CAPSULE_ROOT}/ui"
             PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
         target_link_libraries(RimesClipboardDesktop PUBLIC RimesCapsuleCore PkgConfig::CapsuleWayland PkgConfig::CapsuleXfixes)
+        if(TARGET RimesMailboxUI)
+            target_link_libraries(RimesMailboxUI PUBLIC RimesClipboardDesktop)
+        endif()
         rimes_harden(RimesClipboardDesktop)
 
         pkg_check_modules(CapsuleCapture REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0 libportal gio-unix-2.0 x11)
@@ -633,21 +637,27 @@ if(RIMES_BUILD_TESTS)
         )
         rimes_harden(rimes-fcitx-e2e)
 
-        add_executable(rimes-buffer-derived-host-tests tests/buffer_derived_host_tests.cpp src/buffer/buffer_service.cpp src/buffer/buffer_translation.cpp src/buffer/buffer_delivery.cpp)
+        add_executable(rimes-buffer-derived-host-tests tests/buffer_derived_host_tests.cpp src/buffer/buffer_service.cpp src/buffer/buffer_mailbox.cpp src/buffer/buffer_translation.cpp src/buffer/buffer_delivery.cpp)
         target_include_directories(rimes-buffer-derived-host-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-        target_link_libraries(rimes-buffer-derived-host-tests PRIVATE Fcitx5::Core RimesBufferCore Threads::Threads)
+        target_link_libraries(rimes-buffer-derived-host-tests PRIVATE Fcitx5::Core RimesMailboxCore RimesBufferCore Threads::Threads)
         rimes_harden(rimes-buffer-derived-host-tests)
         add_test(NAME buffer-derived-host COMMAND rimes-buffer-derived-host-tests)
 
-        add_executable(rimes-buffer-translation-host-tests tests/buffer_translation_host_tests.cpp src/buffer/buffer_service.cpp src/buffer/buffer_translation.cpp src/buffer/buffer_delivery.cpp)
+        add_executable(rimes-buffer-translation-host-tests tests/buffer_translation_host_tests.cpp src/buffer/buffer_service.cpp src/buffer/buffer_mailbox.cpp src/buffer/buffer_translation.cpp src/buffer/buffer_delivery.cpp)
         target_include_directories(rimes-buffer-translation-host-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-        target_link_libraries(rimes-buffer-translation-host-tests PRIVATE Fcitx5::Core RimesBufferCore Threads::Threads)
+        target_link_libraries(rimes-buffer-translation-host-tests PRIVATE Fcitx5::Core RimesMailboxCore RimesBufferCore Threads::Threads)
         rimes_harden(rimes-buffer-translation-host-tests)
         add_test(NAME buffer-translation-host COMMAND rimes-buffer-translation-host-tests)
 
-        add_executable(rimes-buffer-delivery-host-tests tests/buffer_delivery_host_tests.cpp src/buffer/buffer_service.cpp src/buffer/buffer_translation.cpp src/buffer/buffer_delivery.cpp)
+        add_executable(rimes-mailbox-buffer-host-tests tests/mailbox_buffer_host_tests.cpp src/buffer/buffer_service.cpp src/buffer/buffer_mailbox.cpp src/buffer/buffer_translation.cpp src/buffer/buffer_delivery.cpp)
+        target_include_directories(rimes-mailbox-buffer-host-tests PRIVATE src)
+        target_link_libraries(rimes-mailbox-buffer-host-tests PRIVATE Fcitx5::Core RimesMailboxCore Threads::Threads)
+        rimes_harden(rimes-mailbox-buffer-host-tests)
+        add_test(NAME mailbox-buffer-host COMMAND rimes-mailbox-buffer-host-tests)
+        set_tests_properties(mailbox-buffer-host PROPERTIES TIMEOUT 60)
+        add_executable(rimes-buffer-delivery-host-tests tests/buffer_delivery_host_tests.cpp src/buffer/buffer_service.cpp src/buffer/buffer_mailbox.cpp src/buffer/buffer_translation.cpp src/buffer/buffer_delivery.cpp)
         target_include_directories(rimes-buffer-delivery-host-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-        target_link_libraries(rimes-buffer-delivery-host-tests PRIVATE Fcitx5::Core RimesBufferCore Threads::Threads)
+        target_link_libraries(rimes-buffer-delivery-host-tests PRIVATE Fcitx5::Core RimesMailboxCore RimesBufferCore Threads::Threads)
         rimes_harden(rimes-buffer-delivery-host-tests)
         add_test(NAME buffer-delivery-host COMMAND rimes-buffer-delivery-host-tests)
 

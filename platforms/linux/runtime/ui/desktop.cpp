@@ -337,6 +337,15 @@ GtkWidget *Icon(const std::string &name, int size) {
         } else if (icon == "slider.horizontal.3") {
           for (int y : {6, 12, 18}) { line(3, y, 21, y); }
           for (auto pair : {std::pair<int,int>{8,6}, {16,12}, {10,18}}) { cairo_move_to(cr, pair.first + 2, pair.second); cairo_arc(cr, pair.first, pair.second, 2, 0, 2 * M_PI); }
+        } else if (icon == "square.and.arrow.down") {
+          line(5, 11, 3, 11); cairo_line_to(cr, 3, 21); cairo_line_to(cr, 21, 21); cairo_line_to(cr, 21, 11); cairo_line_to(cr, 19, 11);
+          line(12, 2, 12, 16); line(7, 11, 12, 16); cairo_line_to(cr, 17, 11);
+        } else if (icon == "text.badge.plus") {
+          line(3, 5, 20, 5); line(3, 10, 20, 10); line(3, 15, 10, 15); line(3, 20, 10, 20);
+          line(18, 14, 18, 22); line(14, 18, 22, 18);
+        } else if (icon == "trash") {
+          line(3, 6, 21, 6); line(8, 6, 8, 3); cairo_line_to(cr, 16, 3); cairo_line_to(cr, 16, 6);
+          line(6, 6, 7, 21); cairo_line_to(cr, 17, 21); cairo_line_to(cr, 18, 6); line(10, 9, 10, 18); line(14, 9, 14, 18);
         } else if (icon == "archivebox") {
           cairo_rectangle(cr, 3, 4, 18, 4);
           cairo_rectangle(cr, 5, 8, 14, 13);

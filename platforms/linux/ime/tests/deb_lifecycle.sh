@@ -32,6 +32,7 @@ printf '%s\n' 'keep salted reveal credential' > "$DATA/capsule/reveal-credential
 printf '%s\n' 'keep encrypted password record' > "$DATA/capsule/passwords/fixture.md"
 printf '%s\n' 'keep Mailbox threads and messages' > "$DATA/mailbox/mailbox.json"
 printf '%s\n' 'keep Mailbox original attachment' > "$DATA/mailbox/images/fixture.png"
+printf '%s\n' 'keep independent Capsule receipt image' > "$DATA/capsule/assets/mailbox-copy.png"
 printf '%s\n' 'keep Mailbox window preferences' > "$DATA/mailbox/window.json"
 (cd "$DATA" && find . -type f -exec sha256sum {} +) > "$WORK/user-data.sha256"
 

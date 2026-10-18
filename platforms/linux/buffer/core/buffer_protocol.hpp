@@ -33,6 +33,7 @@ enum class CommandOp {
     CopyResult,
     CycleAutoSend,
     ToggleCloseAfterLast,
+    ReceiveMailbox,
     Unknown,
 };
 
@@ -41,12 +42,17 @@ struct Command {
     std::string text;
     int insertion_index = -1;
     std::string id;
+    std::string thread, message, revision, scope, module;
+    std::uint64_t generation = 0;
+    std::uint64_t peer_generation = 0;
+    int peer = -1; // Filled by the host socket, never trusted from JSON.
 };
 
 struct PluginChoice { std::string id, name; };
 struct Snapshot {
     int width = 760;
     std::uint64_t generation = 0;
+    std::string mailbox_scope;
     bool visible = false;
     bool capturing = false;
     bool enabled = false;

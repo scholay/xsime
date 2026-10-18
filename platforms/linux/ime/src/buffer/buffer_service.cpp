@@ -151,6 +151,7 @@ BufferService::BufferService(Instance* instance, PostFn post)
     if (const char* close_after = std::getenv("RIMES_BUFFER_CLOSE_AFTER_LAST")) {
         model_.set_close_after_last(std::strcmp(close_after, "0") != 0);
     }
+    InitializeInbox();
     StartSocket();
     Publish();
 }
@@ -158,6 +159,7 @@ BufferService::BufferService(Instance* instance, PostFn post)
 BufferService::~BufferService() {
     auto_send_timer_.reset();
     alive_->store(false);
+    StopInbox();
     CancelDerived();
     CancelHoldTimer();
     CancelFocusGraceTimer();
@@ -625,6 +627,7 @@ bool BufferService::Generate() {
 }
 
 void BufferService::OnActivate(InputContext* ic) {
+    InvalidateMailboxFocus();
     if (ic == nullptr) {
         return;
     }
@@ -681,6 +684,7 @@ void BufferService::OnActivate(InputContext* ic) {
 }
 
 void BufferService::OnDeactivate(InputContext* ic, bool switching_im) {
+    InvalidateMailboxFocus();
     FCITX_LOGC(rimes_buffer_log, Info)
         << "deactivate switch_im=" << switching_im << " capturing=" << model_.capture_enabled()
         << " drag=" << dragging_;
@@ -716,6 +720,7 @@ void BufferService::OnDeactivate(InputContext* ic, bool switching_im) {
 }
 
 void BufferService::OnInputContextDestroyed(InputContext* ic) {
+    InvalidateMailboxFocus();
     if (ic == nullptr) {
         return;
     }
@@ -740,6 +745,7 @@ void BufferService::OnPasswordField(InputContext* ic, bool password) {
     // Capability events from background ICs must not shield or unshield the
     // active workspace. null is used by the host's isolated policy tests.
     if (ic && !ic->hasFocus()) return;
+    if (password != model_.password_field()) InvalidateMailboxFocus();
     if (password) {
         eat_return_until_release_ = false;
         if (!model_.password_field()) {
@@ -765,6 +771,7 @@ void BufferService::OnPasswordField(InputContext* ic, bool password) {
 
 void BufferService::OnSessionProtection(bool protected_session) {
     if (model_.secure() == protected_session) return;
+    InvalidateMailboxFocus();
     if (protected_session) {
         // Protected key events bypass Buffer, including a held Return's key-up.
         eat_return_until_release_ = false;
@@ -971,6 +978,7 @@ bool BufferService::Deliver(bool all) {
 }
 
 void BufferService::HandleCommand(const rimes::buffer::Command& command) {
+    if (command.op == rimes::buffer::CommandOp::ReceiveMailbox) { ReceiveMailbox(command); return; }
     if ((model_.secure() || model_.password_field()) && command.op != rimes::buffer::CommandOp::Hello &&
         command.op != rimes::buffer::CommandOp::Query && command.op != rimes::buffer::CommandOp::Close) {
         Publish(); return;
@@ -1080,6 +1088,7 @@ void BufferService::HandleCommand(const rimes::buffer::Command& command) {
             }
             break;
         }
+        case rimes::buffer::CommandOp::ReceiveMailbox:
         case rimes::buffer::CommandOp::Unknown:
             break;
     }
@@ -1253,7 +1262,7 @@ void BufferService::AcceptClient() {
     SetCloexec(fd);
     {
         std::lock_guard<std::recursive_mutex> lock(clients_mu_);
-        clients_.push_back(Client{fd, {}});
+        clients_.push_back(Client{fd, {}, ++next_client_generation_});
     }
     post_([this] { Publish(); });
 }
@@ -1283,6 +1292,8 @@ void BufferService::ReadClient(Client* client) {
             WriteAll(rimes::buffer::EncodeError("bad_command", error));
             continue;
         }
+        command.peer = client->fd;
+        command.peer_generation = client->generation;
         post_([this, command] { HandleCommand(command); });
     }
 }
@@ -1293,6 +1304,7 @@ void BufferService::CloseClient(int fd) {
         std::lock_guard<std::recursive_mutex> lock(clients_mu_);
         for (auto iterator = clients_.begin(); iterator != clients_.end(); ++iterator) {
             if (iterator->fd == fd) {
+                post_([this, life = alive_, fd, generation = iterator->generation] { if (life->load()) CancelMailboxPeer(fd, generation); });
                 close(fd);
                 clients_.erase(iterator);
                 clients_empty = clients_.empty();
@@ -1353,6 +1365,7 @@ void BufferService::WriteAll(const std::string& payload) {
     for (auto iterator = clients_.begin(); iterator != clients_.end();) {
         const auto written = send(iterator->fd, frame.data(), frame.size(), MSG_NOSIGNAL);
         if (written != static_cast<ssize_t>(frame.size())) {
+            post_([this, life = alive_, peer = iterator->fd, generation = iterator->generation] { if (life->load()) CancelMailboxPeer(peer, generation); });
             close(iterator->fd);
             iterator = clients_.erase(iterator);
             continue;
@@ -1362,12 +1375,14 @@ void BufferService::WriteAll(const std::string& payload) {
 }
 
 void BufferService::Publish() {
+    SynchronizeMailbox();
     SynchronizeDerived();
     SynchronizeAutoSend();
     if (model_.visible()) {
         EnsureUi();
     }
     auto snapshot = rimes::buffer::MakeSnapshot(model_);
+    snapshot.mailbox_scope = MailboxScope();
     snapshot.width = width_;
     snapshot.theme = theme_;
     snapshot.auto_send_seconds = auto_send_ ? auto_send_seconds_ : 0;

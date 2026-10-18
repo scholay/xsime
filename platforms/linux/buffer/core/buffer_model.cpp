@@ -45,6 +45,8 @@ std::string OriginTag(Origin origin) {
             return "clipboard";
         case Origin::Local:
             return "local";
+        case Origin::Mailbox:
+            return "mailbox";
     }
     return "rime";
 }
@@ -61,6 +63,7 @@ bool ParseOrigin(std::string_view tag, Origin* origin) {
         *origin = Origin::Clipboard;
         return true;
     }
+    if (tag == "mailbox") { *origin = Origin::Mailbox; return true; }
     if (tag == "local") {
         *origin = Origin::Local;
         return true;
@@ -386,6 +389,20 @@ bool BufferModel::insert_pasted_text(std::string_view text, Origin origin) {
     }
     insertion_index_ = insertion;
     Notify();
+    return true;
+}
+
+bool BufferModel::stage_mailbox(std::string_view text) {
+    if (secure_ || password_field_ || text.empty() || text.size() > kMaxBlockBytes || text.find('\0') != text.npos) return false;
+    const auto segments = SplitSegments(text);
+    if (segments.empty() || segments.size() + blocks_.size() > kMaxBlocks) return false;
+    std::vector<Block> incoming;
+    for (const auto& text : segments) incoming.push_back({NewBlockId(), text, Origin::Mailbox, UnixTimeMs()});
+    // Reserve before changing any existing content or routing state.
+    blocks_.reserve(blocks_.size() + incoming.size());
+    pause_capture_preserving_content(); clear_selection(); finish_direct_run();
+    for (auto& block : incoming) blocks_.push_back(std::move(block));
+    insertion_index_ = static_cast<int>(blocks_.size()); Notify();
     return true;
 }
 

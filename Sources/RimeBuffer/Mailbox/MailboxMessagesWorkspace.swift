@@ -252,20 +252,20 @@ final class MailboxMessagesWorkspace: NSViewController, NSSearchFieldDelegate {
         let timestamp = MailboxUI.label(streaming ? "生成中" : MailboxUI.time(message.createdAt), size: 10, secondary: true)
         let row = MailboxUI.stack([identity, MailboxUI.spacer(), timestamp], vertical: false)
         let body = MailboxUI.body(message)
-        let block = MailboxUI.stack([row, body], spacing: 12)
+        let block = MailboxUI.stack([row, body], spacing: MailboxUI.messageSpacing)
         if let data = store.imageData(for: message), let image = NSImage(data: data) {
             let imageView = NSImageView()
             imageView.image = image; imageView.imageScaling = .scaleProportionallyUpOrDown
             imageView.translatesAutoresizingMaskIntoConstraints = false
             imageView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             imageView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-            imageView.heightAnchor.constraint(lessThanOrEqualToConstant: module == .inbox ? 300 : 240).isActive = true
+            imageView.heightAnchor.constraint(lessThanOrEqualToConstant: module == .inbox ? MailboxUI.inboxImageHeight : MailboxUI.chatImageHeight).isActive = true
             let aspect = imageView.heightAnchor.constraint(equalTo: imageView.widthAnchor, multiplier: image.size.height / max(1, image.size.width))
             aspect.priority = .defaultHigh; aspect.isActive = true
             block.addArrangedSubview(imageView)
         }
         if !streaming && message.role == .inbound && message.kind == .content {
-            let actions = MailboxUI.stack([], vertical: false, spacing: 8)
+            let actions = MailboxUI.stack([], vertical: false, spacing: MailboxUI.actionSpacing)
             if message.imageFileName != nil {
                 actions.addArrangedSubview(MailboxActionButton("保存图片", symbol: "square.and.arrow.down") { [weak self] in self?.saveImage(message) })
             } else {

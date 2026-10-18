@@ -381,9 +381,10 @@
         "附件复制到独立私有目录后原子发布，存入 Capsule 后不依赖 Mailbox 原附件。",
         "外部内容加入 Buffer 需明确接受且通过来源/焦点/修订检查；验证失败回滚、取消和删除后的独立性。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 169,
-      "url": "https://github.com/scholay/xsime/issues/169"
+      "url": "https://github.com/scholay/xsime/issues/169",
+      "visual_status": "requires_review"
     },
     {
       "order": 20,

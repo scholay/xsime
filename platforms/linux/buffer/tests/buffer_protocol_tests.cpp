@@ -4,6 +4,7 @@
 
 #include "buffer_model.hpp"
 #include "buffer_protocol.hpp"
+#include <nlohmann/json.hpp>
 
 namespace {
 
@@ -60,6 +61,22 @@ int main() {
     Expect(command.op == CommandOp::DragBegin, "drag_begin op");
     Expect(!rimes::buffer::ParseCommand(R"({"op":"nope"})", &command, &error), "unknown op fails");
 
+    nlohmann::json receipt{{"v", 1}, {"op", "receive_mailbox"}, {"id", "11111111-2222-3333-4444-555555555555"},
+        {"thread", "11111111-2222-3333-4444-555555555556"}, {"message", "11111111-2222-3333-4444-555555555557"},
+        {"revision", std::string(64, 'a')}, {"module", "inbox"}, {"scope", "host:1"}, {"generation", 0}};
+    Expect(rimes::buffer::ParseCommand(receipt.dump(), &command, &error) && command.op == CommandOp::ReceiveMailbox && command.peer == -1,
+           "receipt identities not parsed");
+    for (const auto& key : {"thread", "message", "revision", "scope", "generation", "module"}) {
+        auto missing = receipt; missing.erase(key);
+        Expect(!rimes::buffer::ParseCommand(missing.dump(), &command, &error), "receipt missing authority accepted");
+    }
+    auto injected = receipt; injected["text"] = "untrusted renderer text";
+    Expect(!rimes::buffer::ParseCommand(injected.dump(), &command, &error), "renderer body replaced authoritative source");
+    injected = receipt; injected["generation"] = -1;
+    Expect(!rimes::buffer::ParseCommand(injected.dump(), &command, &error), "negative generation accepted");
+    injected = receipt; injected["peer"] = 88; injected["peer_generation"] = 99;
+    Expect(rimes::buffer::ParseCommand(injected.dump(), &command, &error) && command.peer == -1 && command.peer_generation == 0,
+           "renderer forged host connection identity");
     const auto escaped = rimes::buffer::JsonEscape("a\"b\\c");
     Expect(escaped == "\"a\\\"b\\\\c\"", "json escape");
 

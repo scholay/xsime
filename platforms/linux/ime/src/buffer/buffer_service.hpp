@@ -87,12 +87,24 @@ public:
     bool TranslationTick(bool force = false);
 
 private:
+    struct Inbox;
+    std::shared_ptr<Inbox> inbox_;
+    void InitializeInbox();
+    void PrepareMailbox();
+    void StopInbox();
+    void ReceiveMailbox(const rimes::buffer::Command& command);
+    void CancelMailboxPeer(int peer, std::uint64_t generation);
+    bool MailboxPeerAlive(const rimes::buffer::Command& request);
+    void InvalidateMailboxFocus();
+    void SynchronizeMailbox();
+    std::string MailboxScope() const;
     bool restore_after_session_ = false;
     bool focus_suspended_ = false;
     bool managed_hotkey_ = false;
     struct Client {
         int fd = -1;
         std::string incoming;
+        std::uint64_t generation = 0;
     };
 
     static std::string TokenFor(InputContext* ic);
@@ -184,6 +196,7 @@ private:
     std::string dump_path_;
     int listen_fd_ = -1;
     std::vector<Client> clients_;
+    std::uint64_t next_client_generation_ = 0;
     std::recursive_mutex clients_mu_;
     std::thread socket_thread_;
     std::atomic<bool> running_{false};

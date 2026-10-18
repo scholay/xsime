@@ -211,10 +211,14 @@ void CapsuleService::ReloadNotes(std::string selected_id) {
         std::vector<rimes::capsule::Record> records;
         std::string error;
         std::vector<rimes::capsule::Card> captures, passwords;
+        bool passwords_loaded = !load_passwords;
         auto status = store.SeedIfNeeded(&error);
         if (status == rimes::capsule::StoreStatus::Ok) status = store.ListAll(&records, &error);
         try {
-          if (load_passwords) for(const auto& value:rimes::capsule::PasswordStore(root).List()) passwords.push_back(rimes::capsule::PasswordCard(value));
+          if (load_passwords) {
+            for(const auto& value:rimes::capsule::PasswordStore(root).ListWhileActive(*cancelled)) passwords.push_back(rimes::capsule::PasswordCard(value));
+            passwords_loaded = true;
+          }
           if (load_captures) {
             rimes::capsule::CaptureStore archive(root/"captures");
             archive.Prune(std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count());
@@ -229,14 +233,15 @@ void CapsuleService::ReloadNotes(std::string selected_id) {
           }
         } catch(const std::exception&) {}
         if (!alive->load() || cancelled->load()) return;
-        post([this, alive, cancelled, status, selected_id, records = std::move(records), captures = std::move(captures), passwords = std::move(passwords)] {
+        post([this, alive, cancelled, status, selected_id, passwords_loaded, records = std::move(records), captures = std::move(captures), passwords = std::move(passwords)] {
             if (!alive->load() || cancelled->load()) return;
             model_.set_loading(false);
             if (status == rimes::capsule::StoreStatus::Ok) model_.LoadCards(records);
             else model_.LoadCards({});
             if(model_.module()==rimes::capsule::Module::Capture) model_.LoadModuleCards(rimes::capsule::Module::Capture,std::move(captures));
-            if(model_.module()==rimes::capsule::Module::Passwords) model_.LoadModuleCards(rimes::capsule::Module::Passwords,std::move(passwords));
+            if(model_.module()==rimes::capsule::Module::Passwords && passwords_loaded) model_.LoadModuleCards(rimes::capsule::Module::Passwords,std::move(passwords));
             if (!selected_id.empty()) { rimes::capsule::Command selection; selection.id = selected_id; SelectIdentity(selection); }
+            if (model_.module()==rimes::capsule::Module::Passwords && !passwords_loaded) model_.set_hint("密码库暂时无法读取，请稍后重新打开");
             Publish();
         });
     });

@@ -37,6 +37,19 @@ class Store {
     Json Archive(const std::string& id, const std::string& expected, bool archived);
     Json MarkRead(const std::string& id, const std::string& expected);
     void Remove(const std::string& id, const std::string& expected);
+    Json ResolveReview(const std::string& id, const std::string& expected,
+                       const std::string& message, bool accept);
+    Json BeginBufferTransfer(const std::string& id, const std::string& expected,
+                             const std::string& message, const std::string& transfer);
+    void FinishBufferTransfer(const std::string& id, const std::string& transfer, bool accepted);
+    // Requires exclusive ownership of mailbox/transfer-host/.lock. An unfinished
+    // transfer cannot survive a host restart because Buffer is process-local.
+    void RecoverBufferTransfers();
+    // Holds the source writer lock and checks the displayed revision and exact
+    // message identity before the caller publishes an explicit export/copy.
+    void WithMessage(const std::string& id, const std::string& expected,
+                     const std::string& message,
+                     const std::function<void(const Json&, const Json&, const Commit&)>& action) const;
     // Call only after the process has acquired exclusive primary-instance ownership.
     bool RecoverInterrupted();
     const std::filesystem::path& Root() const { return files_.Path(); }

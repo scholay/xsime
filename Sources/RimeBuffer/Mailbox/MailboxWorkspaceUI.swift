@@ -19,7 +19,7 @@ final class MailboxActionButton: RimePointingHandButton {
     override var title: String { didSet { invalidateIntrinsicContentSize(); needsDisplay = true } }
     override var intrinsicContentSize: NSSize {
         let textWidth = (title as NSString).size(withAttributes: [.font: font ?? .systemFont(ofSize: 12)]).width
-        return NSSize(width: title.isEmpty ? 28 : ceil(textWidth) + (image == nil ? 20 : 39), height: 28)
+        return NSSize(width: title.isEmpty ? 28 : ceil(textWidth) + (image == nil ? 20 : 39), height: MailboxUI.actionHeight)
     }
     init(_ title: String, symbol: String? = nil, action: @escaping () -> Void) {
         handler = action
@@ -31,7 +31,7 @@ final class MailboxActionButton: RimePointingHandButton {
         setContentHuggingPriority(.defaultHigh, for: .horizontal)
         setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 28).isActive = true
+        heightAnchor.constraint(equalToConstant: MailboxUI.actionHeight).isActive = true
         widthAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
         target = self
         self.action = #selector(invoke)
@@ -53,14 +53,14 @@ final class MailboxActionButton: RimePointingHandButton {
         let color: NSColor = !isEnabled ? .disabledControlTextColor : emphasized ? .textBackgroundColor : contentTintColor ?? .labelColor
         let font = font ?? .systemFont(ofSize: 12)
         let textSize = (title as NSString).size(withAttributes: [.font: font])
-        let iconWidth: CGFloat = image == nil ? 0 : 14
-        let gap: CGFloat = image == nil || title.isEmpty ? 0 : 5
+        let iconWidth: CGFloat = image == nil ? 0 : MailboxUI.actionIconSize
+        let gap: CGFloat = image == nil || title.isEmpty ? 0 : MailboxUI.actionIconGap
         let available = max(0, bounds.width - 16 - iconWidth - gap)
         let textWidth = min(textSize.width, available)
         let groupWidth = iconWidth + gap + textWidth
         let x = alignment == .left ? 8 : floor((bounds.width - groupWidth) / 2)
         if let image {
-            MailboxUI.drawSymbol(image, in: NSRect(x: x, y: (bounds.height - 14) / 2, width: 14, height: 14), color: color)
+            MailboxUI.drawSymbol(image, in: NSRect(x: x, y: (bounds.height - MailboxUI.actionIconSize) / 2, width: MailboxUI.actionIconSize, height: MailboxUI.actionIconSize), color: color)
         }
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         (title as NSString).draw(in: NSRect(x: x + iconWidth + gap, y: floor((bounds.height - textSize.height) / 2),
@@ -210,6 +210,16 @@ enum MailboxUI {
     static let navigationWidth: CGFloat = 48
     static let navigationHeight: CGFloat = 56
     static let rowHeight: CGFloat = 84
+    static let actionHeight: CGFloat = 28
+    static let actionIconSize: CGFloat = 14
+    static let actionIconGap: CGFloat = 5
+    static let messageSpacing: CGFloat = 12
+    static let actionSpacing: CGFloat = 8
+    static let bodyFontSize: CGFloat = 14
+    static let bodyLineSpacing: CGFloat = 5
+    static let bodyParagraphSpacing: CGFloat = 9
+    static let inboxImageHeight: CGFloat = 300
+    static let chatImageHeight: CGFloat = 240
     static func drawSymbol(_ image: NSImage, in rect: NSRect, color: NSColor) {
         let symbol = image.withSymbolConfiguration(.init(paletteColors: [color])) ?? image
         let scale = min(rect.width / max(1, symbol.size.width), rect.height / max(1, symbol.size.height))
@@ -321,9 +331,9 @@ enum MailboxUI {
         let attributed = NSMutableAttributedString(attributedString: presentation.attributedText)
         if presentation.kind == .prose {
             let paragraph = NSMutableParagraphStyle()
-            paragraph.lineSpacing = 5
-            paragraph.paragraphSpacing = 9
-            attributed.addAttributes([.font: NSFont.systemFont(ofSize: 14), .paragraphStyle: paragraph],
+            paragraph.lineSpacing = bodyLineSpacing
+            paragraph.paragraphSpacing = bodyParagraphSpacing
+            attributed.addAttributes([.font: NSFont.systemFont(ofSize: bodyFontSize), .paragraphStyle: paragraph],
                                      range: NSRange(location: 0, length: attributed.length))
         }
         if presentation.kind == .markdown {

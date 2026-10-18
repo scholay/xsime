@@ -1,3 +1,4 @@
+#include "capsule_store.hpp"
 #include "mailbox_workspace.hpp"
 #include "official_catalog.hpp"
 #include <chrono>
@@ -182,6 +183,43 @@ int main(int argc, char** argv) {
             });
             Check(Text(composer) == "保存期间继续写的新草稿", "completion discarded newer text");
             gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(composer)), "", 0);
+            const std::string inbound_id = store.Get(inbox).at("review").at("messageID");
+            const auto action = [&](const std::string& suffix) {
+                return Find(host.Content(), "mailbox-message-" + inbound_id + "-" + suffix);
+            };
+            stage = "real X11 copy";
+            Wait([&] { return action("copy") && gtk_widget_is_sensitive(action("copy")); });
+            Click(action("copy"));
+            Wait([&] { return gtk_widget_is_sensitive(action("copy")); });
+            auto* copied = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
+            Check(copied &&
+                      copied == store.Get(inbox).at("messages")[0].at("body").get<std::string>(),
+                  "copy differs from original receipt");
+            g_free(copied);
+            stage = "save receipt to Capsule";
+            Click(action("capsule"));
+            rimes::capsule::ContentStore library(root / "capsule");
+            std::vector<rimes::capsule::Record> notes;
+            std::string library_error;
+            Wait([&] {
+                return library.ListAll(&notes, &library_error) == rimes::capsule::StoreStatus::Ok &&
+                       notes.size() == 1;
+            });
+            Wait([&] { return gtk_widget_is_sensitive(action("capsule")); });
+            Click(action("capsule"));
+            Wait([&] { return gtk_widget_is_sensitive(action("capsule")); });
+            Check(library.ListAll(&notes, &library_error) == rimes::capsule::StoreStatus::Ok &&
+                      notes.size() == 1,
+                  "repeated save duplicated note");
+            stage = "ignore keeps content and disables accept";
+            Click(action("reject"));
+            Wait([&] {
+                return store.Get(inbox).at("review").at("state") == "rejected" &&
+                       action("buffer") && !gtk_widget_is_sensitive(action("buffer"));
+            });
+            Check(!action("reject") &&
+                      store.Get(inbox).at("messages")[0].at("body") == notes[0].content,
+                  "ignore lost original or left repeat action");
             stage = "search no result";
             gtk_entry_set_text(GTK_ENTRY(Find(host.Content(), "mailbox-search")),
                                "无法匹配的测试查询");
@@ -218,6 +256,87 @@ int main(int argc, char** argv) {
             Wait([&] { return Find(host.Content(), "mailbox-nav-inbox") != nullptr; });
             Check(host.Open("inbox", inbox), "re-enabled module failed");
             Check(Text(composer) == "关闭不丢失草稿", "module disable lost draft");
+            stage = "image preview and export";
+            std::ifstream png_file(std::filesystem::path(RIMES_MAILBOX_FIXTURE).parent_path() /
+                                       "public-pixel.png",
+                                   std::ios::binary);
+            const std::string png((std::istreambuf_iterator<char>(png_file)), {});
+            auto image_row = Stable([&] {
+                return store.Create({{"kind", "http"},
+                                     {"displayName", "公开图片来源"},
+                                     {"replyCapability", "localNotesOnly"}},
+                                    "独立图片", "公开测试图片", "inbox", png);
+            });
+            const std::string image_thread = image_row.at("id"),
+                              image_message = image_row.at("review").at("messageID");
+            Wait([&] { return Find(host.Content(), "mailbox-thread-" + image_thread) != nullptr; });
+            Check(host.Open("inbox", image_thread), "image receipt did not open");
+            Wait([&] { return Find(host.Content(), "mailbox-image-preview") != nullptr; });
+            const auto image_action = [&](const char* suffix) {
+                return Find(host.Content(), "mailbox-message-" + image_message + "-" + suffix);
+            };
+            const auto dialog = [&]() -> GtkWidget* {
+                GtkWidget* found = nullptr;
+                auto* windows = gtk_window_list_toplevels();
+                for (auto* item = windows; item && !found; item = item->next)
+                    if (GTK_IS_DIALOG(item->data) && gtk_window_get_transient_for(GTK_WINDOW(
+                                                         item->data)) == GTK_WINDOW(host.Window()))
+                        found = GTK_WIDGET(item->data);
+                g_list_free(windows);
+                return found;
+            };
+            Wait([&] {
+                return image_action("save") && gtk_widget_is_sensitive(image_action("save"));
+            });
+            Click(image_action("save"));
+            Wait([&] { return dialog() && GTK_IS_FILE_CHOOSER(dialog()); });
+            gtk_dialog_response(GTK_DIALOG(dialog()), GTK_RESPONSE_CANCEL);
+            Check(!dialog(), "cancel left image chooser open");
+            Click(image_action("save"));
+            Wait([&] { return dialog() && GTK_IS_FILE_CHOOSER(dialog()); });
+            gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog()), root.c_str());
+            gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog()), "exported.png");
+            Pump(150);
+            gtk_dialog_response(GTK_DIALOG(dialog()), GTK_RESPONSE_ACCEPT);
+            Wait([&] { return std::filesystem::exists(root / "exported.png"); });
+            Check(rimes::runtime::PrivateDirectory(root).Read("exported.png", 1048576) == png,
+                  "chooser export changed PNG bytes");
+            Wait([&] { return gtk_widget_is_sensitive(image_action("capsule")); });
+            Click(image_action("capsule"));
+            Wait([&] {
+                return library.ListAll(&notes, &library_error) == rimes::capsule::StoreStatus::Ok &&
+                       notes.size() == 2;
+            });
+            const auto saved_image =
+                *std::find_if(notes.begin(), notes.end(), [](const auto& value) {
+                    return value.kind == rimes::capsule::Kind::Image;
+                });
+            stage = "confirmed delete preserves Capsule image";
+            Wait([&] { return gtk_widget_is_sensitive(image_action("capsule")); });
+            Click(Accessible(host.Content(), "删除会话"));
+            Wait([&] { return dialog() != nullptr; });
+            gtk_dialog_response(GTK_DIALOG(dialog()), GTK_RESPONSE_CANCEL);
+            Check(store.Get(image_thread).at("id") == image_thread, "cancel deleted receipt");
+            Click(Accessible(host.Content(), "删除会话"));
+            Wait([&] { return dialog() != nullptr; });
+            gtk_dialog_response(GTK_DIALOG(dialog()), GTK_RESPONSE_ACCEPT);
+            Wait([&] {
+                try {
+                    store.Get(image_thread);
+                    return false;
+                } catch (const std::runtime_error&) {
+                    return true;
+                }
+            });
+            Check(rimes::runtime::PrivateDirectory(
+                      std::filesystem::path(saved_image.content).parent_path())
+                          .Read(std::filesystem::path(saved_image.content).filename().string(),
+                                1048576) == png,
+                  "deletion removed independent Capsule image");
+            Pump(200);
+            Check(host.Open("inbox", inbox), "original receipt did not reopen");
+            Check(Text(composer) == "关闭不丢失草稿",
+                  "image interaction replaced another receipt draft");
             stage = "external update";
             auto receipt = Stable([&] {
                 return store.Create({{"kind", "http"},

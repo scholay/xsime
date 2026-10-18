@@ -228,6 +228,8 @@ std::string Preview(const Json& thread) {
     return messages.empty() ? "" : messages.back().at("body").get<std::string>();
 }
 std::string Status(const Json& thread) {
+    if (!Optional(thread, "linuxBufferTransfer"))
+        return "正在加入 Buffer";
     if (!Optional(thread, "archivedAt"))
         return "已归档";
     if (!Optional(thread, "generation")) {
@@ -295,7 +297,8 @@ Snapshot Store::Load() const {
 Snapshot Store::Read() const {
     // One atomic JSON publication is already a complete snapshot. Readers do
     // not take the writer lock, so viewing a receipt cannot make a save fail.
-    // Referenced images are persisted before that publication and retained.
+    // Referenced images are persisted before that publication; a concurrent
+    // deletion may remove its original, which image readers handle as unavailable.
     return Load();
 }
 Json Store::Get(const std::string& id) const {
@@ -309,7 +312,15 @@ void Store::Save(Json document) const {
     bool saved = false;
     const auto publish = [&] {
         Need(!saved, "Mailbox 重复提交");
-        files_.Write("mailbox.json", raw + "\n");
+        try {
+            files_.Write("mailbox.json", raw + "\n");
+        } catch (...) {
+            // Directory fsync may fail after rename. Once the exact document is
+            // visible, do not roll back its attachment or report a cancellation.
+            if (files_.Read("mailbox.json", limits_.bytes) !=
+                std::optional<std::string>(raw + "\n"))
+                throw;
+        }
         saved = true;
     };
     if (commit_)
@@ -392,8 +403,10 @@ Json Store::AddNote(const std::string& id, const std::string& expected, const st
 Json Store::Rename(const std::string& id, const std::string& expected, const std::string& title) {
     return Change(id, expected, [&](Json& thread) {
         const auto normalized = TrimText(title);
-        if (normalized.empty()) thread.erase("title");
-        else thread["title"] = normalized;
+        if (normalized.empty())
+            thread.erase("title");
+        else
+            thread["title"] = normalized;
     });
 }
 Json Store::Archive(const std::string& id, const std::string& expected, bool archived) {
@@ -407,15 +420,148 @@ Json Store::Archive(const std::string& id, const std::string& expected, bool arc
 Json Store::MarkRead(const std::string& id, const std::string& expected) {
     return Change(id, expected, [&](Json& thread) { thread["unread"] = false; });
 }
+void Store::WithMessage(
+    const std::string& id, const std::string& expected, const std::string& message,
+    const std::function<void(const Json&, const Json&, const Commit&)>& action) const {
+    auto lock = files_.Lock(false);
+    auto state = Load();
+    const auto& thread = Find(state.document, id);
+    Expected(thread, expected);
+    Need(Optional(thread, "generation") || thread.at("generation").at("phase") != "generating",
+         "请等待消息生成完成");
+    const auto& messages = thread.at("messages");
+    const auto found = std::find_if(messages.begin(), messages.end(), [&](const auto& row) {
+        return row.at("id") == message && row.at("role") == "inbound" &&
+               row.at("kind") == "content";
+    });
+    Need(found != messages.end(), "收件消息已变化或不存在");
+    bool applied = false;
+    const Commit gate = [&](const std::function<void()>& write) {
+        const auto publish = [&] {
+            Need(!applied, "Mailbox 重复操作");
+            write();
+            applied = true;
+        };
+        if (commit_)
+            commit_(publish);
+        else
+            publish();
+    };
+    action(thread, *found, gate);
+    Need(applied, "Mailbox 操作已取消");
+}
+Json Store::ResolveReview(const std::string& id, const std::string& expected,
+                          const std::string& message, bool accept) {
+    return Change(id, expected, [&](Json& thread) {
+        Need(!Optional(thread, "review") && thread.at("review").at("state") == "pending" &&
+                 thread.at("review").at("messageID") == message,
+             "这条外部消息已处理或不可用");
+        Need(Optional(thread, "generation") || thread.at("generation").at("phase") != "generating",
+             "请等待消息生成完成");
+        const auto date = Now();
+        thread["review"]["state"] = accept ? "accepted" : "rejected";
+        thread["review"]["resolvedAt"] = date;
+        auto status = NewMessage("system", "status",
+                                 accept ? "已接受并加入 Buffer。" : "已拒绝该外部推送。", date);
+        status["author"] = "Mailbox";
+        thread.at("messages").push_back(status);
+        thread["updatedAt"] = date;
+    });
+}
+Json Store::BeginBufferTransfer(const std::string& id, const std::string& expected,
+                                const std::string& message, const std::string& transfer) {
+    Need(capsule::LooksLikeUuid(transfer), "无效的接收标识");
+    return Change(id, expected, [&](Json& thread) {
+        Need(Optional(thread, "linuxBufferTransfer"), "这条收件正在加入 Buffer");
+        Need(Optional(thread, "generation") || thread.at("generation").at("phase") != "generating",
+             "消息尚未完成");
+        const auto& messages = thread.at("messages");
+        const auto found = std::find_if(messages.begin(), messages.end(),
+                                        [&](const Json& row) { return row.at("id") == message; });
+        Need(found != messages.end() && found->at("kind") == "content" &&
+                 found->at("role") == "inbound" && Optional(*found, "imageFileName"),
+             "消息无法加入 Buffer");
+        Json journal{{"id", transfer},
+                     {"messageID", message},
+                     {"previousUpdatedAt", thread.at("updatedAt")}};
+        if (!Optional(thread, "review")) {
+            Need(thread.at("review").at("state") == "pending" &&
+                     thread.at("review").at("messageID") == message,
+                 "这条外部消息已处理");
+            const auto date = Now();
+            journal["previousReview"] = thread.at("review");
+            thread["review"]["state"] = "accepted";
+            thread["review"]["resolvedAt"] = date;
+            journal["acceptedReview"] = thread.at("review");
+            auto status = NewMessage("system", "status", "已接受并加入 Buffer。", date);
+            status["author"] = "Mailbox";
+            journal["status"] = status;
+            thread.at("messages").push_back(status);
+            thread["updatedAt"] = date;
+        }
+        thread["linuxBufferTransfer"] = journal;
+    });
+}
+void Store::FinishBufferTransfer(const std::string& id, const std::string& transfer,
+                                 bool accepted) {
+    auto lock = files_.Lock(false);
+    auto state = Load();
+    auto& threads = state.document.at("threads");
+    auto found = std::find_if(threads.begin(), threads.end(),
+                              [&](const Json& row) { return row.at("id") == id; });
+    if (found == threads.end() || Optional(*found, "linuxBufferTransfer"))
+        return;
+    auto& row = *found;
+    const auto journal = row.at("linuxBufferTransfer");
+    Need(journal.at("id") == transfer, "接收操作已变化");
+    if (!accepted && journal.contains("previousReview")) {
+        // Undo only this transfer's review/status; retain concurrently appended
+        // annotations, renamed titles, archives and their newer timestamps.
+        Need(row.at("review") == journal.at("acceptedReview"), "审核状态已变化");
+        auto& messages = row.at("messages");
+        const auto& status = journal.at("status");
+        const auto own = std::find(messages.begin(), messages.end(), status);
+        Need(own != messages.end(), "审核状态已变化");
+        messages.erase(own);
+        row["review"] = journal.at("previousReview");
+        if (row.at("updatedAt") == status.at("createdAt"))
+            row["updatedAt"] = journal.at("previousUpdatedAt");
+    }
+    row.erase("linuxBufferTransfer");
+    Save(state.document);
+}
+void Store::RecoverBufferTransfers() {
+    const auto state = Read();
+    for (const auto& thread : state.document.at("threads"))
+        if (!Optional(thread, "linuxBufferTransfer"))
+            FinishBufferTransfer(thread.at("id"), thread.at("linuxBufferTransfer").at("id"), false);
+}
 void Store::Remove(const std::string& id, const std::string& expected) {
     auto lock = files_.Lock(false);
     auto state = Load();
-    Expected(Find(state.document, id), expected);
+    const auto& removed = Find(state.document, id);
+    Expected(removed, expected);
+    std::set<std::string> images;
+    for (const auto& message : removed.at("messages"))
+        if (!Optional(message, "imageFileName"))
+            images.insert(message.at("imageFileName"));
     auto& threads = state.document.at("threads");
     threads.erase(std::remove_if(threads.begin(), threads.end(),
                                  [&](const auto& thread) { return thread.at("id") == id; }),
                   threads.end());
     Save(state.document);
+    // Native deletion removes only unreferenced Mailbox originals, after the
+    // document is durable. Independently saved Capsule assets are never touched.
+    for (const auto& thread : threads)
+        for (const auto& message : thread.at("messages"))
+            if (!Optional(message, "imageFileName"))
+                images.erase(message.at("imageFileName"));
+    for (const auto& image : images) {
+        try {
+            runtime::PrivateDirectory(files_.Path() / "images").Remove(image);
+        } catch (const std::exception&) { /* A failed cleanup cannot undo the durable deletion. */
+        }
+    }
 }
 bool Store::RecoverInterrupted() {
     auto lock = files_.Lock(false);

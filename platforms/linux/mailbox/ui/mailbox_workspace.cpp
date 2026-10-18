@@ -1,13 +1,17 @@
 #include "background_jobs.hpp"
 #include "capsule_text.hpp"
+#include "clipboard_desktop.hpp"
 #include "desktop.hpp"
+#include "inbox_actions.hpp"
 #include "launcher_client.hpp"
+#include "mailbox_buffer_client.hpp"
 #include "mailbox_tokens.hpp"
 #include "mailbox_workspace.hpp"
 #include "official_catalog.hpp"
 #include <algorithm>
 #include <atomic>
 #include <ctime>
+#include <deque>
 #include <map>
 #include <mutex>
 #include <set>
@@ -86,6 +90,40 @@ GtkWidget* Paragraph(const std::string& body, const char* css = "mailbox-body") 
     gtk_label_set_selectable(GTK_LABEL(label), TRUE);
     return label;
 }
+GtkWidget* Prose(const std::string& text) {
+    auto* view = Class(gtk_text_view_new(), "mailbox-body");
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(view), false);
+    gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(view), false);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
+    gtk_text_view_set_pixels_inside_wrap(GTK_TEXT_VIEW(view), Metric("bodyLineSpacing"));
+    auto* buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    gtk_text_buffer_set_text(buffer, text.c_str(), text.size());
+    // AppKit leaves paragraph spacing between paragraphs, not below the last.
+    // A size request cannot shrink GTK's natural height, so set the spacing on
+    // all preceding paragraphs instead of subtracting it from the allocation.
+    auto* paragraph = gtk_text_buffer_create_tag(buffer, nullptr, "pixels-below-lines",
+                                                 Metric("bodyParagraphSpacing"), nullptr);
+    GtkTextIter start, last;
+    gtk_text_buffer_get_start_iter(buffer, &start);
+    gtk_text_buffer_get_end_iter(buffer, &last);
+    gtk_text_iter_set_line_offset(&last, 0);
+    gtk_text_buffer_apply_tag(buffer, paragraph, &start, &last);
+    g_signal_connect(view, "size-allocate",
+                     G_CALLBACK((+[](GtkWidget* widget, GtkAllocation*, gpointer) {
+                         auto* buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widget));
+                         GtkTextIter end;
+                         gtk_text_buffer_get_end_iter(buffer, &end);
+                         int y = 0, height = 0;
+                         gtk_text_view_get_line_yrange(GTK_TEXT_VIEW(widget), &end, &y, &height);
+                         int requested = 0;
+                         gtk_widget_get_size_request(widget, nullptr, &requested);
+                         const int needed = std::max(1, y + height);
+                         if (requested != needed)
+                             gtk_widget_set_size_request(widget, -1, needed);
+                     })),
+                     nullptr);
+    return view;
+}
 std::string Text(GtkWidget* view) {
     auto* buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
     GtkTextIter a{}, b{};
@@ -116,6 +154,10 @@ void ApplyTheme(const std::string& requested, GtkWidget* root) {
     Theme(theme);
     const auto& palette = Tokens().at("palettes").at(theme);
     auto c = [&](const char* name) { return palette.at(name).get<std::string>(); };
+    auto alpha = [&](const char* name, double value) {
+        const auto color = c(name);
+        return color.substr(0, color.find_last_of(',') + 1) + std::to_string(value) + ")";
+    };
     const std::string css =
         ".mailbox, .mailbox viewport, .mailbox textview, .mailbox textview text { background: " +
         c("background") + "; color: " + c("label") +
@@ -144,9 +186,9 @@ void ApplyTheme(const std::string& requested, GtkWidget* root) {
         "font-weight: 500; }"
         ".mailbox button { background: " +
         c("control") + "; color: " + c("label") +
-        "; min-width: 0; min-height: 0; padding: 0 10px; border: 1px solid alpha(" +
-        c("separator") +
-        ", 0.3); border-radius: 6px; }"
+        "; min-width: 0; min-height: 0; padding: 0 9px; border: 1px solid " +
+        alpha("separator", 0.3) +
+        "; border-radius: 6px; }"
         ".mailbox button label { color: inherit; font-size: 12px; } .mailbox button:hover { "
         "background: " +
         c("selection") +
@@ -202,7 +244,13 @@ void ApplyTheme(const std::string& requested, GtkWidget* root) {
         ", 0.25); border-radius: 5px; }"
         ".mailbox .mailbox-scrim { background: alpha(black, 0.08); border: 0; border-radius: 0; }";
     const std::string details =
-        ".mailbox .mailbox-side viewport { background: " + c("sidebar") +
+        ".mailbox .mailbox-action .glyph { color: " + c("label") +
+        "; }"
+        ".mailbox .mailbox-note textview, .mailbox .mailbox-note textview text { background: " +
+        c("sidebar") +
+        "; }"
+        ".mailbox .mailbox-side viewport { background: " +
+        c("sidebar") +
         "; }"
         ".mailbox button.mailbox-nav label.mailbox-badge, .mailbox button.mailbox-nav.selected "
         "label.mailbox-badge { font-size: 9px; color: " +
@@ -244,7 +292,11 @@ struct Workspace::Impl {
     std::shared_ptr<Access> access = std::make_shared<Access>();
     std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
     std::shared_ptr<std::atomic<bool>> load_token = std::make_shared<std::atomic<bool>>(false);
-    runtime::BackgroundJobs jobs;
+    runtime::BackgroundJobs jobs, preview_jobs;
+    std::unique_ptr<capsule::DesktopClipboard> clipboard;
+    std::vector<std::pair<GtkWidget*, bool>> message_actions;
+    std::deque<std::function<void()>> previews;
+    bool preview_running = false;
     GtkWidget *window, *root_view, *rail, *navigation, *content, *overlay, *layout, *side, *main,
         *index, *search, *filters, *heading, *source, *toolbar, *transcript, *composer, *hint,
         *send, *feedback, *scrim, *placeholder;
@@ -350,6 +402,9 @@ struct Workspace::Impl {
             }),
             this);
         if (!fixture) {
+            clipboard = std::make_unique<capsule::DesktopClipboard>(
+                capsule::DesktopClipboard::Capture{}, [](std::string) {});
+            clipboard->Configure(false, true);
             Watch(root);
             Watch(runtime::UserRoot() / "plugins");
             Watch(runtime::UserRoot() / "configuration");
@@ -373,6 +428,8 @@ struct Workspace::Impl {
             g_object_unref(monitor);
         }
         jobs.Shutdown();
+        preview_jobs.Shutdown();
+        clipboard.reset();
         if (dialog)
             gtk_widget_destroy(dialog);
         if (auto* provider =
@@ -469,7 +526,7 @@ struct Workspace::Impl {
         gtk_widget_set_no_show_all(placeholder, TRUE);
         gtk_overlay_add_overlay(GTK_OVERLAY(composer_overlay), placeholder);
         gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(composer_overlay), placeholder, TRUE);
-        auto* actions = Row(8);
+        auto* actions = Row(Metric("actionSpacing"));
         hint = Label("", "mailbox-hint");
         Add(actions, hint, true);
         send = Named(Button("添加备注", [this] { Submit(); }, "mailbox-send"), "mailbox-send");
@@ -550,8 +607,12 @@ struct Workspace::Impl {
         return nullptr;
     }
     void Revoke() {
-        std::lock_guard<std::mutex> lock(access->mutex);
-        ++access->epoch;
+        {
+            std::lock_guard<std::mutex> lock(access->mutex);
+            ++access->epoch;
+        }
+        if (clipboard)
+            clipboard->CancelWrites();
     }
     void Hide() {
         Revoke();
@@ -566,6 +627,8 @@ struct Workspace::Impl {
             if (value)
                 ++access->epoch;
         }
+        if (clipboard)
+            clipboard->Configure(false, value);
         if (value) {
             if (dialog)
                 gtk_widget_destroy(dialog);
@@ -766,6 +829,8 @@ struct Workspace::Impl {
         }
         rendered_revision = revision;
         Clear(toolbar);
+        message_actions.clear();
+        previews.clear();
         Clear(transcript);
         Add(toolbar, Tool("sidebar.left", "显示或隐藏列表", [this] { ToggleSidebar(); }));
         if (!thread) {
@@ -807,8 +872,9 @@ struct Workspace::Impl {
                         store.Archive(row.at("id"), Revision(row), !archived);
                     });
                 }));
+            Add(toolbar, Tool("trash", "删除会话", [this] { DeleteThread(); }));
             for (const auto& message : thread->at("messages")) {
-                auto* block = Column(12);
+                auto* block = Column(Metric("messageSpacing"));
                 auto* identity = Row(8);
                 const bool local = message.at("kind") == "localNote";
                 const std::string author =
@@ -818,25 +884,78 @@ struct Workspace::Impl {
                         : (message.contains("author") && !message.at("author").is_null()
                                ? message.at("author").get<std::string>()
                                : thread->at("source").at("displayName").get<std::string>());
-                Add(identity, LineLabel(author, "mailbox-author", 14), true);
+                auto* name = LineLabel(author, "mailbox-author", 14);
+                if (local)
+                    Class(name, "mailbox-secondary");
+                Add(identity, name, true);
                 Add(identity, LineLabel(Time(message.at("createdAt")), "mailbox-time", 14));
                 Add(block, identity);
-                // Full text is selectable. Parsing rich bodies and review actions are
-                // supplied by the inbox/chat adapters, not by the window host.
-                Add(block, Paragraph(message.at("body")));
-                if (message.contains("imageFileName") && !message.at("imageFileName").is_null())
-                    Add(block, Label("图片附件", "mailbox-hint"));
-                auto* padded = local ? Surface(Pad(block), "mailbox-note") : Pad(block);
+                Add(block, message.at("format") == "plain" ? Prose(message.at("body"))
+                                                           : Paragraph(message.at("body")));
+                const bool image =
+                    message.contains("imageFileName") && !message.at("imageFileName").is_null();
+                if (image)
+                    AddImage(block, *thread, message);
+                if (message.at("role") == "inbound" && message.at("kind") == "content" &&
+                    (!thread->contains("generation") || thread->at("generation").is_null() ||
+                     thread->at("generation").at("phase") != "generating")) {
+                    auto* actions = Row(Metric("actionSpacing"));
+                    const std::string id = message.at("id");
+                    const bool review =
+                        thread->contains("review") && !thread->at("review").is_null();
+                    const bool pending = review && thread->at("review").at("state") == "pending" &&
+                                         thread->at("review").at("messageID") == id;
+                    if (image)
+                        Add(actions, MessageAction("square.and.arrow.down", "保存图片", id, "save",
+                                                   [this, id] { SaveImage(id); }));
+                    else {
+                        Add(actions, MessageAction("doc.on.doc", "复制", id, "copy",
+                                                   [this, message] { CopyMessage(message); }));
+                        Add(actions, MessageAction(
+                                         "text.badge.plus", "加入 Buffer", id, "buffer",
+                                         [this, id] { JoinBuffer(id); }, !review || pending));
+                    }
+                    Add(actions,
+                        MessageAction("archivebox", "存入 Capsule", id, "capsule", [this, id] {
+                            auto duplicate = std::make_shared<bool>(false);
+                            Mutate(
+                                [id, duplicate](Store& store, const Json& row) {
+                                    capsule::ContentStore destination(
+                                        capsule::ContentStore::DefaultRoot());
+                                    *duplicate = SaveToCapsule(store, row.at("id"), Revision(row),
+                                                               id, destination);
+                                },
+                                [this, duplicate] {
+                                    Notice(*duplicate ? "Capsule 中已有这份内容"
+                                                      : "已存入 Capsule");
+                                });
+                        }));
+                    if (pending)
+                        Add(actions, MessageAction("xmark", "忽略", id, "reject", [this, id] {
+                                Mutate(
+                                    [id](Store& store, const Json& row) {
+                                        store.ResolveReview(row.at("id"), Revision(row), id, false);
+                                    },
+                                    [this] { Notice("已忽略这条外部消息"); });
+                            }));
+                    Add(actions, gtk_label_new(""), true);
+                    Add(block, actions);
+                }
+                auto* padded =
+                    message.at("role") == "user" ? Surface(Pad(block), "mailbox-note") : Pad(block);
                 Add(transcript, padded);
             }
         }
         gtk_widget_show_all(toolbar);
         gtk_widget_show_all(transcript);
         ComposerState();
+        NextPreview();
     }
     void ComposerState() {
         if (!send)
             return;
+        for (const auto& [button, enabled] : message_actions)
+            gtk_widget_set_sensitive(button, enabled && (fixture || (Allowed() && !busy)));
         const auto* thread = Selected();
         const bool note = thread && thread->at("source").at("replyCapability") == "localNotesOnly";
         gtk_label_set_text(GTK_LABEL(placeholder), note ? "写下本地备注…" : "输入消息…");
@@ -849,6 +968,322 @@ struct Workspace::Impl {
         gtk_widget_set_sensitive(send, Allowed() && !busy && note &&
                                            !capsule::TrimText(Text(composer)).empty());
         atk_object_set_name(gtk_widget_get_accessible(composer), note ? "本地备注" : "消息输入框");
+    }
+    GtkWidget* MessageAction(const char* icon, const char* title, const std::string& id,
+                             const char* action, std::function<void()> run, bool enabled = true) {
+        auto* button = Named(Button("", std::move(run), "mailbox-action"),
+                             ("mailbox-message-" + id + "-" + action).c_str());
+        gtk_container_remove(GTK_CONTAINER(button), gtk_bin_get_child(GTK_BIN(button)));
+        auto* face = Row(Metric("actionIconGap"));
+        Add(face, Icon(icon, Metric("actionIconSize")));
+        Add(face, Label(title));
+        gtk_container_add(GTK_CONTAINER(button), face);
+        gtk_widget_set_size_request(button, -1, Metric("actionHeight"));
+        atk_object_set_name(gtk_widget_get_accessible(button), title);
+        message_actions.emplace_back(button, enabled);
+        return button;
+    }
+    void CopyMessage(const Json& message) {
+        if (!Allowed() || busy || !Selected() || !clipboard)
+            return;
+        const auto row = *Selected();
+        const auto grant = grants.at(module), plugin = Plugin(module);
+        const auto authorization = access;
+        const auto life = alive;
+        std::uint64_t epoch;
+        {
+            std::lock_guard<std::mutex> lock(access->mutex);
+            epoch = access->epoch;
+        }
+        busy = true;
+        ComposerState();
+        const auto finish = [this, life, authorization, epoch](bool copied) {
+            Post([this, life, authorization, epoch, copied] {
+                if (!life->load())
+                    return;
+                busy = false;
+                bool current;
+                {
+                    std::lock_guard<std::mutex> lock(authorization->mutex);
+                    current = authorization->epoch == epoch;
+                }
+                if (current)
+                    Notice(copied ? "已复制，可在目标应用中粘贴"
+                                  : "复制未完成，请检查桌面剪贴板或重试");
+                ComposerState();
+            });
+        };
+        capsule::ClipboardArchive archive{{{"text/plain;charset=utf-8", message.at("body")},
+                                           {"UTF8_STRING", message.at("body")}}};
+        const bool queued = clipboard->Restore(
+            std::move(archive), false, finish,
+            [this, authorization, epoch, row, message, grant, plugin](const auto& write) {
+                packages.WithEnabledGrant(
+                    plugin, grant,
+                    [&] {
+                        Store source_store(root, {}, [authorization, epoch](const auto& publish) {
+                            std::lock_guard<std::mutex> lock(authorization->mutex);
+                            if (authorization->alive && !authorization->protected_session &&
+                                authorization->epoch == epoch)
+                                publish();
+                        });
+                        source_store.WithMessage(
+                            row.at("id"), Revision(row), message.at("id"),
+                            [&](const Json&, const Json& current, const Commit& gate) {
+                                if (current.at("body") == message.at("body"))
+                                    gate(write);
+                            });
+                    },
+                    false);
+            });
+        if (!queued)
+            finish(false);
+    }
+    void SaveImage(const std::string& id) {
+        if (!Allowed() || busy || !Selected() || dialog)
+            return;
+        const auto row = *Selected();
+        dialog = gtk_file_chooser_dialog_new(
+            "保存图片", GTK_WINDOW(window), GTK_FILE_CHOOSER_ACTION_SAVE, "取消",
+            GTK_RESPONSE_CANCEL, "保存", GTK_RESPONSE_ACCEPT, nullptr);
+        gtk_window_set_modal(GTK_WINDOW(dialog), true);
+        gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(dialog), true);
+        gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), true);
+        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), "mailbox-image.png");
+        auto* png = gtk_file_filter_new();
+        gtk_file_filter_set_name(png, "PNG 图片");
+        gtk_file_filter_add_pattern(png, "*.png");
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), png);
+        auto callback = new std::function<void(int)>([this, id, row](int response) {
+            if (response == GTK_RESPONSE_ACCEPT && Allowed() && Selected() &&
+                Revision(*Selected()) == Revision(row)) {
+                auto* raw = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+                const std::filesystem::path path = raw ? raw : "";
+                g_free(raw);
+                Mutate(
+                    [id, path](Store& store, const Json& selected_row) {
+                        ExportImage(store, selected_row.at("id"), Revision(selected_row), id, path,
+                                    true);
+                    },
+                    [this] { Notice("图片已保存"); });
+            }
+            if (dialog)
+                gtk_widget_destroy(dialog);
+        });
+        g_signal_connect_data(
+            dialog, "response", G_CALLBACK(+[](GtkDialog*, gint response, gpointer raw) {
+                auto fn = *static_cast<std::function<void(int)>*>(raw);
+                fn(response);
+            }),
+            callback,
+            +[](gpointer raw, GClosure*) { delete static_cast<std::function<void(int)>*>(raw); },
+            GConnectFlags(0));
+        g_signal_connect(dialog, "destroy", G_CALLBACK(+[](GtkWidget*, gpointer raw) {
+                             static_cast<Impl*>(raw)->dialog = nullptr;
+                         }),
+                         this);
+        gtk_widget_show_all(dialog);
+    }
+    void DeleteThread() {
+        if (!Allowed() || busy || !Selected() || dialog)
+            return;
+        const auto row = *Selected();
+        dialog = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION,
+                                        GTK_BUTTONS_NONE, "%s", "删除这个会话？");
+        gtk_message_dialog_format_secondary_text(
+            GTK_MESSAGE_DIALOG(dialog), "%s",
+            "会话及其原始附件将被删除，已存入 Capsule 的副本会保留。");
+        gtk_dialog_add_buttons(GTK_DIALOG(dialog), "取消", GTK_RESPONSE_CANCEL, "删除",
+                               GTK_RESPONSE_ACCEPT, nullptr);
+        auto callback = new std::function<void(int)>([this, row](int response) {
+            if (response == GTK_RESPONSE_ACCEPT && Allowed() && Selected() &&
+                Revision(*Selected()) == Revision(row))
+                Mutate([](Store& store, const Json& current) {
+                    store.Remove(current.at("id"), Revision(current));
+                });
+            if (dialog)
+                gtk_widget_destroy(dialog);
+        });
+        g_signal_connect_data(
+            dialog, "response", G_CALLBACK(+[](GtkDialog*, gint response, gpointer raw) {
+                auto fn = *static_cast<std::function<void(int)>*>(raw);
+                fn(response);
+            }),
+            callback,
+            +[](gpointer raw, GClosure*) { delete static_cast<std::function<void(int)>*>(raw); },
+            GConnectFlags(0));
+        g_signal_connect(dialog, "destroy", G_CALLBACK(+[](GtkWidget*, gpointer raw) {
+                             static_cast<Impl*>(raw)->dialog = nullptr;
+                         }),
+                         this);
+        gtk_widget_show_all(dialog);
+    }
+    void NextPreview() {
+        if (preview_running || previews.empty())
+            return;
+        auto next = std::move(previews.front());
+        previews.pop_front();
+        next();
+    }
+    void AddImage(GtkWidget* block, const Json& row, const Json& message) {
+        auto* holder =
+            Named(Column(0), ("mailbox-image-" + message.at("id").get<std::string>()).c_str());
+        Add(holder, Label("正在载入图片…", "mailbox-hint"));
+        Add(block, holder);
+        const auto view = std::shared_ptr<GtkWidget>(
+            GTK_WIDGET(g_object_ref(holder)), [](GtkWidget* widget) { g_object_unref(widget); });
+        const auto revision = rendered_revision;
+        const auto life = alive;
+        previews.push_back([this, row, message, view, revision, life] {
+            preview_running = true;
+            if (!preview_jobs.Run(std::make_shared<std::atomic<bool>>(false), [this, row, message,
+                                                                               view, revision,
+                                                                               life] {
+                    std::shared_ptr<GdkPixbuf> pixbuf;
+                    try {
+                        Store store(root);
+                        store.WithMessage(
+                            row.at("id"), Revision(row), message.at("id"),
+                            [&](const Json&, const Json& content, const Commit& gate) {
+                                const auto bytes = store.Image(content.at("imageFileName"));
+                                if (!bytes || bytes->size() < 24)
+                                    throw std::runtime_error("missing image");
+                                auto dimension = [&](int start) {
+                                    std::uint32_t value = 0;
+                                    for (int i = start; i < start + 4; ++i)
+                                        value =
+                                            (value << 8) | static_cast<unsigned char>((*bytes)[i]);
+                                    return value;
+                                };
+                                const auto width = dimension(16), height = dimension(20);
+                                if (!width || !height || width > 32768 || height > 32768 ||
+                                    std::uint64_t(width) * height > 64000000)
+                                    throw std::runtime_error("image dimensions");
+                                auto* loader = gdk_pixbuf_loader_new_with_type("png", nullptr);
+                                const double scale = std::min({1.0, 600.0 / width, 300.0 / height});
+                                gdk_pixbuf_loader_set_size(loader, std::max(1, int(width * scale)),
+                                                           std::max(1, int(height * scale)));
+                                const bool written = gdk_pixbuf_loader_write(
+                                    loader, reinterpret_cast<const guchar*>(bytes->data()),
+                                    bytes->size(), nullptr);
+                                const bool valid =
+                                    gdk_pixbuf_loader_close(loader, nullptr) && written;
+                                if (valid)
+                                    if (auto* value = gdk_pixbuf_loader_get_pixbuf(loader))
+                                        pixbuf = std::shared_ptr<GdkPixbuf>(
+                                            GDK_PIXBUF(g_object_ref(value)),
+                                            [](auto* p) { g_object_unref(p); });
+                                g_object_unref(loader);
+                                gate([] {});
+                            });
+                    } catch (const std::exception&) {
+                    }
+                    Post([this, life, view, revision, pixbuf] {
+                        if (!life->load())
+                            return;
+                        preview_running = false;
+                        if (rendered_revision == revision) {
+                            Clear(view.get());
+                            if (pixbuf) {
+                                auto* image =
+                                    Named(gtk_drawing_area_new(), "mailbox-image-preview");
+                                const int maximum = Metric(module == "inbox" ? "inboxImageHeight"
+                                                                             : "chatImageHeight");
+                                gtk_widget_set_size_request(image, 1, maximum);
+                                auto* saved = new std::shared_ptr<GdkPixbuf>(pixbuf);
+                                g_object_set_data_full(
+                                    G_OBJECT(image), "mailbox-image", saved, +[](gpointer raw) {
+                                        delete static_cast<std::shared_ptr<GdkPixbuf>*>(raw);
+                                    });
+                                g_signal_connect(
+                                    image, "draw",
+                                    G_CALLBACK(+[](GtkWidget* widget, cairo_t* cr,
+                                                   gpointer raw) -> gboolean {
+                                        const auto& value =
+                                            *static_cast<std::shared_ptr<GdkPixbuf>*>(raw);
+                                        const double scale = std::min(
+                                            {double(gtk_widget_get_allocated_width(widget)) /
+                                                 gdk_pixbuf_get_width(value.get()),
+                                             double(gtk_widget_get_allocated_height(widget)) /
+                                                 gdk_pixbuf_get_height(value.get())});
+                                        cairo_translate(
+                                            cr,
+                                            (gtk_widget_get_allocated_width(widget) -
+                                             gdk_pixbuf_get_width(value.get()) * scale) /
+                                                2,
+                                            (gtk_widget_get_allocated_height(widget) -
+                                             gdk_pixbuf_get_height(value.get()) * scale) /
+                                                2);
+                                        cairo_scale(cr, scale, scale);
+                                        gdk_cairo_set_source_pixbuf(cr, value.get(), 0, 0);
+                                        cairo_pattern_set_extend(cairo_get_source(cr),
+                                                                 CAIRO_EXTEND_PAD);
+                                        cairo_rectangle(cr, 0, 0, gdk_pixbuf_get_width(value.get()),
+                                                        gdk_pixbuf_get_height(value.get()));
+                                        cairo_clip(cr);
+                                        cairo_paint(cr);
+                                        return FALSE;
+                                    }),
+                                    saved);
+                                Add(view.get(), image);
+                            } else
+                                Add(view.get(),
+                                    Label("图片不可用或超过预览尺寸上限", "mailbox-hint"));
+                            gtk_widget_show_all(view.get());
+                        }
+                        NextPreview();
+                    });
+                })) {
+                preview_running = false;
+                NextPreview();
+            }
+        });
+    }
+    void JoinBuffer(const std::string& id) {
+        if (!Allowed() || busy || !Selected())
+            return;
+        const auto row = *Selected();
+        const auto life = alive;
+        const auto authorization = access;
+        std::uint64_t epoch;
+        {
+            std::lock_guard<std::mutex> lock(access->mutex);
+            epoch = access->epoch;
+        }
+        busy = true;
+        ComposerState();
+        if (!jobs.Run(std::make_shared<std::atomic<bool>>(false),
+                      [this, row, id, life, authorization, epoch] {
+                          const auto current = [&] {
+                              std::lock_guard<std::mutex> lock(authorization->mutex);
+                              return authorization->alive && !authorization->protected_session &&
+                                     authorization->epoch == epoch;
+                          };
+                          std::string status;
+                          try {
+                              status = ReceiveInBuffer(row, id, current);
+                          } catch (const std::exception& error) {
+                              status = error.what();
+                          }
+                          Post([this, life, authorization, epoch, status] {
+                              if (!life->load())
+                                  return;
+                              busy = false;
+                              bool current;
+                              {
+                                  std::lock_guard<std::mutex> lock(authorization->mutex);
+                                  current = authorization->epoch == epoch;
+                              }
+                              if (current)
+                                  Notice(status);
+                              Refresh();
+                              ComposerState();
+                          });
+                      })) {
+            busy = false;
+            ComposerState();
+            Notice("后台正忙，请稍后重试");
+        }
     }
     void Mutate(std::function<void(Store&, const Json&)> action,
                 std::function<void()> completed = {}, std::function<void()> committed = {}) {

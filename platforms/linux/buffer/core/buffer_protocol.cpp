@@ -90,7 +90,7 @@ std::string EncodeSnapshot(const Snapshot& snapshot) {
             segments.push_back({{"id", block.id}, {"bytes", block.text.size()}});
     }
     for (const auto& p : snapshot.plugins) choices.push_back({{"id", p.id}, {"name", p.name}});
-    return Json{{"v", 1}, {"type", "snapshot"}, {"generation", snapshot.generation},
+    return Json{{"v", 1}, {"type", "snapshot"}, {"generation", snapshot.generation}, {"mailbox_scope", snapshot.mailbox_scope},
         {"width", snapshot.width}, {"visible", snapshot.visible}, {"capturing", snapshot.capturing},
         {"enabled", snapshot.enabled}, {"secure", snapshot.secure}, {"password_field", snapshot.password_field},
         {"close_after_last", snapshot.close_after_last}, {"empty", snapshot.secure || snapshot.empty},
@@ -117,6 +117,7 @@ bool ParseSnapshot(std::string_view text, Snapshot* output) {
         Snapshot s;
         s.width = std::clamp(value.value("width", 760), rimes::native::bufferMinimumWidth, rimes::native::bufferMaximumWidth);
         s.generation = value.value("generation", std::uint64_t{0});
+        s.mailbox_scope = ReadText(value, "mailbox_scope");
         s.visible = value.at("visible").get<bool>();
         s.capturing = value.at("capturing").get<bool>();
         s.enabled = value.value("enabled", false);
@@ -223,7 +224,7 @@ bool ParseCommand(std::string_view text, Command* command, std::string* error) {
             {"generate", CommandOp::Generate}, {"cancel_generation", CommandOp::CancelGeneration},
             {"return_to_edit", CommandOp::ReturnToEdit}, {"select_result", CommandOp::SelectResult},
             {"copy_result", CommandOp::CopyResult}, {"cycle_auto_send", CommandOp::CycleAutoSend},
-            {"toggle_close_after_last", CommandOp::ToggleCloseAfterLast}};
+            {"toggle_close_after_last", CommandOp::ToggleCloseAfterLast}, {"receive_mailbox", CommandOp::ReceiveMailbox}};
         Command next;
         for (const auto& [name, code] : ops) if (op == name) next.op = code;
         if (next.op == CommandOp::Unknown) throw std::runtime_error("Unknown operation");
@@ -241,6 +242,23 @@ bool ParseCommand(std::string_view text, Command* command, std::string* error) {
             next.id = ReadText(value, "id");
             if (!value.contains("id") || next.id.size() > 256 ||
                 (next.op != CommandOp::SelectPlugin && next.id.empty())) throw std::runtime_error("Invalid identity");
+        }
+        if (next.op == CommandOp::ReceiveMailbox) {
+            next.id = ReadText(value, "id"); next.thread = ReadText(value, "thread");
+            next.message = ReadText(value, "message"); next.revision = ReadText(value, "revision");
+            next.scope = ReadText(value, "scope"); next.module = ReadText(value, "module");
+            const auto uuid = [](const std::string& text) {
+                if (text.size() != 36) return false;
+                for (std::size_t i = 0; i < text.size(); ++i)
+                    if (i == 8 || i == 13 || i == 18 || i == 23) { if (text[i] != '-') return false; }
+                    else if (!((text[i] >= '0' && text[i] <= '9') || (text[i] >= 'a' && text[i] <= 'f'))) return false;
+                return true;
+            };
+            if (!uuid(next.id) || !uuid(next.thread) || !uuid(next.message) || next.revision.size() != 64 ||
+                !std::all_of(next.revision.begin(), next.revision.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); }) ||
+                next.scope.empty() || next.scope.size() > 128 || (next.module != "inbox" && next.module != "chat") ||
+                !value.at("generation").is_number_unsigned() || value.contains("text")) throw std::runtime_error("Invalid receipt identity");
+            next.generation = value.at("generation");
         }
         *command = std::move(next);
         if (error) error->clear();

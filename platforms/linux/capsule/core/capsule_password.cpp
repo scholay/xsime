@@ -13,6 +13,7 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <sstream>
+#include <thread>
 namespace rimes::capsule {
 namespace {
 using Json = nlohmann::json;
@@ -221,6 +222,24 @@ std::vector<PasswordSummary> PasswordStore::List() const {
         return a.title == b.title ? a.id < b.id : a.title < b.title;
     });
     return result;
+}
+std::vector<PasswordSummary>
+PasswordStore::ListWhileActive(const std::atomic<bool>& cancelled) const {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    for (;;) {
+        if (cancelled.load())
+            throw std::runtime_error("密码库读取已取消");
+        try {
+            auto values = List();
+            if (cancelled.load())
+                throw std::runtime_error("密码库读取已取消");
+            return values;
+        } catch (const runtime::StorageBusy&) {
+            if (std::chrono::steady_clock::now() >= deadline)
+                throw;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
 }
 PasswordSummary PasswordStore::Inspect(const std::string& id) const {
     runtime::PrivateDirectory directory(root_);

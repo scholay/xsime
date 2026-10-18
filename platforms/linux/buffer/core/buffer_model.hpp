@@ -9,14 +9,13 @@
 
 namespace rimes::buffer {
 
-// Provenance for one staged block. Linux Default mode only mints Rime,
-// clipboard, and local (ASCII/direct) origins. Plugin origins stay in the
-// snapshot vocabulary so a later Capsule/Mailbox port can reuse the wire
-// format without rewriting macOS Swift.
+// Provenance for staged native input, clipboard, local typing and explicitly
+// accepted Mailbox receipts. External content survives app-switch resets.
 enum class Origin {
     Rime,
     Clipboard,
     Local,
+    Mailbox,
 };
 
 enum class InputRoute {
@@ -107,6 +106,9 @@ public:
     bool delete_backward_direct(std::string_view owner);
     void finish_direct_run();
     bool insert_pasted_text(std::string_view text, Origin origin = Origin::Clipboard);
+    // All-or-nothing external staging. Never replaces a selection, truncates a
+    // receipt, activates capture, or enables automatic delivery.
+    bool stage_mailbox(std::string_view text);
     bool remove_last_block();
     bool remove_block(std::string_view id);
     bool set_insertion_point(int index);

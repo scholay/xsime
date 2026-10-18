@@ -97,6 +97,20 @@ int main() {
     const auto sentences = segmenter.SplitSegments("你好。世界！");
     Expect(sentences.size() == 2, "CJK sentence punctuation splits");
 
+    BufferModel received;
+    received.append("已有的原文", Origin::Rime); received.activate_capture("old-target"); received.select_all();
+    Expect(received.stage_mailbox("收件内容。下一句🙂"), "receipt staging failed");
+    Expect(received.staged_text() == "已有的原文收件内容。下一句🙂" && received.blocks().back().origin == Origin::Mailbox,
+           "receipt replaced selection, lost content or provenance");
+    Expect(!received.capture_enabled() && !received.processing_active() && !received.visible() && received.capture_token().empty(),
+           "receipt staging captured or auto-delivered into old target");
+    BufferModel full;
+    for (int i = 0; i < BufferModel::kMaxBlocks - 1; ++i) full.append("已有", Origin::Rime);
+    full.activate_capture("keep-target"); full.select_all(); const auto generation = full.generation();
+    Expect(!full.stage_mailbox("第一句。第二句。") && full.generation() == generation && full.all_content_selected() && full.captures("keep-target"),
+           "receipt overflow partially appended or changed existing state");
+    received.set_password_field(true); const auto protected_generation = received.generation();
+    Expect(!received.stage_mailbox("拒绝") && received.generation() == protected_generation, "receipt entered protected input");
     if (failures != 0) {
         std::cerr << failures << " buffer model checks failed\n";
         return EXIT_FAILURE;
