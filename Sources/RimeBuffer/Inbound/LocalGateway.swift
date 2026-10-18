@@ -12,6 +12,22 @@ import Network
 final class LocalGateway {
     static let shared = LocalGateway()
 
+    /// Public parity data only; does not start the server or read user tokens.
+    static func linuxContract() -> [String: Any] {
+        let origins: [String?] = [nil, "http://localhost", "http://127.0.0.1:47700",
+            "https://[::1]:1000", "null", "https://example.com", "http://localhost/",
+            "http://localhost@evil.test", "http://127.0.0.1:", "http://localhost?x=1",
+            "http://%6cocalhost", "https://localhost:65536", " HTTP://LOCALHOST:1234 "]
+        return ["schemaVersion": 1, "purpose": "public-gateway-contract",
+            "defaultPort": Int(defaultPort), "maxHeaderBytes": maxHeaderBytes,
+            "maxBodyBytes": maxBodyBytes, "maxPending": InboundBus.maxPending,
+            "maxTextCount": InboundBus.maxTextCount,
+            "maxPendingTextCount": InboundBus.maxPendingTextCount,
+            "origins": origins.map { ["origin": $0 as Any? ?? NSNull(),
+                                       "allowed": isAllowedOrigin($0)] },
+            "mcp": Connection.linuxContract()]
+    }
+
     static let defaultPort: UInt16 = 47700
     private static let maxHeaderBytes = 32 * 1024
     private static let maxBodyBytes = 256 * 1024
@@ -1241,6 +1257,11 @@ final class LocalGateway {
         // one of these; anything else on MCP-Protocol-Version is a 400.
         private static let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
         private static let latestProtocolVersion = "2025-06-18"
+        static func linuxContract() -> [String: Any] {
+            ["versions": supportedProtocolVersions, "latest": latestProtocolVersion,
+             "tools": toolList]
+        }
+
 
         // Give-only tools: an agent can push, never read the buffer or deliver.
         // `readOnlyHint: false` (they mutate the inbox) + no destructive/open-world

@@ -222,13 +222,14 @@ Json ConfigurationStore::Defaults() {
           {"closeAfterLast", true},   {"resetOnAppSwitch", false},
           {"autoSend", false},        {"autoSendSeconds", 1},
           {"globalShortcuts", true},  {"shortcuts", DefaultShortcuts()},
+          {"gatewayEnabled", true}, {"gatewayPort", 47700}, {"gatewayBlockedSources", Json::array()},
           {"activeConnector", "openai-compatible"},
           {"activeProvider", ""},     {"providers", Json::array()},
           {"plugins", Json::object()}};
 }
-ConfigurationStore::ConfigurationStore(const std::filesystem::path &root)
+ConfigurationStore::ConfigurationStore(const std::filesystem::path &root, bool wait_for_seed)
     : files_(root), credentials_(root / "credentials") {
-  auto lock = files_.Lock();
+  auto lock = files_.Lock(wait_for_seed);
   if (!files_.Read("preferences.json", 1024 * 1024))
     files_.Write("preferences.json", Defaults().dump());
 }
@@ -276,7 +277,7 @@ Json ConfigurationStore::NormalizePlugin(std::string_view id,
   return normalized;
 }
 void ConfigurationStore::Validate(const Json &value) {
-  Require(value.is_object() && value.size() == 14 &&
+  Require(value.is_object() && value.size() == 17 &&
           value.at("schemaVersion") == 1 && Identity(value.at("revision")));
   Require(value.at("theme") == "night" || value.at("theme") == "day" ||
           value.at("theme") == "quiet" || value.at("theme") == "rasta" ||
@@ -285,6 +286,16 @@ void ConfigurationStore::Validate(const Json &value) {
           value.at("bufferWidth") >= rimes::native::bufferMinimumWidth && value.at("bufferWidth") <= rimes::native::bufferMaximumWidth);
   for (auto key : {"closeAfterLast", "resetOnAppSwitch", "autoSend", "globalShortcuts"})
     Require(value.at(key).is_boolean());
+  Require(value.at("gatewayEnabled").is_boolean() && value.at("gatewayPort").is_number_integer() &&
+          value.at("gatewayPort") >= 1024 && value.at("gatewayPort") <= 65535 &&
+          value.at("gatewayBlockedSources").is_array() && value.at("gatewayBlockedSources").size() <= 100);
+  std::set<std::string> blocked;
+  for (const auto& item : value.at("gatewayBlockedSources")) {
+    Require(item.is_string());
+    const auto name = item.get<std::string>();
+    Require(Plain(name, 160) && (name.rfind("http:", 0) == 0 || name.rfind("mcp:", 0) == 0) &&
+            blocked.insert(name).second);
+  }
   ValidateShortcuts(value.at("shortcuts"));
   Require(value.at("autoSendSeconds").is_number_integer() &&
           (value.at("autoSendSeconds") == 1 || value.at("autoSendSeconds") == 2 ||
@@ -326,8 +337,18 @@ Json ConfigurationStore::Load() const {
   if (value.is_object() && !value.contains("autoSendSeconds")) value["autoSendSeconds"] = 1;
   if (value.is_object() && !value.contains("shortcuts")) value["shortcuts"] = DefaultShortcuts();
   if (value.is_object() && !value.contains("globalShortcuts")) value["globalShortcuts"] = true;
+  if (value.is_object() && !value.contains("gatewayEnabled")) value["gatewayEnabled"] = true;
+  if (value.is_object() && !value.contains("gatewayPort")) value["gatewayPort"] = 47700;
+  if (value.is_object() && !value.contains("gatewayBlockedSources")) value["gatewayBlockedSources"] = Json::array();
   Validate(value);
   return value;
+}
+void ConfigurationStore::WithGateway(const std::string& revision,
+                                     const std::function<void()>& action) const {
+  auto lock = files_.Lock(false);
+  const auto state = Load();
+  Require(state.at("gatewayEnabled") == true && state.at("revision") == revision);
+  action();
 }
 bool ConfigurationStore::Save(
     Json next, const std::string &expected,
@@ -336,6 +357,9 @@ bool ConfigurationStore::Save(
   if (next.is_object() && !next.contains("autoSendSeconds")) next["autoSendSeconds"] = 1;
   if (next.is_object() && !next.contains("shortcuts")) next["shortcuts"] = DefaultShortcuts();
   if (next.is_object() && !next.contains("globalShortcuts")) next["globalShortcuts"] = true;
+  if (next.is_object() && !next.contains("gatewayEnabled")) next["gatewayEnabled"] = true;
+  if (next.is_object() && !next.contains("gatewayPort")) next["gatewayPort"] = 47700;
+  if (next.is_object() && !next.contains("gatewayBlockedSources")) next["gatewayBlockedSources"] = Json::array();
   const auto current = Load();
   if (current.at("revision") != expected)
     throw std::runtime_error("设置已在其他窗口更新，请重新加载后再保存。");

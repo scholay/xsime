@@ -59,7 +59,20 @@ execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/gen
 if(NOT RIMES_CAPSULE_IMPORT_RESULT EQUAL 0)
     message(FATAL_ERROR "Review the native macOS Capsule contract")
 endif()
-add_library(RimesPluginCore STATIC core/plugin_registry.cpp core/plugin_store.cpp core/package_binding.cpp core/official_catalog.cpp core/http_download.cpp core/configuration.cpp core/shortcuts.cpp)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${RIMES_REPOSITORY_ROOT}/Sources/RimeBuffer/Inbound/LocalGateway.swift"
+    "${RIMES_REPOSITORY_ROOT}/Sources/RimeBuffer/Inbound/InboundBus.swift"
+    "${RIMES_REPOSITORY_ROOT}/Sources/RimeBuffer/Inbound/GatewayToken.swift"
+    "${RIMES_REPOSITORY_ROOT}/Sources/RimeBuffer/SettingsWindow.swift"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../mailbox/resources/native-gateway.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../mailbox/resources/native-gateway-settings.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../mailbox/verify_gateway_contract.py")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../mailbox/verify_gateway_contract.py"
+    --output "${CMAKE_CURRENT_BINARY_DIR}/generated/native_gateway_contract.hpp" RESULT_VARIABLE RIMES_GATEWAY_IMPORT_RESULT)
+if(NOT RIMES_GATEWAY_IMPORT_RESULT EQUAL 0)
+    message(FATAL_ERROR "Regenerate the actual native gateway and settings contracts")
+endif()
+add_library(RimesPluginCore STATIC core/plugin_registry.cpp core/plugin_store.cpp core/package_binding.cpp core/official_catalog.cpp core/http_download.cpp core/configuration.cpp core/shortcuts.cpp core/gateway_access.cpp)
 target_compile_features(RimesPluginCore PUBLIC cxx_std_17)
 target_include_directories(RimesPluginCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/core" "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_include_directories(RimesPluginCore PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/generated")

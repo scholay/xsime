@@ -1,4 +1,5 @@
 import Cocoa
+import CryptoKit
 import CRimeBridge
 import UniformTypeIdentifiers
 
@@ -1026,6 +1027,53 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
             allRendered = false
         }
         return allRendered
+    }
+
+    /// Public-only paired Linux fixtures. Volatile defaults never touch the user's
+    /// preferences, tokens, gateway listener, or live Rime data directory.
+    func renderGatewayForPreview(to directory: String) -> Bool {
+        let defaults = UserDefaults.standard
+        let old = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defer { defaults.setVolatileDomain(old, forName: UserDefaults.argumentDomain) }
+        let root = URL(fileURLWithPath: directory, isDirectory: true)
+        do { try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true) }
+        catch { return false }
+        var manifest: [[String: Any]] = []
+        var clients: [[String: Any]] = []
+        var success = true
+        let identifiers = ["cursor", "codex", "claudeCode", "genericMCP"]
+        for enabled in [true, false] {
+            var preview = old
+            preview["gatewayEnabled"] = enabled
+            preview["gatewayPort"] = 47700
+            defaults.setVolatileDomain(preview, forName: UserDefaults.argumentDomain)
+            if window == nil { build() }
+            rebuildRouteCatalog()
+            reload()
+            for client in GatewayClientConfiguration.allCases {
+                selectedGatewayClient = client
+                selectPreviewTarget(routeID: SettingsCoreRoute.connectors.id,
+                                    subpageID: SettingsSubpageID(rawValue: "local-gateway"))
+                let id = identifiers[client.rawValue]
+                let name = "gateway-\(id)-\(enabled ? "enabled" : "disabled").png"
+                success = renderCurrentView(to: root.appendingPathComponent(name).path) && success
+                manifest.append(["file": name, "client": id, "enabled": enabled,
+                                 "theme": RimeUI.appearance.rawValue, "width": 980, "height": 680])
+                if enabled {
+                    clients.append(["id": id, "title": client.title, "detail": client.detail,
+                        "configuration": gatewayConfiguration(for: client, token: GatewayClientConfiguration.redactedToken),
+                        "supplementary": gatewaySupplementaryConfiguration(for: client, token: GatewayClientConfiguration.redactedToken) ?? ""])
+                }
+            }
+        }
+        do {
+            try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
+                .write(to: root.appendingPathComponent("manifest.json"), options: .atomic)
+            try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "purpose": "public-gateway-settings", "clients": clients,
+                "sources": ["Sources/RimeBuffer/SettingsWindow.swift": SHA256.hash(data: try Data(contentsOf: URL(fileURLWithPath: #filePath))).map { String(format: "%02x", $0) }.joined()]], options: [.prettyPrinted, .sortedKeys])
+                .write(to: root.appendingPathComponent("settings-contract.json"), options: .atomic)
+        } catch { return false }
+        return success
     }
 
     private func previewTargets() -> [(SettingsRouteID, SettingsSubpageID, String)] {

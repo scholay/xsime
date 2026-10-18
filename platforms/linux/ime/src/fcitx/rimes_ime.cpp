@@ -75,6 +75,7 @@ RimesIme::RimesIme(Instance* instance)
             }
         });
     };
+    gateway_ = std::make_unique<rimes::mailbox::GatewayServer>();
     buffer_ = std::make_unique<BufferService>(instance_, post);
     capsule_ = std::make_unique<CapsuleService>(instance_, post);
     launcher_ = std::make_unique<WorkspaceLauncher>(*instance_, *buffer_, *capsule_, [] {
@@ -116,7 +117,10 @@ RimesIme::RimesIme(Instance* instance)
         {[] {}, [this] { ai_worker_.CancelAll(); }});
     for (const auto* module : {"terminal", "chat", "inbox"}) {
         const auto id = std::string("builtin.mailbox.") + module;
-        plugins_.Register(rimes::plugins::CompiledAdapters().at(id), {[] {}, [] {}});
+        if (std::string(module) == "inbox")
+            plugins_.Register(rimes::plugins::CompiledAdapters().at(id),
+                {[this] { gateway_->SetModuleEnabled(true); }, [this] { gateway_->SetModuleEnabled(false); }});
+        else plugins_.Register(rimes::plugins::CompiledAdapters().at(id), {[] {}, [] {}});
     }
     WatchPluginPackages();
     WatchConfiguration();
@@ -181,6 +185,7 @@ RimesIme::RimesIme(Instance* instance)
                 if (auto* state = cap.inputContext()->propertyFor(&factory_)) state->reset();
             }
             if (!cap.inputContext()->hasFocus()) return;
+            gateway_->SetInputProtected(password);
             if (password && launcher_) launcher_->Revoke();
             if (buffer_) {
                 buffer_->OnPasswordField(cap.inputContext(), password);
@@ -195,11 +200,13 @@ RimesIme::RimesIme(Instance* instance)
         [this](Event& event) {
             auto* ic = static_cast<InputContextEvent&>(event).inputContext();
             const bool protected_field = ProtectedInput(ic->capabilityFlags());
+            gateway_->SetInputProtected(protected_field);
             buffer_->OnPasswordField(ic, protected_field);
             capsule_->OnPasswordField(ic, protected_field);
         });
     session_monitor_ = std::make_unique<SessionMonitor>(instance_->eventLoop(), [this](bool protected_session) {
         if (protected_session && launcher_) launcher_->Revoke();
+        gateway_->SetSessionProtected(protected_session);
         buffer_->OnSessionProtection(protected_session);
         capsule_->OnSessionProtection(protected_session);
         if (protected_session) instance_->inputContextManager().foreach([this](InputContext* ic) {
@@ -241,6 +248,7 @@ RimesIme::~RimesIme() {
     if (plugin_watch_fd_ >= 0) close(plugin_watch_fd_);
     plugin_binding_.reset();
     plugins_.Shutdown();
+    gateway_.reset();
     if (alive_) {
         alive_->store(false);
     }
@@ -316,6 +324,7 @@ void RimesIme::ApplyConfiguration() {
         const auto revision = config.at("revision").get<std::string>();
         if (revision == configuration_revision_) return;
         configuration_revision_ = revision;
+        if (gateway_) gateway_->Configure(config);
         for (const auto& state : plugins_.Entries()) plugins_.Invalidate(state.descriptor.id);
         buffer_->Configure(config.at("closeAfterLast"), config.at("resetOnAppSwitch"), config.at("bufferWidth"), revision, config.at("theme"));
         buffer_->ConfigureAutoSend(config.at("autoSend"), config.at("autoSendSeconds"));
@@ -329,6 +338,11 @@ void RimesIme::ApplyConfiguration() {
         if (desktop_shortcuts_) desktop_shortcuts_->Configure(config.at("shortcuts"), config.at("globalShortcuts"));
     } catch (const std::exception&) {
         configuration_revision_.clear();
+        if (gateway_) {
+            auto disabled = rimes::runtime::ConfigurationStore::Defaults();
+            disabled["gatewayEnabled"] = false;
+            gateway_->Configure(disabled);
+        }
         buffer_->ConfigureAutoSend(false, 1);
         capsule_->ConfigureClipboard(false);
         if (launcher_) launcher_->Revoke();

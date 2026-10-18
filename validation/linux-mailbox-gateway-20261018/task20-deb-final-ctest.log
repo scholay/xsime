@@ -1,0 +1,145 @@
+Test project /tmp/rimes-deb.VkPEfX/build
+      Start  1: mailbox-store
+ 1/70 Test  #1: mailbox-store .......................   Passed    0.13 sec
+      Start  2: mailbox-gateway
+ 2/70 Test  #2: mailbox-gateway .....................   Passed    1.73 sec
+      Start  3: mailbox-gateway-native-contract
+ 3/70 Test  #3: mailbox-gateway-native-contract .....   Passed    0.04 sec
+      Start  4: buffer-render
+ 4/70 Test  #4: buffer-render .......................   Passed    6.41 sec
+      Start  5: RimesCandidateMatrix
+ 5/70 Test  #5: RimesCandidateMatrix ................   Passed    0.00 sec
+      Start  6: RimesUserLock
+ 6/70 Test  #6: RimesUserLock .......................   Passed    0.00 sec
+      Start  7: RimesDeploymentShutdown
+ 7/70 Test  #7: RimesDeploymentShutdown .............   Passed    0.88 sec
+      Start  8: derived-workspace
+ 8/70 Test  #8: derived-workspace ...................   Passed    0.00 sec
+      Start  9: buffer-auto-send
+ 9/70 Test  #9: buffer-auto-send ....................   Passed    0.00 sec
+      Start 10: RimesKey
+10/70 Test #10: RimesKey ............................   Passed    0.00 sec
+      Start 11: RimesSnapshot
+11/70 Test #11: RimesSnapshot .......................   Passed    0.00 sec
+      Start 12: RimesPaths
+12/70 Test #12: RimesPaths ..........................   Passed    0.00 sec
+      Start 13: RimesBufferModel
+13/70 Test #13: RimesBufferModel ....................   Passed    0.00 sec
+      Start 14: RimesBufferReturn
+14/70 Test #14: RimesBufferReturn ...................   Passed    0.00 sec
+      Start 15: RimesBufferProtocol
+15/70 Test #15: RimesBufferProtocol .................   Passed    0.00 sec
+      Start 16: RimesBufferProcess
+16/70 Test #16: RimesBufferProcess ..................   Passed    0.01 sec
+      Start 17: RimesBufferPlacement
+17/70 Test #17: RimesBufferPlacement ................   Passed    0.00 sec
+      Start 18: capsule-clipboard-sensitive-x11
+18/70 Test #18: capsule-clipboard-sensitive-x11 .....   Passed    5.96 sec
+      Start 19: capsule-clipboard-x11
+19/70 Test #19: capsule-clipboard-x11 ...............   Passed    1.94 sec
+      Start 20: capsule-clipboard-controller
+20/70 Test #20: capsule-clipboard-controller ........   Passed    1.63 sec
+      Start 21: capsule-native-clipboard-fixtures
+21/70 Test #21: capsule-native-clipboard-fixtures ...   Passed    0.05 sec
+      Start 22: RimesCapsuleHistory
+22/70 Test #22: RimesCapsuleHistory .................   Passed    0.29 sec
+      Start 23: RimesCapsuleNotes
+23/70 Test #23: RimesCapsuleNotes ...................   Passed    0.00 sec
+      Start 24: capsule-native-fixtures
+24/70 Test #24: capsule-native-fixtures .............   Passed    0.02 sec
+      Start 25: RimesCapsuleTransport
+25/70 Test #25: RimesCapsuleTransport ...............   Passed    0.02 sec
+      Start 26: RimesCapsuleStore
+26/70 Test #26: RimesCapsuleStore ...................   Passed    0.02 sec
+      Start 27: RimesCapsuleModel
+27/70 Test #27: RimesCapsuleModel ...................   Passed    0.00 sec
+      Start 28: RimesCapsuleProtocol
+28/70 Test #28: RimesCapsuleProtocol ................   Passed    0.00 sec
+      Start 29: RimesCapsuleClick
+29/70 Test #29: RimesCapsuleClick ...................   Passed    0.00 sec
+      Start 30: RimesCapsuleClipboard
+30/70 Test #30: RimesCapsuleClipboard ...............   Passed    0.00 sec
+      Start 31: RimesCapsulePassword
+31/70 Test #31: RimesCapsulePassword ................   Passed    1.13 sec
+      Start 32: capsule-native-password-fixtures
+32/70 Test #32: capsule-native-password-fixtures ....   Passed    0.02 sec
+      Start 33: RimesCapsuleModules
+33/70 Test #33: RimesCapsuleModules .................   Passed    0.02 sec
+      Start 34: capsule-capture-controller
+34/70 Test #34: capsule-capture-controller ..........   Passed    4.02 sec
+      Start 35: capsule-native-capture-fixtures
+35/70 Test #35: capsule-native-capture-fixtures .....   Passed    0.05 sec
+      Start 36: RimesCapsuleCapture
+36/70 Test #36: RimesCapsuleCapture .................   Passed    0.05 sec
+      Start 37: capsule-capture-x11
+37/70 Test #37: capsule-capture-x11 .................   Passed    1.42 sec
+      Start 38: capsule-capture-portal
+38/70 Test #38: capsule-capture-portal ..............   Passed    0.38 sec
+      Start 39: capsule-capture-pipewire
+39/70 Test #39: capsule-capture-pipewire ............   Passed    3.73 sec
+      Start 40: RimesCapsuleResources
+40/70 Test #40: RimesCapsuleResources ...............   Passed    0.15 sec
+      Start 41: capsule-native-reference-fixtures
+41/70 Test #41: capsule-native-reference-fixtures ...   Passed    0.01 sec
+      Start 42: mailbox-session-protection
+42/70 Test #42: mailbox-session-protection ..........   Passed    2.67 sec
+      Start 43: mailbox-native-contract
+43/70 Test #43: mailbox-native-contract .............   Passed    0.02 sec
+      Start 44: mailbox-ui
+44/70 Test #44: mailbox-ui ..........................   Passed    3.38 sec
+      Start 45: mailbox-primary-process
+45/70 Test #45: mailbox-primary-process .............   Passed    1.08 sec
+      Start 46: capsule-password-ui
+46/70 Test #46: capsule-password-ui .................   Passed   18.73 sec
+      Start 47: capsule-note-editor-ui
+47/70 Test #47: capsule-note-editor-ui ..............   Passed    0.07 sec
+      Start 48: capsule-manager-ui
+48/70 Test #48: capsule-manager-ui ..................   Passed    1.09 sec
+      Start 49: buffer-derived-host
+49/70 Test #49: buffer-derived-host .................   Passed    0.01 sec
+      Start 50: buffer-translation-host
+50/70 Test #50: buffer-translation-host .............   Passed    0.01 sec
+      Start 51: mailbox-buffer-host
+51/70 Test #51: mailbox-buffer-host .................   Passed    2.58 sec
+      Start 52: buffer-delivery-host
+52/70 Test #52: buffer-delivery-host ................   Passed    2.22 sec
+      Start 53: session-protection-dbus
+53/70 Test #53: session-protection-dbus .............   Passed    3.25 sec
+      Start 54: desktop-shortcuts-portal
+54/70 Test #54: desktop-shortcuts-portal ............   Passed    4.74 sec
+      Start 55: desktop-shortcuts-x11
+55/70 Test #55: desktop-shortcuts-x11 ...............   Passed    2.00 sec
+      Start 56: scheme-import
+56/70 Test #56: scheme-import .......................   Passed    0.01 sec
+      Start 57: background-jobs
+57/70 Test #57: background-jobs .....................   Passed    0.00 sec
+      Start 58: window-geometry
+58/70 Test #58: window-geometry .....................   Passed    0.01 sec
+      Start 59: ai-codec
+59/70 Test #59: ai-codec ............................   Passed    0.01 sec
+      Start 60: ai-http
+60/70 Test #60: ai-http .............................   Passed    1.86 sec
+      Start 61: translation-units
+61/70 Test #61: translation-units ...................   Passed    0.00 sec
+      Start 62: runtime-process
+62/70 Test #62: runtime-process .....................   Passed    3.34 sec
+      Start 63: translation-resources
+63/70 Test #63: translation-resources ...............   Passed    0.10 sec
+      Start 64: plugin-registry
+64/70 Test #64: plugin-registry .....................   Passed    0.00 sec
+      Start 65: plugin-store
+65/70 Test #65: plugin-store ........................   Passed    0.03 sec
+      Start 66: configuration
+66/70 Test #66: configuration .......................   Passed    0.01 sec
+      Start 67: panel-window-x11
+67/70 Test #67: panel-window-x11 ....................   Passed    0.74 sec
+      Start 68: panel-window-hidpi
+68/70 Test #68: panel-window-hidpi ..................   Passed    0.77 sec
+      Start 69: translation-ui
+69/70 Test #69: translation-ui ......................   Passed    0.13 sec
+      Start 70: settings-ui
+70/70 Test #70: settings-ui .........................   Passed    0.40 sec
+
+100% tests passed, 0 tests failed out of 70
+
+Total Test time (real) =  79.44 sec

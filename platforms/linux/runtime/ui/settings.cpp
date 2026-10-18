@@ -4,6 +4,11 @@
 #include "official_catalog.hpp"
 #include "shortcuts.hpp"
 #include "launcher_client.hpp"
+#include "gateway_access.hpp"
+#ifdef RIMES_GATEWAY_CLIPBOARD
+#include "clipboard_desktop.hpp"
+#include "capsule_password.hpp"
+#endif
 #include <algorithm>
 #include <atomic>
 #include <cstring>
@@ -25,6 +30,10 @@ struct Settings {
   GtkWidget *window = nullptr, *root = nullptr, *content = nullptr,
             *sidebar = nullptr, *feedback = nullptr;
   std::string route = "core.rimes", subpage = "about", message;
+  std::string gateway_client = "cursor";
+#ifdef RIMES_GATEWAY_CLIPBOARD
+  std::unique_ptr<rimes::capsule::DesktopClipboard> gateway_clipboard;
+#endif
   std::map<std::string, GtkWidget *> navigation;
   std::map<std::string, GtkWidget *> shortcut_buttons;
   GtkWidget *shortcut_status = nullptr;
@@ -40,6 +49,9 @@ struct Settings {
       std::make_shared<std::atomic<bool>>(true);
   ~Settings() {
     alive->store(false);
+#ifdef RIMES_GATEWAY_CLIPBOARD
+    gateway_clipboard.reset();
+#endif
     if (window) {
       g_signal_handlers_disconnect_by_data(window, this);
       gtk_widget_destroy(window);
@@ -78,6 +90,10 @@ struct Settings {
       g_object_set(gtk_settings_get_default(), "gtk-enable-animations", FALSE,
                    nullptr);
     Theme(saved.at("theme"));
+#ifdef RIMES_GATEWAY_CLIPBOARD
+    gateway_clipboard = std::make_unique<rimes::capsule::DesktopClipboard>([](auto, auto, auto) {}, [](auto) {});
+    gateway_clipboard->Configure(false, false);
+#endif
     window = offscreen ? gtk_offscreen_window_new()
                        : application ? gtk_application_window_new(application) : gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "XSIME 设置");
@@ -180,6 +196,9 @@ struct Settings {
   }
   void Select(std::string next, const std::string &page = "") {
     StopShortcutRecording();
+#ifdef RIMES_GATEWAY_CLIPBOARD
+    if (gateway_clipboard) gateway_clipboard->CancelWrites();
+#endif
     ++page_revision;
     shortcut_buttons.clear(); shortcut_status = nullptr;
     route = std::move(next);
@@ -207,7 +226,10 @@ struct Settings {
         Class(b, "selected");
       Add(segments, b);
     }
-    feedback = Label(message, "tiny");
+    std::string breadcrumb = r.at("title");
+    for (const auto& page : r.at("subpages")) if (page[0] == subpage) breadcrumb += " · " + page[1].get<std::string>();
+    feedback = Label(message.empty() ? breadcrumb : message, "tiny");
+    gtk_label_set_xalign(GTK_LABEL(feedback), 1);
     // A long validation message must not change the native window geometry.
     gtk_label_set_ellipsize(GTK_LABEL(feedback), PANGO_ELLIPSIZE_END);
     gtk_widget_set_tooltip_text(feedback, message.c_str());
@@ -236,6 +258,8 @@ struct Settings {
       Plugins(body);
     else if (route == "core.connectors" && subpage == "ai-model")
       Connectors(body);
+    else if (route == "core.connectors" && subpage == "local-gateway")
+      Gateway(body);
     else if (route == "core.appearance")
       Appearance(body);
     else if (route == "core.capsule")
@@ -653,6 +677,119 @@ struct Settings {
                          : "尚未保存密钥；支持无需密钥的本机服务。",
                      "caption"));
   }
+  void CopyGateway(bool supplementary) {
+#ifdef RIMES_GATEWAY_CLIPBOARD
+    Try([&] {
+      saved = config.Load();
+      if (!saved.at("gatewayEnabled").get<bool>()) { Message("本地网关已关闭"); return; }
+      auto bearer = GatewayAccess().Current();
+      auto value = GatewayConfiguration(gateway_client, saved.at("gatewayPort"), bearer, supplementary);
+      auto life = alive;
+      const auto revision = saved.at("revision").get<std::string>();
+      const auto directory = UserRoot();
+      const auto page = page_revision;
+      bool queued = gateway_clipboard && gateway_clipboard->Restore(
+        rimes::capsule::ClipboardArchive{{{"text/plain;charset=utf-8", value}, {"UTF8_STRING", value}}}, true,
+        [this, life, page](bool success) {
+          auto* callback = new std::function<void()>([this, life, page, success] {
+            if (life->load() && page_revision == page)
+              Message(success ? "已复制配置，60 秒后清理本次复制" : "复制未完成，请检查桌面剪贴板权限或重新复制");
+          });
+          g_idle_add_full(G_PRIORITY_DEFAULT, +[](gpointer raw)->gboolean {
+            (*static_cast<std::function<void()>*>(raw))(); return G_SOURCE_REMOVE;
+          }, callback, +[](gpointer raw) { delete static_cast<std::function<void()>*>(raw); });
+        }, [directory, revision, bearer, life](const auto& publish) {
+          if (!life->load()) return;
+          GatewayAccess(directory / "gateway").WithBearer(bearer, [&] {
+            ConfigurationStore(directory / "configuration", false).WithGateway(revision, [&] {
+              if (life->load()) publish();
+            });
+          });
+        });
+      rimes::capsule::EraseSecret(bearer);
+      rimes::capsule::EraseSecret(value);
+      Message(queued ? "正在复制配置…" : "复制未完成，请检查桌面剪贴板权限或重试");
+    });
+#else
+    (void)supplementary;
+    Message("复制网关配置需要 Linux 完整版的桌面剪贴板组件。");
+#endif
+  }
+  void Gateway(GtkWidget* body) {
+    const bool enabled = saved.at("gatewayEnabled");
+    auto* row = Class(Row(10), "shortcut-row");
+    gtk_widget_set_size_request(row, 650, 46);
+    auto* tile = Class(gtk_event_box_new(), "gateway-icon-tile");
+    gtk_widget_set_size_request(tile, 30, 30);
+    gtk_widget_set_valign(tile, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_start(tile, 11);
+    auto* glyph = Icon("network", 19);
+    gtk_widget_set_halign(glyph, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(glyph, GTK_ALIGN_CENTER);
+    gtk_container_add(GTK_CONTAINER(tile), glyph);
+    Add(row, tile);
+    auto* label = Label("启用本地网关", "name");
+    gtk_widget_set_tooltip_text(label, "允许本机智能体通过标准 MCP / HTTP 推送待确认内容；配置仅指向 127.0.0.1。");
+    Add(row, label, true);
+    auto* toggle = gtk_switch_new();
+    gtk_widget_set_valign(toggle, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_end(toggle, 10);
+    atk_object_set_name(gtk_widget_get_accessible(toggle), "启用本地网关");
+    gtk_switch_set_active(GTK_SWITCH(toggle), enabled);
+    g_signal_connect(toggle, "state-set", G_CALLBACK(+[](GtkSwitch*, gboolean state, gpointer raw)->gboolean {
+      auto* self = static_cast<Settings*>(raw);
+      self->Try([&] { auto next = self->saved; next["gatewayEnabled"] = bool(state); self->Save(next); });
+      // Rebuild after the emitting widget returns to GTK.
+      auto life = self->alive;
+      auto* callback = new std::function<void()>([self, life] { if (life->load() && self->route == "core.connectors" && self->subpage == "local-gateway") self->Select(self->route, self->subpage); });
+      g_idle_add_full(G_PRIORITY_DEFAULT, +[](gpointer p)->gboolean { (*static_cast<std::function<void()>*>(p))(); return G_SOURCE_REMOVE; }, callback, +[](gpointer p) { delete static_cast<std::function<void()>*>(p); });
+      return FALSE;
+    }), this);
+    Add(row, toggle);
+    Add(body, row);
+    auto* panel = Class(Column(10), "panel");
+    gtk_widget_set_size_request(panel, 650, -1);
+    gtk_widget_set_opacity(panel, enabled ? 1 : 0.55);
+    auto* tabs = Class(Row(0), "gateway-tabs");
+    gtk_box_set_homogeneous(GTK_BOX(tabs), TRUE);
+    gtk_widget_set_size_request(tabs, 626, -1);
+    for (const auto& client : GatewayClients()) {
+      const std::string id = client.at("id"), title = client.at("title");
+      auto* button = Button(title, [this, id] { gateway_client = id; Select(route, subpage); }, "segment");
+      if (id == gateway_client) Class(button, "selected");
+      gtk_widget_set_sensitive(button, enabled);
+      Add(tabs, button, true);
+    }
+    Add(panel, tabs);
+    std::string description;
+    for (const auto& client : GatewayClients()) if (client.at("id") == gateway_client) description = client.at("detail");
+    auto* detail = Class(Label(description, "caption"), "gateway-detail");
+    gtk_widget_set_size_request(detail, 626, -1);
+    gtk_label_set_line_wrap(GTK_LABEL(detail), TRUE);
+    Add(panel, detail);
+    auto section = [&](const char* title, const char* copy, bool supplementary) {
+      auto* header = Row(12);
+      gtk_widget_set_size_request(header, 626, -1);
+      Add(header, Label(title, "name"), true);
+      auto* button = Button(copy, [this, supplementary] { CopyGateway(supplementary); }, "gateway-copy");
+      gtk_widget_set_sensitive(button, enabled);
+      Add(header, button);
+      Add(panel, header);
+      // The preview never opens the token file.
+      auto* preview = Class(Label(GatewayConfiguration(gateway_client, saved.at("gatewayPort"), "••••••••", supplementary)), "gateway-config");
+      gtk_widget_set_size_request(preview, 626, -1);
+      gtk_label_set_line_wrap(GTK_LABEL(preview), TRUE);
+      gtk_label_set_line_wrap_mode(GTK_LABEL(preview), PANGO_WRAP_CHAR);
+      gtk_label_set_selectable(GTK_LABEL(preview), TRUE);
+      gtk_label_set_max_width_chars(GTK_LABEL(preview), 100);
+      atk_object_set_name(gtk_widget_get_accessible(preview), supplementary ? "附加配置预览" : "网关配置预览");
+      Add(panel, preview);
+    };
+    section("配置预览（令牌已脱敏）", "复制配置", false);
+    if (gateway_client == "codex") section("环境变量（当前预览已脱敏）", "复制环境变量", true);
+    if (gateway_client == "claudeCode") section("终端命令（可选，当前预览已脱敏）", "复制终端命令", true);
+    Add(body, panel);
+  }
   void Connectors(GtkWidget *body) {
     auto *row = Row(8);
     gtk_widget_set_size_request(row, 650, 68);
@@ -965,16 +1102,16 @@ struct Settings {
   }
 };
 
-GtkWidget *FindControl(GtkWidget *root, const std::string &name) {
+GtkWidget *FindControl(GtkWidget *root, const std::string &name, bool labels = false) {
   const auto *label = atk_object_get_name(gtk_widget_get_accessible(root));
-  if (label && name == label && !GTK_IS_LABEL(root))
+  if (label && name == label && (labels || !GTK_IS_LABEL(root)))
     return root;
   if (!GTK_IS_CONTAINER(root))
     return nullptr;
   auto *children = gtk_container_get_children(GTK_CONTAINER(root));
   GtkWidget *found = nullptr;
   for (auto *item = children; item && !found; item = item->next)
-    found = FindControl(GTK_WIDGET(item->data), name);
+    found = FindControl(GTK_WIDGET(item->data), name, labels);
   g_list_free(children);
   return found;
 }
@@ -1008,7 +1145,7 @@ int SettingsSmoke() {
     app.Build(true);
     gtk_widget_show_all(app.window);
     auto control = [&](const char *name) {
-      auto *widget = FindControl(app.root, name);
+      auto *widget = FindControl(app.root, name, std::string(name).find("配置预览") != std::string::npos);
       if (!widget)
         throw std::runtime_error("Missing control");
       return widget;
@@ -1078,6 +1215,43 @@ int SettingsSmoke() {
     click("保存");
     check(app.config.Load() == before);
     check(app.message.find("secret") == std::string::npos);
+    phase = "gateway";
+    app.Select("core.connectors", "local-gateway");
+    check(!std::filesystem::exists(root / "user/gateway/token"));
+    click("Codex");
+    check(std::string(gtk_label_get_text(GTK_LABEL(control("网关配置预览")))).find("bearer_token_env_var") != std::string::npos);
+    check(std::string(gtk_label_get_text(GTK_LABEL(control("附加配置预览")))).find("••••••••") != std::string::npos);
+    click("Claude Code");
+    check(std::string(gtk_label_get_text(GTK_LABEL(control("附加配置预览")))).find("claude mcp add") != std::string::npos);
+    check(!std::filesystem::exists(root / "user/gateway/token"));
+    gtk_switch_set_active(GTK_SWITCH(control("启用本地网关")), false);
+    while (gtk_events_pending()) gtk_main_iteration();
+    check(!app.config.Load().at("gatewayEnabled").get<bool>() && !gtk_widget_get_sensitive(control("复制配置")) && !gtk_widget_get_sensitive(control("Cursor")));
+    gtk_switch_set_active(GTK_SWITCH(control("启用本地网关")), true);
+    while (gtk_events_pending()) gtk_main_iteration();
+    check(app.config.Load().at("gatewayEnabled").get<bool>());
+#ifdef RIMES_GATEWAY_CLIPBOARD
+    click("Cursor");
+    SettleLayout();
+    click("复制配置");
+    for (unsigned wait = 0; wait < 100 && app.message.find("已复制配置") == std::string::npos; ++wait) {
+      while (gtk_events_pending()) gtk_main_iteration();
+      g_usleep(10000);
+    }
+    check(app.message.find("已复制配置") != std::string::npos);
+    const auto token = GatewayAccess(root / "user/gateway").Current();
+    auto* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+    auto* copied = gtk_clipboard_wait_for_text(clipboard);
+    check(copied && std::string(copied).find(token) != std::string::npos);
+    g_free(copied);
+    check(gtk_clipboard_wait_is_target_available(clipboard, gdk_atom_intern_static_string("application/x-rimes-sensitive")));
+    check(std::string(gtk_label_get_text(GTK_LABEL(control("网关配置预览")))).find(token) == std::string::npos);
+    gtk_clipboard_set_text(clipboard, "new user clipboard", -1);
+    app.gateway_clipboard->CancelWrites();
+    copied = gtk_clipboard_wait_for_text(clipboard);
+    check(copied && std::string(copied) == "new user clipboard");
+    g_free(copied);
+#endif
     phase = "plugins";
     app.Select("core.plugins", "buffer-plugins");
     for (const auto &package : app.packages.Entries()) {
@@ -1115,12 +1289,13 @@ int SettingsSmoke() {
 } // namespace
 int main(int argc, char **argv) {
   if (argc == 2 && std::string_view(argv[1]) == "--help") {
-    std::cout << "Usage: rimes-settings [--render DIRECTORY | --smoke]\n";
+    std::cout << "Usage: rimes-settings [--render DIRECTORY | --render-gateway DIRECTORY | --smoke]\n";
     return 0;
   }
   try {
     const bool smoke = argc == 2 && std::string_view(argv[1]) == "--smoke";
-    const bool render = argc == 3 && std::string_view(argv[1]) == "--render";
+    const bool gateway_render = argc == 3 && std::string_view(argv[1]) == "--render-gateway";
+    const bool render = gateway_render || (argc == 3 && std::string_view(argv[1]) == "--render");
     if (argc != 1 && !render && !smoke)
       return 2;
     const std::filesystem::path output = render ? argv[2] : "";
@@ -1166,6 +1341,21 @@ int main(int argc, char **argv) {
       std::filesystem::create_directories(output);
       gtk_widget_show_all(app.window);
       Json manifest = Json::array();
+      if (gateway_render) {
+        for (bool enabled : {true, false}) for (const auto* client : {"cursor", "codex", "claudeCode", "genericMCP"}) {
+          app.saved["gatewayEnabled"] = enabled;
+          app.saved["gatewayPort"] = 47700;
+          app.gateway_client = client;
+          app.Select("core.connectors", "local-gateway");
+          gtk_window_resize(GTK_WINDOW(app.window), 980, 680);
+          SettleLayout();
+          const std::string name = std::string("gateway-") + client + (enabled ? "-enabled.png" : "-disabled.png");
+          if (!Render(app.root, (output / name).string())) return 1;
+          manifest.push_back({{"file", name}, {"client", client}, {"enabled", enabled}, {"theme", app.saved.at("theme")}, {"width", 980}, {"height", 680}});
+        }
+        std::ofstream(output / "manifest.json") << manifest.dump(2) << '\n';
+        return 0;
+      }
       for (const auto &route : Visuals().at("routes"))
         for (const auto &page : route.at("subpages")) {
           app.Select(route.at("id"), page[0]);

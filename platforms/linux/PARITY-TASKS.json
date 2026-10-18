@@ -401,9 +401,10 @@
         "外部输入进入待审核收件，不自动上屏或拉起 Buffer；支持接受/拒绝和撤销来源。",
         "覆盖未授权、坏请求、重放/重复、取消、关窗和安全态；不扩展到尚未在 macOS 落地的 SSE/SSH 客户端。"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "issue": 170,
-      "url": "https://github.com/scholay/xsime/issues/170"
+      "url": "https://github.com/scholay/xsime/issues/170",
+      "visual_status": "requires_review"
     },
     {
       "order": 21,

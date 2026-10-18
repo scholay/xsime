@@ -117,6 +117,7 @@ if [[ ! -x "$BUILD_DIR/rimes-capsule-fcitx-e2e" ]]; then
 fi
 echo "==> in-process Fcitx5 Capsule (show / insert / search / focus / password)"
 "$BUILD_DIR/rimes-capsule-fcitx-e2e" "$BUILD_DIR" "." "test-data"
+RIMES_PRIVATE_SESSION_TEST=1 dbus-run-session -- "$BUILD_DIR/rimes-gateway-fcitx-e2e" "$BUILD_DIR" "." "test-data"
 
 if [[ ! -x "$BUILD_DIR/rimes-capsule-respawn-e2e" || ! -x "$BUILD_DIR/rimes-capsule-ui-stub" ]]; then
     echo "error: missing rimes-capsule-respawn-e2e or rimes-capsule-ui-stub" >&2

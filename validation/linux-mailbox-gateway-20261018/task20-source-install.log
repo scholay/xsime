@@ -1,0 +1,22 @@
+test_cli_rejects_missing_values_unknown_options_and_root (test_install_lifecycle.InstallLifecycleTests.test_cli_rejects_missing_values_unknown_options_and_root) ... ok
+test_corrupt_or_wrong_prefix_receipt_stops_without_deletion (test_install_lifecycle.InstallLifecycleTests.test_corrupt_or_wrong_prefix_receipt_stops_without_deletion) ... ok
+test_dry_run_is_read_only_and_missing_files_are_tolerated (test_install_lifecycle.InstallLifecycleTests.test_dry_run_is_read_only_and_missing_files_are_tolerated) ... ok
+test_legacy_install_uses_original_manifest_and_known_data_only (test_install_lifecycle.InstallLifecycleTests.test_legacy_install_uses_original_manifest_and_known_data_only) ... ok
+test_legacy_manifest_with_wrong_prefix_is_rejected (test_install_lifecycle.InstallLifecycleTests.test_legacy_manifest_with_wrong_prefix_is_rejected) ... ok
+test_manifest_cannot_target_user_data_or_escape_prefix (test_install_lifecycle.InstallLifecycleTests.test_manifest_cannot_target_user_data_or_escape_prefix) ... ok
+test_modified_file_stops_before_any_deletion (test_install_lifecycle.InstallLifecycleTests.test_modified_file_stops_before_any_deletion) ... ok
+test_replaced_file_symlink_stops_uninstall_and_install (test_install_lifecycle.InstallLifecycleTests.test_replaced_file_symlink_stops_uninstall_and_install) ... ok
+test_replaced_parent_symlink_preserves_external_files (test_install_lifecycle.InstallLifecycleTests.test_replaced_parent_symlink_preserves_external_files) ... ok
+test_roundtrip_without_build_preserves_all_personal_data (test_install_lifecycle.InstallLifecycleTests.test_roundtrip_without_build_preserves_all_personal_data) ... ok
+test_skip_build_cannot_change_the_compiled_prefix (test_install_lifecycle.InstallLifecycleTests.test_skip_build_cannot_change_the_compiled_prefix) ... ok
+test_system_prefix_with_destdir_never_touches_host (test_install_lifecycle.InstallLifecycleTests.test_system_prefix_with_destdir_never_touches_host) ... ok
+test_upgrade_keeps_ownership_of_retired_files (test_install_lifecycle.InstallLifecycleTests.test_upgrade_keeps_ownership_of_retired_files) ... ok
+test_default_tracks_product_version (test_package_version.PackageVersionTests.test_default_tracks_product_version) ... ok
+test_formal_version_must_match_product_target (test_package_version.PackageVersionTests.test_formal_version_must_match_product_target) ... ok
+test_invalid_versions_are_rejected_before_building (test_package_version.PackageVersionTests.test_invalid_versions_are_rejected_before_building) ... ok
+test_preview_uses_debian_ordering (test_package_version.PackageVersionTests.test_preview_uses_debian_ordering) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 2.084s
+
+OK

@@ -1,0 +1,37 @@
+{
+  "clients" : [
+    {
+      "configuration" : "{\n  \"mcpServers\": {\n    \"rimes\": {\n      \"type\": \"http\",\n      \"url\": \"http:\/\/127.0.0.1:47700\/mcp\",\n      \"headers\": {\n        \"Authorization\": \"Bearer ••••••••\"\n      }\n    }\n  }\n}",
+      "detail" : "粘贴到项目的 .cursor\/mcp.json 或用户级 ~\/.cursor\/mcp.json。",
+      "id" : "cursor",
+      "supplementary" : "",
+      "title" : "Cursor"
+    },
+    {
+      "configuration" : "[mcp_servers.rimes]\nurl = \"http:\/\/127.0.0.1:47700\/mcp\"\nbearer_token_env_var = \"RIMES_MCP_TOKEN\"\ndefault_tools_approval_mode = \"prompt\"",
+      "detail" : "粘贴到 ~\/.codex\/config.toml；令牌通过环境变量提供，不写进配置文件。",
+      "id" : "codex",
+      "supplementary" : "export RIMES_MCP_TOKEN='••••••••'",
+      "title" : "Codex"
+    },
+    {
+      "configuration" : "{\n  \"mcpServers\": {\n    \"rimes\": {\n      \"type\": \"http\",\n      \"url\": \"http:\/\/127.0.0.1:47700\/mcp\",\n      \"headers\": {\n        \"Authorization\": \"Bearer ••••••••\"\n      }\n    }\n  }\n}",
+      "detail" : "粘贴到项目的 .mcp.json，或复制下方可选的命令在终端注册。",
+      "id" : "claudeCode",
+      "supplementary" : "claude mcp add --transport http rimes http:\/\/127.0.0.1:47700\/mcp --header \"Authorization: Bearer ••••••••\"",
+      "title" : "Claude Code"
+    },
+    {
+      "configuration" : "{\n  \"mcpServers\": {\n    \"rimes\": {\n      \"type\": \"http\",\n      \"url\": \"http:\/\/127.0.0.1:47700\/mcp\",\n      \"headers\": {\n        \"Authorization\": \"Bearer ••••••••\"\n      }\n    }\n  }\n}",
+      "detail" : "适用于接受 Streamable HTTP MCP JSON 配置的客户端。",
+      "id" : "genericMCP",
+      "supplementary" : "",
+      "title" : "通用 MCP"
+    }
+  ],
+  "purpose" : "public-gateway-settings",
+  "schemaVersion" : 1,
+  "sources" : {
+    "Sources\/RimeBuffer\/SettingsWindow.swift" : "1c7033c5b4b8f500ef706b554556ba0985845cc390f2d184b64511c0f03dbcff"
+  }
+}

@@ -26,7 +26,7 @@ installation, status, cancellation and repair; see the
 [resource instructions](../runtime/README.md#local-translation-resources).
 Its Python 3.12 runtime is included in deb dependencies. Downloaded resources
 remain in the user directory when either source or deb installation is removed.
-The [Mailbox host](../mailbox/README.md) now provides independent navigation, persistent threads and local notes; AI conversation, PTY and inbox-transfer adapters are tracked separately. Buffer and Capsule behavior are specified in
+The [Mailbox host](../mailbox/README.md) now provides independent navigation, persistent threads, local notes, reviewed Buffer/Capsule transfers and a loopback HTTP/MCP gateway. AI conversation and PTY adapters are tracked separately. Buffer and Capsule behavior are specified in
 [`../buffer/SPEC.md`](../buffer/SPEC.md) and
 [`../capsule/SPEC.md`](../capsule/SPEC.md). Hooks live in
 `src/engine/rime_hooks.hpp`.
@@ -61,7 +61,7 @@ The [Mailbox host](../mailbox/README.md) now provides independent navigation, pe
   See [Capsule usage](../capsule/README.md).
 
 macOS-only behaviour that is **not** reproduced here: custom candidate chrome,
-Mailbox AI/PTY adapters and inbox transfers, Capsule iCloud, advanced capture editing and audio,
+Mailbox AI/PTY adapters, Capsule iCloud, advanced capture editing and audio,
 Buffer stream/music plugins, cross-batch chord pairing,
 IMK `Delivery.insert`. See [`../buffer/SPEC.md`](../buffer/SPEC.md) and
 [`../capsule/SPEC.md`](../capsule/SPEC.md) for the explicit gap lists.

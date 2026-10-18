@@ -331,9 +331,50 @@ void Store::Save(Json document) const {
 }
 Json Store::Create(const Json& source, const std::string& title, const std::string& body,
                    const std::string& module, const std::string& png) {
+    return CreateReceipt(source, title, body, module, png, "plain", nullptr);
+}
+Json Store::ReceiveGateway(const Json& source, const std::string& title, const std::string& body,
+                           const std::string& format, const std::string& nonce,
+                           const std::string& digest) {
+    Need(source.at("kind") == "http" || source.at("kind") == "mcp", "无效的网关来源");
+    Need(!TrimText(body).empty() && capsule::CharacterCount(body) <= 20000 &&
+             body.size() <= 256 * 1024,
+         "收件正文为空或超过上限");
+    Need(format == "plain" || format == "markdown" || format == "json", "无效的正文格式");
+    Need((nonce.empty() && digest.empty()) ||
+             (nonce.size() == 64 && digest.size() == 64 &&
+              nonce.find_first_not_of("0123456789abcdef") == nonce.npos &&
+              digest.find_first_not_of("0123456789abcdef") == digest.npos),
+         "无效的请求标识");
+    return CreateReceipt(source, title, body, "inbox", "", format,
+                         Json{{"nonce", nonce}, {"digest", digest}});
+}
+Json Store::CreateReceipt(const Json& source, const std::string& title, const std::string& body,
+                          const std::string& module, const std::string& png,
+                          const std::string& format, const Json& gateway) {
     auto lock = files_.Lock(false);
     auto state = Load();
     auto& document = state.document;
+    if (!gateway.is_null()) {
+        std::size_t count = 0, characters = 0;
+        for (const auto& row : document.at("threads")) {
+            if (!gateway.at("nonce").get<std::string>().empty() &&
+                row.value("linuxGateway", Json::object()).value("nonce", "") ==
+                    gateway.at("nonce")) {
+                Need(row.at("linuxGateway").at("digest") == gateway.at("digest"),
+                     "请求标识已用于不同内容");
+                return row;
+            }
+            if (!Optional(row, "review") && row.at("review").at("state") == "pending") {
+                ++count;
+                for (const auto& item : row.at("messages"))
+                    if (item.at("id") == row.at("review").at("messageID"))
+                        characters += capsule::CharacterCount(item.at("body").get<std::string>());
+            }
+        }
+        Need(count < 50 && characters + capsule::CharacterCount(body) <= 1048576,
+             "待审核收件已达到上限");
+    }
     Need(document.at("nextSequence").get<std::int64_t>() < std::numeric_limits<std::int64_t>::max(),
          "Mailbox 会话序号超过上限");
     Need(!AI(source) && module == "inbox", "单向来源只能创建收件");
@@ -347,6 +388,9 @@ Json Store::Create(const Json& source, const std::string& title, const std::stri
                 {"createdAt", date},
                 {"updatedAt", date}};
     thread["messages"][0]["author"] = source.at("displayName");
+    thread["messages"][0]["format"] = format;
+    if (!gateway.is_null())
+        thread["linuxGateway"] = gateway;
     thread["review"] = {{"messageID", thread.at("messages").at(0).at("id")}, {"state", "pending"}};
     if (!TrimText(title).empty())
         thread["title"] = title;
