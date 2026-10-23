@@ -53,9 +53,11 @@ app's signature carries concrete groups.
   keyboard extension: not performed. No real credentials or user data were used.
 - New release, Apple upload, review and availability: not yet performed.
 
-Candidate: iOS **1.1.9 (65)**; other platforms remain on the 1.1.8 product baseline.
-The cloud archive and automated iOS release now use the iOS version anchor,
-while checking that it remains on the baseline major/minor line.
+The maintainer requested no version bump while validating this repair. Project
+version/build anchors remain **1.1.8 (64)**. No new build has been uploaded or
+submitted for review. A previously prepared App Store Connect 1.1.9 draft remains
+unsubmitted and is not a published version. App Store publication is on hold:
+[Apple requires an incremental version for an update to an already released app](https://developer.apple.com/help/app-store-connect/update-your-app/create-a-new-version).
 
 Apple Build Metadata for the exact uploaded 1.1.8 (64) build was subsequently
 read after signing in: both targets contain the full expected Keychain group.
@@ -63,8 +65,11 @@ See [Apple build metadata](apple-build-metadata.json). This rules out a missing
 shared Keychain entitlement in that upload. The page does not expose the custom
 Info.plist runtime group; original IPA bytes remain unavailable.
 
-The current Mac has Command Line Tools and a development signing identity, but
-no discoverable full Xcode installation. GitHub repository and `ios-app-store`
+At the initial inspection, this Mac had Command Line Tools and a development
+signing identity but no full Xcode installation. GitHub repository and `ios-app-store`
 environment secret lists were empty on October 23. The existing automated
 App Store workflow therefore cannot sign/upload until its credentials are
 configured, or the established interactive cloud-signing path is available.
+The maintainer subsequently authorized installing official Xcode 26.6. Its
+Apple-signed archive was verified and expanded, but macOS rejected launching
+the app as incompatible with the current OS; first-run setup is not complete.
