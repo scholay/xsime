@@ -885,6 +885,7 @@
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RIMES_APP_GROUP = group.org.scholay.rimes.ios;
+				RIMES_KEYCHAIN_GROUP = 585J2TL9U6.org.scholay.rimes.ios.shared;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OBJC_BRIDGING_HEADER = Bridge/RimeMobile.h;
@@ -1046,6 +1047,7 @@
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RIMES_APP_GROUP = group.org.scholay.rimes.ios;
+				RIMES_KEYCHAIN_GROUP = 585J2TL9U6.org.scholay.rimes.ios.shared;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OBJC_BRIDGING_HEADER = Bridge/RimeMobile.h;

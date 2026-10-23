@@ -33,7 +33,7 @@
 	<key>RIMESAppGroup</key>
 	<string>$(RIMES_APP_GROUP)</string>
 	<key>RIMESKeychainGroup</key>
-	<string>$(AppIdentifierPrefix)org.scholay.rimes.ios.shared</string>
+	<string>$(RIMES_KEYCHAIN_GROUP)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

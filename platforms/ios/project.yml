@@ -26,6 +26,8 @@ settings:
     CLANG_CXX_LANGUAGE_STANDARD: c++17
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     RIMES_APP_GROUP: group.org.scholay.rimes.ios
+    # Keep the existing group explicit: AppIdentifierPrefix is empty in unsigned CI archives.
+    RIMES_KEYCHAIN_GROUP: 585J2TL9U6.org.scholay.rimes.ios.shared
     SWIFT_OBJC_BRIDGING_HEADER: Bridge/RimeMobile.h
     HEADER_SEARCH_PATHS: '$(SRCROOT)/../../Vendor/ios-build/headers'
     OTHER_LDFLAGS: ['$(inherited)', '-lc++', '-all_load']
@@ -68,7 +70,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleLocalizations: [en, zh-Hans, zh-Hant]
         RIMESAppGroup: $(RIMES_APP_GROUP)
-        RIMESKeychainGroup: $(AppIdentifierPrefix)org.scholay.rimes.ios.shared
+        RIMESKeychainGroup: $(RIMES_KEYCHAIN_GROUP)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         ITSAppUsesNonExemptEncryption: false
@@ -76,7 +78,7 @@ targets:
       path: App/RIMES.entitlements
       properties:
         com.apple.security.application-groups: [group.org.scholay.rimes.ios]
-        keychain-access-groups: ['$(AppIdentifierPrefix)org.scholay.rimes.ios.shared']
+        keychain-access-groups: ['$(RIMES_KEYCHAIN_GROUP)']
   RIMESKeyboard:
     type: app-extension
     platform: iOS
@@ -112,7 +114,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleLocalizations: [en, zh-Hans, zh-Hant]
         RIMESAppGroup: $(RIMES_APP_GROUP)
-        RIMESKeychainGroup: $(AppIdentifierPrefix)org.scholay.rimes.ios.shared
+        RIMESKeychainGroup: $(RIMES_KEYCHAIN_GROUP)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
@@ -125,7 +127,7 @@ targets:
       path: Keyboard/RIMESKeyboard.entitlements
       properties:
         com.apple.security.application-groups: [group.org.scholay.rimes.ios]
-        keychain-access-groups: ['$(AppIdentifierPrefix)org.scholay.rimes.ios.shared']
+        keychain-access-groups: ['$(RIMES_KEYCHAIN_GROUP)']
   RIMESTests:
     type: bundle.unit-test
     platform: iOS

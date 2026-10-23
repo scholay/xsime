@@ -4,6 +4,7 @@ import hashlib
 import json
 import plistlib
 import re
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -39,6 +40,8 @@ def validate_archive(archive, version, build):
             raise ValueError(f'{bundle.name}: missing executable')
         if not (bundle / 'PrivacyInfo.xcprivacy').is_file():
             raise ValueError(f'{bundle.name}: missing privacy manifest')
+    verifier = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'platforms/ios/scripts/verify-release-ipa.py'))
+    verifier['validate_unsigned_app'](app)
 
 
 def main(args):

@@ -8,7 +8,7 @@
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)org.scholay.rimes.ios.shared</string>
+		<string>$(RIMES_KEYCHAIN_GROUP)</string>
 	</array>
 </dict>
 </plist>

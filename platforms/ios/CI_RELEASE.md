@@ -20,6 +20,15 @@ remain enabled. English, Simplified Chinese and Traditional Chinese store notes
 were saved and read back; TestFlight uses the existing English and Simplified
 Chinese locales.
 
+October 23 follow-up: the original build-64 unsigned CI archive contains
+`org.scholay.rimes.ios.shared` in both bundles' `RIMESKeychainGroup`, without
+the established `585J2TL9U6.` prefix. Signing a copy with the correct entitlement
+leaves that runtime value unchanged. The repair pins the existing full group in
+`RIMES_KEYCHAIN_GROUP` for both Info.plist and entitlements and gates unsigned
+device builds/archives as well as the final IPA. See the
+[evidence and acceptance limits](../../validation/ios-keychain-20261023/README.md).
+The originally uploaded signed IPA has not been inspected in this follow-up.
+
 The CI archive came from `cbe03560f7582326c1cd43f5c4f6a7a5304121e9`,
 [run 39776428911](https://github.com/scholay/xsime/actions/runs/39776428911).
 The later `851f02fc` main integration changes only three Windows files, so the
@@ -63,12 +72,19 @@ For a maintainer-authorized release using that existing account:
    sign a copy with the existing matching development identity/profiles, including
    both targets' App Group and shared Keychain entitlements. Sign nested code
    before the keyboard extension and containing app; verify the resulting
-   entitlements. This preparation is signing only, not a local build or test.
+   entitlements. Before any signing, run
+   `python3 platforms/ios/scripts/verify-release-ipa.py --check-unsigned-app <archive>/Products/Applications/RIMES.app`.
+   Both bundles must contain `585J2TL9U6.org.scholay.rimes.ios.shared` in
+   `RIMESKeychainGroup`; signing does not repair a missing Info.plist prefix.
+   This preparation is signing only, not a local build or test.
 4. Open the copy in Xcode Organizer. Use Custom > App Store Connect > Export,
    automatic cloud signing and the existing authorized Apple Account. Turn off
    Manage version and build number. Verify the exported IPA with
    `scripts/verify-release-ipa.py`, then inspect both targets' signed App Group
-   and shared Keychain entitlements before uploading. The existing upload API
+   and shared Keychain entitlements before uploading. The verifier compares the
+   runtime group to the actual signed group and to the profile's explicit or
+   wildcard allowance, and records both targets' groups in the verification JSON.
+   The existing upload API
    key can upload this distribution-signed IPA even though it cannot cloud-sign
    an archive or submit App Review. Never upload a development-signed copy.
 5. Read back processing in App Store Connect, select that exact build in the

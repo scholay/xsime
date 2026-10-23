@@ -1,0 +1,54 @@
+{
+  "original_ci_run": "https://github.com/scholay/xsime/actions/runs/39776428911",
+  "artifact_id": 12426038858,
+  "ci_artifact_sha256": "08706edeb5704b3ae7cd1a6bb2dbda629b4ca2f3a3b24453b289569bdb10e6d2",
+  "source_commit": "cbe03560f7582326c1cd43f5c4f6a7a5304121e9",
+  "version": "1.1.8",
+  "build": "64",
+  "method": "Local ad-hoc signing of an extracted CI archive copy, then editing its Info.plist to the repaired build-setting value and signing again. No product rebuild or device installation.",
+  "before": [
+    {
+      "bundle": "org.scholay.rimes.ios.keyboard",
+      "before": "org.scholay.rimes.ios.shared",
+      "after_signing": "org.scholay.rimes.ios.shared",
+      "signed_keychain_groups": [
+        "585J2TL9U6.org.scholay.rimes.ios.shared"
+      ],
+      "matches": false
+    },
+    {
+      "bundle": "org.scholay.rimes.ios",
+      "before": "org.scholay.rimes.ios.shared",
+      "after_signing": "org.scholay.rimes.ios.shared",
+      "signed_keychain_groups": [
+        "585J2TL9U6.org.scholay.rimes.ios.shared"
+      ],
+      "matches": false
+    }
+  ],
+  "original_rejection": "RIMES.app: wrong Info.plist Keychain group: 'org.scholay.rimes.ios.shared'",
+  "after": [
+    {
+      "bundle": "org.scholay.rimes.ios.keyboard",
+      "runtime_group": "585J2TL9U6.org.scholay.rimes.ios.shared",
+      "signed_keychain_groups": [
+        "585J2TL9U6.org.scholay.rimes.ios.shared"
+      ],
+      "matches": true
+    },
+    {
+      "bundle": "org.scholay.rimes.ios",
+      "runtime_group": "585J2TL9U6.org.scholay.rimes.ios.shared",
+      "signed_keychain_groups": [
+        "585J2TL9U6.org.scholay.rimes.ios.shared"
+      ],
+      "matches": true
+    }
+  ],
+  "fixed_unsigned_group_gate": "passed",
+  "fixed_codesign_verify": "passed for both bundles",
+  "original_uploaded_ipa_available": false,
+  "device_runtime_tested": false,
+  "codesign_default_entitlement_format": "human-readable [Dict]",
+  "codesign_with_xml": "plistlib-compatible XML"
+}

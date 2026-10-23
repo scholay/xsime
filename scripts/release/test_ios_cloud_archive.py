@@ -19,12 +19,20 @@ class CloudArchiveTests(unittest.TestCase):
         (self.root / 'Info.plist').write_bytes(plistlib.dumps({'ApplicationProperties': {'ApplicationPath': 'Applications/RIMES.app'}}))
         for path, identifier in ((self.app, 'org.scholay.rimes.ios'), (self.extension, 'org.scholay.rimes.ios.keyboard')):
             path.mkdir(parents=True)
-            (path / 'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': identifier, 'CFBundleVersion': '62', 'CFBundleShortVersionString': '1.1.6', 'UIDeviceFamily': [1], 'CFBundleExecutable': 'RIMES'}))
+            (path / 'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': identifier, 'CFBundleVersion': '62', 'CFBundleShortVersionString': '1.1.6', 'UIDeviceFamily': [1], 'CFBundleExecutable': 'RIMES', 'RIMESKeychainGroup': '585J2TL9U6.org.scholay.rimes.ios.shared', 'RIMESAppGroup': 'group.org.scholay.rimes.ios'}))
             (path / 'RIMES').write_bytes(b'executable fixture')
             (path / 'PrivacyInfo.xcprivacy').write_bytes(plistlib.dumps({}))
 
     def test_complete_unsigned_archive_is_accepted(self):
         ARCHIVE.validate_archive(self.root, '1.1.6', '62')
+
+    def test_archive_with_lost_keychain_prefix_cannot_be_packaged(self):
+        path = self.extension / 'Info.plist'
+        info = plistlib.loads(path.read_bytes())
+        info['RIMESKeychainGroup'] = 'org.scholay.rimes.ios.shared'
+        path.write_bytes(plistlib.dumps(info))
+        with self.assertRaisesRegex(ValueError, 'Keychain group'):
+            ARCHIVE.validate_archive(self.root, '1.1.6', '62')
 
     def test_wrong_extension_build_is_rejected(self):
         path = self.extension / 'Info.plist'

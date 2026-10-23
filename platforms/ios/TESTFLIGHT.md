@@ -12,7 +12,7 @@ See `AppStore/README.md` for current state and `VALIDATION.md` for actual checks
 | Application | `org.scholay.rimes.ios` |
 | Keyboard extension | `org.scholay.rimes.ios.keyboard` |
 | App Group | `group.org.scholay.rimes.ios` |
-| Shared Keychain group | `$(AppIdentifierPrefix)org.scholay.rimes.ios.shared` |
+| Shared Keychain group | `585J2TL9U6.org.scholay.rimes.ios.shared`, supplied through `RIMES_KEYCHAIN_GROUP` even for unsigned archives |
 | Supported device/OS | iPhone, iOS 17+ |
 | Developer team | `585J2TL9U6`; App Store profiles and active free-app agreement verified |
 | App Store Connect app | `6814620242`, `RIMES: Chinese Keyboard`, publisher Haiyang Cui |
