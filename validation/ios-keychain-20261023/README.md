@@ -53,6 +53,16 @@ app's signature carries concrete groups.
   keyboard extension: not performed. No real credentials or user data were used.
 - New release, Apple upload, review and availability: not yet performed.
 
+Candidate: iOS **1.1.9 (65)**; other platforms remain on the 1.1.8 product baseline.
+The cloud archive and automated iOS release now use the iOS version anchor,
+while checking that it remains on the baseline major/minor line.
+
+Apple Build Metadata for the exact uploaded 1.1.8 (64) build was subsequently
+read after signing in: both targets contain the full expected Keychain group.
+See [Apple build metadata](apple-build-metadata.json). This rules out a missing
+shared Keychain entitlement in that upload. The page does not expose the custom
+Info.plist runtime group; original IPA bytes remain unavailable.
+
 The current Mac has Command Line Tools and a development signing identity, but
 no discoverable full Xcode installation. GitHub repository and `ios-app-store`
 environment secret lists were empty on October 23. The existing automated

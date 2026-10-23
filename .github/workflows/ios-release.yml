@@ -31,7 +31,7 @@ jobs:
         run: git merge-base --is-ancestor HEAD origin/main
       - name: Validate tag, release notes and build counter
         run: |
-          ruby -r ./platforms/ios/scripts/release-config.rb -e 'v=RimesRelease.version(ENV.fetch("GITHUB_REF_NAME")); RimesRelease.require_target(v,"VERSION"); RimesRelease.notes("platforms/ios",v); File.open(ENV.fetch("GITHUB_ENV"),"a") { |f| f.puts "IOS_BUILD_NUMBER=#{RimesRelease.build_number(ENV)}" }'
+          ruby -r ./platforms/ios/scripts/release-config.rb -e 'v=RimesRelease.version(ENV.fetch("GITHUB_REF_NAME")); RimesRelease.require_ios_target(v,"platforms/ios"); RimesRelease.notes("platforms/ios",v); File.open(ENV.fetch("GITHUB_ENV"),"a") { |f| f.puts "IOS_BUILD_NUMBER=#{RimesRelease.build_number(ENV)}" }'
       - name: Check required signing credentials
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}

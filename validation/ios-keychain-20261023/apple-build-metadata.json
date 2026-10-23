@@ -1,0 +1,38 @@
+{
+  "source": "App Store Connect Build Metadata, read via authenticated browser UI",
+  "source_url": "https://appstoreconnect.apple.com/apps/6814620242/testflight/ios/dbe673d0-00e0-4cab-900b-130799b29ba5/metadata",
+  "observed_date": "2026-10-23",
+  "version": "1.1.8",
+  "build": "64",
+  "binary_state": "Validated",
+  "original_file_name": "27e9889c-81a6-4328-9c3e-ac910d252575.ipa",
+  "bundles": [
+    {
+      "bundle_id": "org.scholay.rimes.ios",
+      "application-identifier": "585J2TL9U6.org.scholay.rimes.ios",
+      "beta-reports-active": true,
+      "get-task-allow": false,
+      "keychain-access-groups": [
+        "585J2TL9U6.org.scholay.rimes.ios.shared"
+      ],
+      "com.apple.developer.team-identifier": "585J2TL9U6",
+      "com.apple.security.application-groups": [
+        "group.org.scholay.rimes.ios"
+      ]
+    },
+    {
+      "bundle_id": "org.scholay.rimes.ios.keyboard",
+      "application-identifier": "585J2TL9U6.org.scholay.rimes.ios.keyboard",
+      "beta-reports-active": true,
+      "get-task-allow": false,
+      "keychain-access-groups": [
+        "585J2TL9U6.org.scholay.rimes.ios.shared"
+      ],
+      "com.apple.developer.team-identifier": "585J2TL9U6",
+      "com.apple.security.application-groups": [
+        "group.org.scholay.rimes.ios"
+      ]
+    }
+  ],
+  "limitation": "Apple UI exposes signed entitlements, not the custom RIMESKeychainGroup Info.plist value or original IPA bytes."
+}

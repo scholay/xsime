@@ -1,0 +1,5 @@
+{
+  "en-US": "Fixes an issue that could prevent saving AI configurations with OSStatus error -34018. Restores consistent access to securely stored API keys in the app and keyboard. Existing input schemes and personal settings are preserved.",
+  "zh-Hans": "修复保存 AI 配置时可能出现 OSStatus 错误 -34018 的问题，恢复主应用与键盘对安全存储的 API Key 的一致访问。保留现有输入方案与个人设置。",
+  "zh-Hant": "修復儲存 AI 設定時可能出現 OSStatus 錯誤 -34018 的問題，恢復主應用程式與鍵盤對安全儲存的 API Key 的一致存取。保留現有輸入方案與個人設定。"
+}

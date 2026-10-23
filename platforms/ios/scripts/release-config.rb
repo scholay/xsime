@@ -11,6 +11,17 @@ module RimesRelease
     raise 'Release tag must match the numeric VERSION product target' unless /\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\z/.match?(target) && target == version
     target
   end
+  def self.require_ios_target(version, root)
+    require 'yaml'
+    target = YAML.safe_load(File.read(File.join(root, 'project.yml'))).dig('settings', 'base', 'MARKETING_VERSION')
+    baseline = File.read(File.join(root, '../../VERSION')).strip
+    pattern = /\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\z/
+    raise 'Invalid iOS or product version' unless target.is_a?(String) && pattern.match?(target) && pattern.match?(baseline)
+    actual, minimum = [target, baseline].map { |v| v.split('.').map(&:to_i) }
+    raise 'iOS release must stay on the product major/minor line without patch rollback' unless actual[0,2] == minimum[0,2] && actual[2] >= minimum[2]
+    raise 'Release tag must match iOS MARKETING_VERSION' unless version == target
+    target
+  end
   def self.build_number(env)
     major = Integer(env.fetch('GITHUB_RUN_NUMBER')) + 100
     attempt = Integer(env.fetch('GITHUB_RUN_ATTEMPT', '1'))

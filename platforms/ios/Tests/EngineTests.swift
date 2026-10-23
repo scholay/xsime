@@ -203,6 +203,8 @@ import RimesCore
         engine.clear(); XCTAssertTrue(engine.currentSnapshot.candidates.isEmpty)
     }
     func testKeychainRoundTripAndNoKeyInConfig() throws {
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "RIMESKeychainGroup") as? String,
+                       "585J2TL9U6.org.scholay.rimes.ios.shared")
         let store = KeychainStore(), id = UUID()
         defer { try? store.delete(id) }
         try store.save("test-only-local-key",id:id)
