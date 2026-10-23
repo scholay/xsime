@@ -46,18 +46,32 @@ app's signature carries concrete groups.
 - Local release-tool suite: 118 tests passed, including 16 iOS archive/IPA tests.
 - Local signing reproduction: original runtime group rejected; corrected copy
   passes both group comparison and strict signature validation.
-- Full iOS build and hosted tests: pending remote CI.
+- Full iOS build and hosted tests passed on repair commit `bc1858a` in
+  [run 39942595962](https://github.com/scholay/xsime/actions/runs/39942595962):
+  281 tests, 5 conditional skips and 0 failures, including the Keychain
+  save/read/delete test and the unsigned device artifact group check.
+- The general CI and macOS runtime/package installation/upgrade checks passed.
+  [PR #276](https://github.com/scholay/xsime/pull/276) was squash-merged as
+  `9ed518bab8a43104469036f71ea901e99bc894d1`.
+- Xcode 27.1 cloud-signing comparison: both IPA signatures are valid, but the
+  original unprefixed runtime group remains unchanged after export and fails
+  both bundles' metadata checks. The corrected group passes the complete IPA
+  verifier, including with Python optimization enabled. These are old-archive
+  reproduction copies, not a new source build or either originally uploaded IPA.
+  See [cloud-signing comparison](cloud-signing-comparison.json) and
+  [optimized verifier results](verifier-cli-results.json).
 - Original uploaded App Store IPA: on another Mac and not obtained. Local
   signing reproduction is not evidence of the exact shipped binary.
 - Physical-device saving/reading of a new provider in the containing app and
   keyboard extension: not performed. No real credentials or user data were used.
 - New release, Apple upload, review and availability: not yet performed.
 
-The maintainer requested no version bump while validating this repair. Project
-version/build anchors remain **1.1.8 (64)**. No new build has been uploaded or
-submitted for review. A previously prepared App Store Connect 1.1.9 draft remains
-unsubmitted and is not a published version. App Store publication is on hold:
-[Apple requires an incremental version for an update to an already released app](https://developer.apple.com/help/app-store-connect/update-your-app/create-a-new-version).
+The maintainer approved an iOS-only **1.1.9 (65)** repair release after
+confirming that [Apple requires an incremental version for an update to an
+already released app](https://developer.apple.com/help/app-store-connect/update-your-app/create-a-new-version).
+Other platforms remain at **1.1.8**. The App Store Connect 1.1.9 draft is prepared;
+the new source archive, upload and review states must be recorded independently.
+See [release preparation](../../platforms/ios/AppStore/release-preparation/1.1.9-build65.md).
 
 Apple Build Metadata for the exact uploaded 1.1.8 (64) build was subsequently
 read after signing in: both targets contain the full expected Keychain group.
@@ -70,6 +84,8 @@ signing identity but no full Xcode installation. GitHub repository and `ios-app-
 environment secret lists were empty on October 23. The existing automated
 App Store workflow therefore cannot sign/upload until its credentials are
 configured, or the established interactive cloud-signing path is available.
-The maintainer subsequently authorized installing official Xcode 26.6. Its
-Apple-signed archive was verified and expanded, but macOS rejected launching
-the app as incompatible with the current OS; first-run setup is not complete.
+Official Xcode 26.6 could not launch on this Mac's OS. Compatible Xcode 27.1
+was subsequently installed, the maintainer accepted its license and signed into
+the original Apple account, and cloud export reused the existing distribution
+certificate and App Store profiles. Both exported comparison packages remain
+local and have not been uploaded.

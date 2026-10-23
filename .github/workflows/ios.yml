@@ -87,7 +87,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           python3 scripts/release/create-ios-cloud-archive.py --check-build "$IOS_BUILD_NUMBER"
           python3 platforms/ios/scripts/verify.py --distribution
-          VERSION=$(cat VERSION)
+          VERSION=$(python3 scripts/release/check-product-versions.py | python3 -c 'import json,sys; print(json.load(sys.stdin)["ios"]["version"])')
           xcodebuild -project platforms/ios/RIMES.xcodeproj -scheme RIMES \
             -configuration Release -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/XSIME.xcarchive" \

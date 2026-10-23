@@ -4,6 +4,20 @@ require 'fileutils'
 require 'json'
 require_relative '../release-config'
 class ReleaseConfigTest < Minitest::Test
+  def test_ios_hotfix_uses_its_own_version_without_changing_desktop_baseline
+    Dir.mktmpdir do |dir|
+      root = File.join(dir, 'platforms/ios'); FileUtils.mkdir_p(root)
+      File.write(File.join(dir, 'VERSION'), "1.1.8\n")
+      path = File.join(root, 'project.yml')
+      File.write(path, "settings:\n  base:\n    MARKETING_VERSION: '1.1.9'\n")
+      assert_equal '1.1.9', RimesRelease.require_ios_target('1.1.9', root)
+      assert_raises(RuntimeError) { RimesRelease.require_ios_target('1.1.8', root) }
+      %w[1.1.7 1.2.0 1.0.9 2.1.9 1.1.9-preview.1].each do |version|
+        File.write(path, "settings:\n  base:\n    MARKETING_VERSION: '#{version}'\n")
+        assert_raises(RuntimeError) { RimesRelease.require_ios_target(version, root) }
+      end
+    end
+  end
   def test_release_target_drift_fails_before_signing
     Dir.mktmpdir do |dir|
       path = File.join(dir, 'VERSION')

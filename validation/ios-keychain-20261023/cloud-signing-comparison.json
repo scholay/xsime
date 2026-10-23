@@ -1,0 +1,75 @@
+{
+  "purpose": "Cloud-signing A/B reproduction only; neither IPA is the originally uploaded App Store binary or a new source build",
+  "xcode": "27.1 (27A9275)",
+  "version": "1.1.8",
+  "build": "64",
+  "uploaded": false,
+  "cases": [
+    {
+      "name": "signed-original-group-1.1.8-64",
+      "bytes": 20283236,
+      "sha256": "9950a1f5bdb356ca08e022e0d32dc952cc6867ec4b2063a4bcc3d12c48bbc2bb",
+      "bundles": [
+        {
+          "bundle_id": "org.scholay.rimes.ios",
+          "runtime_keychain_group": "org.scholay.rimes.ios.shared",
+          "signed_keychain_groups": [
+            "585J2TL9U6.org.scholay.rimes.ios.shared"
+          ],
+          "profile_keychain_groups": [
+            "585J2TL9U6.*",
+            "com.apple.token"
+          ],
+          "signature": "valid",
+          "metadata_check": "org.scholay.rimes.ios: wrong Info.plist Keychain group: 'org.scholay.rimes.ios.shared'; expected 585J2TL9U6.org.scholay.rimes.ios.shared"
+        },
+        {
+          "bundle_id": "org.scholay.rimes.ios.keyboard",
+          "runtime_keychain_group": "org.scholay.rimes.ios.shared",
+          "signed_keychain_groups": [
+            "585J2TL9U6.org.scholay.rimes.ios.shared"
+          ],
+          "profile_keychain_groups": [
+            "585J2TL9U6.*",
+            "com.apple.token"
+          ],
+          "signature": "valid",
+          "metadata_check": "org.scholay.rimes.ios.keyboard: wrong Info.plist Keychain group: 'org.scholay.rimes.ios.shared'; expected 585J2TL9U6.org.scholay.rimes.ios.shared"
+        }
+      ]
+    },
+    {
+      "name": "signed-reproduction-1.1.8-64",
+      "bytes": 20283542,
+      "sha256": "f52e0d0171133d7c96b410484a378743ead20284bc135c56a9ecb5e1647422ae",
+      "bundles": [
+        {
+          "bundle_id": "org.scholay.rimes.ios",
+          "runtime_keychain_group": "585J2TL9U6.org.scholay.rimes.ios.shared",
+          "signed_keychain_groups": [
+            "585J2TL9U6.org.scholay.rimes.ios.shared"
+          ],
+          "profile_keychain_groups": [
+            "585J2TL9U6.*",
+            "com.apple.token"
+          ],
+          "signature": "valid",
+          "metadata_check": "passed"
+        },
+        {
+          "bundle_id": "org.scholay.rimes.ios.keyboard",
+          "runtime_keychain_group": "585J2TL9U6.org.scholay.rimes.ios.shared",
+          "signed_keychain_groups": [
+            "585J2TL9U6.org.scholay.rimes.ios.shared"
+          ],
+          "profile_keychain_groups": [
+            "585J2TL9U6.*",
+            "com.apple.token"
+          ],
+          "signature": "valid",
+          "metadata_check": "passed"
+        }
+      ]
+    }
+  ]
+}

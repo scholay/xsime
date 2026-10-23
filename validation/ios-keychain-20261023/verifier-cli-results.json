@@ -1,0 +1,16 @@
+[
+  {
+    "artifact": "signed-original-group-1.1.8-64",
+    "python_optimized": true,
+    "expected_exit": 1,
+    "actual_exit": 1,
+    "result": "ValueError: org.scholay.rimes.ios: wrong Info.plist Keychain group: 'org.scholay.rimes.ios.shared'; expected 585J2TL9U6.org.scholay.rimes.ios.shared"
+  },
+  {
+    "artifact": "signed-reproduction-1.1.8-64",
+    "python_optimized": true,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "result": "PASS: exact IPA versions, App Store profiles, signatures, shared groups and privacy manifests"
+  }
+]

@@ -15,7 +15,7 @@ platform :ios do
   desc 'Build, upload and submit the exact ios-v* tag; release after Apple approval'
   lane :release do
     version = RimesRelease.version(ENV.fetch('GITHUB_REF_NAME'))
-    RimesRelease.require_target(version, File.join(ROOT, '../../VERSION'))
+    RimesRelease.require_ios_target(version, ROOT)
     build = ENV.fetch('IOS_BUILD_NUMBER')
     notes = RimesRelease.notes(ROOT, version)
     missing = RimesRelease::SECRETS.select { |key| ENV[key].to_s.empty? }
