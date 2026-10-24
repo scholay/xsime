@@ -36,6 +36,15 @@ class OutsideClick {
       PostMessageW(window_, kDismiss, generation_, 0);
   }
   bool Current(WPARAM generation) const { return window_ && generation == generation_; }
+  static HWND HitTest(POINT physical_point) {
+    // Low-level hooks can run in the process's default DPI context rather than
+    // the rail's PMv2 context. Keep the event and hit-test coordinates physical,
+    // and restore that callback context before forwarding to the next hook.
+    const auto previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    const auto hit = WindowFromPhysicalPoint(physical_point);
+    if (previous) SetThreadDpiAwarenessContext(previous);
+    return hit;
+  }
  private:
   inline static thread_local OutsideClick* active_ = nullptr;
   HWND window_ = nullptr;
@@ -45,7 +54,7 @@ class OutsideClick {
     if (code == HC_ACTION && active_ && (message == WM_LBUTTONDOWN ||
         message == WM_RBUTTONDOWN || message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN)) {
       const auto* event = reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
-      active_->Observe(WindowFromPoint(event->pt));
+      active_->Observe(HitTest(event->pt));
     }
     return CallNextHookEx(nullptr, code, message, data);
   }

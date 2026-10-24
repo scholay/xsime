@@ -1,5 +1,6 @@
 #include "rime_engine.hpp"
 #include "rime_snapshot.hpp"
+#include "candidate_paging.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -38,6 +39,8 @@ void TestUtf8AndSnapshotConversion() {
   raw.selection_end_utf8 = 4;
   raw.page_number = 2;
   raw.page_size = 5;
+  raw.last_page = true;
+  raw.candidate_page_keys = static_cast<std::uint32_t>(core::InputStateFlags::kEqualPageDown);
   raw.highlighted_candidate = 1;
   raw.candidates = candidates;
 
@@ -67,6 +70,58 @@ void TestUtf8AndSnapshotConversion() {
         "wire page should describe the transmitted current-page candidates");
   Check(state.candidates.size() == 2 && state.candidates[0].id == 10,
         "wire candidate should retain its global engine ID");
+  Check(snapshot.last_page && (state.state_flags &
+      static_cast<std::uint32_t>(core::InputStateFlags::kLastCandidatePage)),
+      "librime last-page metadata survives conversion without inferring from a short page");
+  Check((state.state_flags & core::kCandidatePageKeyFlags) == raw.candidate_page_keys,
+      "effective schema paging bindings survive the engine and wire snapshot boundary");
+  raw.last_page = false;
+  Check(BuildEngineSnapshot(raw, &snapshot, &error) &&
+      MapSnapshotToInputState(7, 10, 4, snapshot, &state, &error) &&
+      !(state.state_flags & static_cast<std::uint32_t>(core::InputStateFlags::kLastCandidatePage)),
+      "a short page with an engine neighbour remains pageable");
+}
+
+void TestCandidatePageKeyBindings() {
+  using F = core::InputStateFlags;
+  const auto flag = [](F value) { return static_cast<std::uint32_t>(value); };
+  std::map<std::string, std::string> config{
+      {"engine/processors/@2", "key_binder"},
+      {"key_binder/bindings/@0/accept", "minus"}, {"key_binder/bindings/@0/when", "paging"},
+      {"key_binder/bindings/@0/send", "Page_Up"},
+      {"key_binder/bindings/@1/accept", "equal"}, {"key_binder/bindings/@1/when", "has_menu"},
+      {"key_binder/bindings/@1/send", "Page_Down"}};
+  const auto read = [&] { return ReadCandidatePageKeys([&](const std::string& path) {
+    const auto found = config.find(path); return found == config.end() ? std::string() : found->second;
+  }); };
+  const auto normal = flag(F::kMinusPageUp) | flag(F::kMinusPagingOnly) | flag(F::kEqualPageDown);
+  Check(read() == normal, "actual menu/paging symbol bindings retain their direction and condition");
+  config["key_binder/bindings/@2/accept"] = "minus";
+  config["key_binder/bindings/@2/when"] = "paging";
+  config["key_binder/bindings/@2/send"] = "Page_Up";
+  Check(read() == normal, "identical duplicate bindings remain unambiguous");
+  config["key_binder/bindings/@2/send"] = "Escape";
+  Check(read() == flag(F::kEqualPageDown), "a later custom binding blocks interception of the same symbol");
+  config["key_binder/bindings/@0/send"] = "Escape";
+  config["key_binder/bindings/@2/send"] = "Page_Up";
+  Check(read() == flag(F::kEqualPageDown), "an earlier unknown binding also fails closed");
+  config["key_binder/bindings/@0/accept"] = "Control+minus";
+  Check(read() == normal, "modified bindings do not change plain-symbol ownership");
+  config["key_binder/bindings/@2/when"] = "always";
+  Check(read() == flag(F::kEqualPageDown), "unsupported conditions remain owned by the engine");
+  config["key_binder/bindings/@2/accept"] = "a";
+  config["key_binder/bindings/@1/send"] = "Page_Up";
+  Check(read() == flag(F::kEqualPageUp), "explicit reverse paging is supported without inferring letter bindings");
+  config["key_binder/bindings/@3/accept"] = "equal";
+  config["key_binder/bindings/@3/when"] = "has_menu";
+  config["key_binder/bindings/@3/send"] = "Escape";
+  Check(read() == 0, "custom equal action revokes paging metadata for compact and expanded consumers");
+  config["key_binder/bindings/@3/send"] = "Page_Down";
+  Check(read() == 0, "conflicting equal directions never grant either paging direction");
+  config["key_binder/bindings/@3/send"] = "Page_Up";
+  Check(read() == flag(F::kEqualPageUp), "identical reverse bindings retain one unambiguous direction");
+  config.erase("engine/processors/@2");
+  Check(read() == 0, "unused key_binder configuration never creates a shortcut");
 }
 
 void TestMalformedUtf8FailsClosed() {
@@ -204,6 +259,7 @@ void TestDllPathGate() {
 int main() {
   using namespace rimes::windows::engine;
   TestUtf8AndSnapshotConversion();
+  TestCandidatePageKeyBindings();
   TestMalformedUtf8FailsClosed();
   TestMalformedOptionalCommentPreservesCandidate();
   TestMidScalarOffsetFailsClosed();

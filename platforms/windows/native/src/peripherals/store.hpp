@@ -7,6 +7,14 @@
 
 namespace rimes::windows::peripherals {
 using core::Json;
+inline bool ClipboardHasFiles(const Json& value) {
+  const auto archive = value.find("clipboard");
+  if (archive == value.end() || !archive->is_object()) return false;
+  const auto files = archive->find("files");
+  return files != archive->end() && files->is_array() && !files->empty();
+}
+struct ClipboardContent;
+struct ClipboardFormat;
 enum class Module {
   Temporary,
   Capture,
@@ -53,6 +61,8 @@ class Store {
   Json Save(Json value, std::uint64_t expected_revision = 0);
   Json PromoteTemporary(const Json&);
   Json RecordClipboardText(const std::string&);
+  Json RecordClipboard(const ClipboardContent&, Module = Module::Temporary);
+  std::vector<ClipboardFormat> ClipboardFormats(const Json&) const;
   void Erase(const std::string& id, std::uint64_t expected_revision);
   Json Import(Module, const std::filesystem::path&,
               const std::string& terminal = "");

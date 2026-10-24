@@ -107,6 +107,13 @@ bool ParseBrokerOptions(int argc, wchar_t** argv, BrokerOptions* options,
         }
         saw_paths = true;
         parsed.print_paths = true;
+      } else if (argument == L"--restart-parent") {
+        if (parsed.restart_parent || index + 1 >= argc || !argv[index + 1]) return false;
+        const std::wstring_view value(argv[++index]);
+        if (value.empty() || value.size() > 10 || value.find_first_not_of(L"0123456789") != value.npos) return false;
+        const auto pid = std::stoull(std::wstring(value));
+        if (!pid || pid > 0xffffffffULL) return false;
+        parsed.restart_parent = static_cast<unsigned long>(pid);
       } else if (argument == L"--settings") {
         if (parsed.open_settings) {
           SetError(error, L"duplicate option: --settings");
@@ -169,6 +176,10 @@ bool ParseBrokerOptions(int argc, wchar_t** argv, BrokerOptions* options,
       }
     }
 
+    if (parsed.restart_parent && !parsed.open_settings) {
+      SetError(error, L"--restart-parent requires --settings");
+      return false;
+    }
     if (parsed.deploy_only && (parsed.serve_once || parsed.print_paths)) {
       SetError(
           error,

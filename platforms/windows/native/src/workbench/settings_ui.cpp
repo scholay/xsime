@@ -126,6 +126,10 @@ void SettingsUiHost::SyncDraftFromConfig(const Settings& config) {
   draft_.vertical_candidates = config.vertical_candidates;
   draft_.auto_send_seconds = config.auto_send_seconds;
   draft_.close_after_send = config.close_after_send;
+  draft_.align_to_input_box = config.align_to_input_box;
+  draft_.reset_on_app_switch = config.reset_on_app_switch;
+  draft_.global_keys = {config.settings_key, config.capsule_key, config.capture_key};
+  draft_.global_modifiers = {config.settings_modifiers, config.capsule_modifiers, config.capture_modifiers};
   draft_.translation_provider_index = config.translation_provider == "ai" ? 1 : 0;
   draft_.plugin_keys = {config.previous_plugin_key, config.next_plugin_key};
   draft_.plugin_modifiers = {config.previous_plugin_modifiers, config.next_plugin_modifiers};
@@ -254,13 +258,14 @@ void SettingsUiHost::StopRecording() {
   SetWindowTextW(record_hotkey_, L"录入快捷键");
   SetWindowTextW(record_send_, L"录入快捷键");
   for (const auto control : record_plugin_) SetWindowTextW(control, L"录入快捷键");
+  for (const auto control : record_global_) SetWindowTextW(control, L"录入快捷键");
 }
 
 void SettingsUiHost::RecordShortcut(unsigned key, unsigned modifiers) {
   if (!RecordingShortcut()) return;
   const bool send = recording_shortcut_ == 1;
   if (key == VK_DELETE && !modifiers) {
-    const unsigned defaults[] = {'B', VK_RETURN, VK_UP, VK_DOWN};
+    const unsigned defaults[] = {'B', VK_RETURN, VK_UP, VK_DOWN, 'S', 'V', '4'};
     key = defaults[recording_shortcut_];
     modifiers = MOD_ALT | MOD_SHIFT;
   }
@@ -268,13 +273,13 @@ void SettingsUiHost::RecordShortcut(unsigned key, unsigned modifiers) {
     SetWindowTextW(shortcut_feedback_, L"该组合不安全或是系统编辑快捷键，请换一个组合。无修饰键仅允许发送键使用 Enter 或 F6–F12。");
     return;
   }
-  if ((key == 'S' || key == 'V' || key == 'M' || key == '4') && modifiers == (MOD_ALT | MOD_SHIFT)) {
-    SetWindowTextW(shortcut_feedback_, L"Alt+Shift+S / V / M / 4 用于设置、Capsule、Mailbox 和截图，请使用另一个组合。");
+  if (key == 'M' && modifiers == (MOD_ALT | MOD_SHIFT)) {
+    SetWindowTextW(shortcut_feedback_, L"Alt+Shift+M 保留给 Mailbox，请使用另一个组合。");
     return;
   }
-  const HWND edits[] = {edit_hotkey_, edit_send_, edit_plugin_[0], edit_plugin_[1]};
-  const HWND combos[] = {combo_hotkey_modifiers_, combo_send_modifiers_, combo_plugin_modifiers_[0], combo_plugin_modifiers_[1]};
-  for (int i = 0; i < 4; ++i) {
+  const HWND edits[] = {edit_hotkey_, edit_send_, edit_plugin_[0], edit_plugin_[1], edit_global_[0], edit_global_[1], edit_global_[2]};
+  const HWND combos[] = {combo_hotkey_modifiers_, combo_send_modifiers_, combo_plugin_modifiers_[0], combo_plugin_modifiers_[1], combo_global_modifiers_[0], combo_global_modifiers_[1], combo_global_modifiers_[2]};
+  for (int i = 0; i < 7; ++i) {
     if (i == recording_shortcut_) continue;
     const auto choice = SendMessageW(combos[i], CB_GETCURSEL, 0, 0);
     const unsigned other_modifiers = choice >= 0 && choice < static_cast<LRESULT>(kBufferHotkeyChoices.size())
@@ -331,7 +336,7 @@ bool SettingsUiHost::HandleDialogMessage(MSG* message) {
     const auto key = message->wParam;
     const int control_id = GetDlgCtrlID(GetParent(message->hwnd) == hwnd_ ? message->hwnd : GetParent(message->hwnd));
     if ((message->hwnd == combo_hotkey_modifiers_ || message->hwnd == combo_send_modifiers_ || message->hwnd == combo_plugin_modifiers_[0] || message->hwnd == combo_plugin_modifiers_[1] || message->hwnd == combo_connector_ ||
-         control_id == 5112 || control_id == 6000 || control_id == 6005 || control_id == 6007 || control_id == 6011 || control_id == 6023 || control_id == 6032 || control_id == 6050 ||
+         (control_id >= 433 && control_id <= 435) || control_id == 5112 || control_id == 6000 || control_id == 6005 || control_id == 6007 || control_id == 6011 || control_id == 6023 || control_id == 6032 || control_id == 6050 ||
          message->hwnd == combo_auto_send_ || message->hwnd == combo_translation_) &&
         (key == VK_RETURN || key == VK_ESCAPE) &&
         SendMessageW(GetParent(message->hwnd) == hwnd_ ? message->hwnd : GetParent(message->hwnd), CB_GETDROPPEDSTATE, 0, 0))
@@ -359,7 +364,7 @@ bool SettingsUiHost::HandleDialogMessage(MSG* message) {
     }
     if (key == VK_TAB) {
       std::vector<HWND> controls;
-      for (const auto control : {schemes_button_, input_habits_, check_ascii_, check_trad_, check_punct_,
+      for (const auto control : {schemes_button_, input_habits_, lexicon_button_, check_ascii_, check_trad_, check_punct_,
                                 edit_font_, edit_candidate_count_, check_vertical_, combo_hotkey_modifiers_, edit_hotkey_, record_hotkey_,
                                 combo_send_modifiers_, edit_send_, record_send_,
                                 combo_plugin_modifiers_[0], edit_plugin_[0], record_plugin_[0],
@@ -368,6 +373,13 @@ bool SettingsUiHost::HandleDialogMessage(MSG* message) {
                                 combo_auto_send_, check_close_after_, combo_translation_})
         if (control && IsWindowVisible(control)) controls.push_back(control);
       if (parity_) { const auto added=parity_->VisibleControls(); controls.insert(controls.end(),added.begin(),added.end()); }
+      for (int i = 0; i < 3; ++i)
+        for (const auto control : {combo_global_modifiers_[i], edit_global_[i], record_global_[i]})
+          if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
+      for (const auto control : {check_align_, check_reset_app_, move_buffer_})
+        if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
+      for (const auto control : maintenance_actions_)
+        if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
       for (const auto control : {plugin_filter_, plugin_previous_, plugin_next_, clipboard_recording_, peripheral_open_, home_action_})
         if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
       for (std::size_t i = 0; i < plugin_labels_.size(); ++i)
@@ -456,6 +468,8 @@ void SettingsUiHost::CreateOrUpdateChildren() {
   };
   make_button(schemes_button_, L"导入与管理方案…", 415);
   make_button(input_habits_, L"当前方案的输入习惯…", 425);
+  make_button(lexicon_button_, L"学习词库：导入、导出与恢复…", 455);
+  EnableWindow(lexicon_button_, static_cast<bool>(callbacks_.open_lexicon));
   EnableWindow(input_habits_, static_cast<bool>(callbacks_.input_options));
   make_button(peripheral_open_, L"打开独立窗口…", 416);
   make_button(home_action_, L"", 417);
@@ -479,8 +493,30 @@ void SettingsUiHost::CreateOrUpdateChildren() {
     SendMessageW(combo_plugin_modifiers_[i], CB_SETCURSEL, BufferHotkeyChoiceIndex(draft_.plugin_modifiers[i]), 0);
   }
   make_button(reset_shortcuts_, L"恢复全部默认快捷键", 411);
+  for (int i = 0; i < 3; ++i) {
+    make_edit(&edit_global_[i], false);
+    SetWindowLongPtrW(edit_global_[i], GWLP_ID, 430 + i);
+    if (!combo_global_modifiers_[i]) {
+      combo_global_modifiers_[i] = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS,
+          0, 0, 160, 130, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(433 + i)), GetModuleHandleW(nullptr), nullptr);
+      for (const auto& choice : kBufferHotkeyChoices)
+        SendMessageW(combo_global_modifiers_[i], CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(choice.label));
+    }
+    make_button(record_global_[i], L"录入快捷键", 436 + i);
+    SetWindowTextW(edit_global_[i], ShortcutKeyTitle(draft_.global_keys[i]).c_str());
+    SendMessageW(combo_global_modifiers_[i], CB_SETCURSEL, BufferHotkeyChoiceIndex(draft_.global_modifiers[i]), 0);
+    SetWindowSubclass(combo_global_modifiers_[i], ComboProcedure, 1, reinterpret_cast<DWORD_PTR>(this));
+  }
+  make_check(&check_align_, L"对齐目标输入框（关闭后保留窗口位置）", 439);
+  make_check(&check_reset_app_, L"切换应用时清空本地缓冲（保留外部来源内容）", 440);
+  make_button(move_buffer_, L"移到当前屏幕", 441);
+  EnableWindow(move_buffer_, static_cast<bool>(callbacks_.move_buffer_to_screen));
+  const wchar_t* maintenance_titles[] = {L"打开运行日志目录", L"打开输入法数据目录", L"打开设置与历史目录", L"重启输入法进程", L"重新安装 · 暂不可用"};
+  for (int i = 0; i < 5; ++i) make_button(maintenance_actions_[i], maintenance_titles[i], 450 + i);
+  EnableWindow(maintenance_actions_[3], static_cast<bool>(callbacks_.restart_broker));
+  EnableWindow(maintenance_actions_[4], FALSE);
   if (!shortcut_feedback_) shortcut_feedback_ = CreateWindowExW(0, L"STATIC",
-      L"录入时 Esc 取消，Delete 恢复该项默认；完成修改后立即生效。\n切换按已启用插件的工具栏顺序循环，保留原文；仅 Buffer 捕获时生效。\n发送键轻按逐块发送，长按默认 1.2 秒全部发送。",
+      L"录入时 Esc 取消，Delete 恢复该项默认；完成修改后立即生效。\n切换按已启用插件的工具栏顺序循环，保留原文；仅 Buffer 捕获时生效。\n发送键轻按逐块发送，长按默认 0.6 秒全部发送。",
       WS_CHILD | SS_LEFT, 0, 0, 1, 1, hwnd_, nullptr, GetModuleHandleW(nullptr), nullptr);
   make_edit(&edit_base_, false);
   make_edit(&edit_codex_path_, false);
@@ -610,6 +646,11 @@ void SettingsUiHost::ThemeEdits() {
     SendMessageW(edit, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.control),
                  TRUE);
   }
+  for (int i = 0; i < 3; ++i)
+    for (const auto control : {edit_global_[i], combo_global_modifiers_[i], record_global_[i]})
+      SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.control), TRUE);
+  for (const auto control : {check_align_, check_reset_app_, move_buffer_}) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+  for (const auto control : maintenance_actions_) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
   for (std::size_t i = 0; i < plugin_labels_.size(); ++i) {
     for (const auto control : {plugin_labels_[i], plugin_install_[i], plugin_enable_[i], plugin_remove_[i]})
       SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
@@ -656,7 +697,8 @@ void SettingsUiHost::Relayout() {
   const bool appearance = draft_.page == ui::SettingsPage::kAppearance && draft_.subpage == 1;
   const bool buffer = draft_.page == ui::SettingsPage::kBuffer && draft_.subpage == 0;
   const bool behavior = draft_.page == ui::SettingsPage::kBuffer && draft_.subpage == 1;
-  if (!buffer) StopRecording();
+  const bool global = draft_.page == ui::SettingsPage::kBuffer && draft_.subpage == 2;
+  if (!buffer && !global) StopRecording();
   const bool api = false; // Native multi-profile content owns this page.
   auto place_edit = [&](HWND edit, ui::DipRect box, bool show) {
     if (show) {
@@ -686,8 +728,22 @@ void SettingsUiHost::Relayout() {
     place_edit(edit_plugin_[i], layout_.plugin_edit[i], buffer);
     Place(record_plugin_[i], layout_.plugin_record[i], dpi_, buffer);
   }
-  Place(reset_shortcuts_, layout_.shortcut_reset, dpi_, buffer);
-  Place(shortcut_feedback_, layout_.shortcut_feedback, dpi_, buffer);
+  for (int i = 0; i < 3; ++i) {
+    auto dropdown = layout_.global_modifiers[i]; dropdown.bottom += 160;
+    Place(combo_global_modifiers_[i], dropdown, dpi_, global);
+    place_edit(edit_global_[i], layout_.global_edit[i], global);
+    Place(record_global_[i], layout_.global_record[i], dpi_, global);
+  }
+  Place(check_align_, {layout_.body.left, layout_.body.top + 214, layout_.body.right, layout_.body.top + 240}, dpi_, global);
+  Place(check_reset_app_, {layout_.body.left, layout_.body.top + 246, layout_.body.right, layout_.body.top + 272}, dpi_, global);
+  Place(move_buffer_, {layout_.body.left, layout_.body.top + 282, layout_.body.left + 190, layout_.body.top + 312}, dpi_, global);
+  Place(reset_shortcuts_, layout_.shortcut_reset, dpi_, buffer || global);
+  Place(shortcut_feedback_, layout_.shortcut_feedback, dpi_, buffer || global);
+  for (int i = 0; i < 5; ++i) {
+    const bool show = draft_.page == ui::SettingsPage::kAbout && (draft_.subpage == 1 ? i < 3 : i >= 3);
+    const auto y = layout_.body.top + 112 + (i < 3 ? i : i - 3) * 44.f;
+    Place(maintenance_actions_[i], {layout_.body.left, y, layout_.body.left + 240, y + 32}, dpi_, show);
+  }
   place_edit(edit_base_, layout_.base_edit, api);
   auto connector_dropdown = layout_.connector_combo;
   connector_dropdown.bottom += 96.0f;
@@ -709,6 +765,8 @@ void SettingsUiHost::Relayout() {
       ? layout_.body.top + 170 : layout_.scheme_cards.back().bottom + 20;
   Place(schemes_button_, {layout_.body.left, schemes_top, layout_.body.left + 225, schemes_top + 34}, dpi_, schemes);
   Place(input_habits_, {layout_.body.left + 240, schemes_top, layout_.body.left + 490, schemes_top + 34}, dpi_, schemes);
+  Place(lexicon_button_, {layout_.body.left, schemes_top + 44, layout_.body.left + 300, schemes_top + 78}, dpi_, schemes);
+  SendMessageW(lexicon_button_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
   SendMessageW(input_habits_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
   Place(imported_label_, {layout_.body.left, layout_.body.top, layout_.body.right, layout_.body.top + 100}, dpi_, schemes && !draft_.imported_schema.empty());
   SendMessageW(schemes_button_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
@@ -872,6 +930,8 @@ bool SettingsUiHost::CommitSave() {
     if (automatic < 0 || automatic > 4 || translation < 0 || translation > 1) throw std::runtime_error("Buffer behavior choice");
     config.auto_send_seconds = automatic == 4 ? 5U : static_cast<unsigned>(automatic);
     config.close_after_send = draft_.close_after_send;
+    config.align_to_input_box = draft_.align_to_input_box;
+    config.reset_on_app_switch = draft_.reset_on_app_switch;
     config.translation_provider = translation == 0 ? "local" : "ai";
     const auto font_text = GetText(edit_font_);
     std::size_t parsed = 0;
@@ -900,6 +960,14 @@ bool SettingsUiHost::CommitSave() {
       key = ParseShortcutKey(GetText(edit_plugin_[i]));
       const auto choice = SendMessageW(combo_plugin_modifiers_[i], CB_GETCURSEL, 0, 0);
       modifiers = choice >= 0 && choice < static_cast<LRESULT>(kBufferHotkeyChoices.size())
+          ? kBufferHotkeyChoices[static_cast<std::size_t>(choice)].modifiers : 0U;
+    }
+    unsigned* global_keys[] = {&config.settings_key, &config.capsule_key, &config.capture_key};
+    unsigned* global_modifiers[] = {&config.settings_modifiers, &config.capsule_modifiers, &config.capture_modifiers};
+    for (int i = 0; i < 3; ++i) {
+      *global_keys[i] = ParseShortcutKey(GetText(edit_global_[i]));
+      const auto choice = SendMessageW(combo_global_modifiers_[i], CB_GETCURSEL, 0, 0);
+      *global_modifiers[i] = choice >= 0 && choice < static_cast<LRESULT>(kBufferHotkeyChoices.size())
           ? kBufferHotkeyChoices[static_cast<std::size_t>(choice)].modifiers : 0U;
     }
     if (!ValidBufferShortcuts(config)) {
@@ -1145,13 +1213,34 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
         return 0;
       }
       if (LOWORD(wparam) == 425 && HIWORD(wparam) == BN_CLICKED) { self->OpenInputHabits(); return 0; }
-      if (HIWORD(wparam) == BN_CLICKED && (LOWORD(wparam) == 409 || LOWORD(wparam) == 410 || LOWORD(wparam) == 418 || LOWORD(wparam) == 419)) {
-        const int recording = LOWORD(wparam) >= 418 ? LOWORD(wparam) - 416 : LOWORD(wparam) - 409;
+      if (LOWORD(wparam) == 455 && HIWORD(wparam) == BN_CLICKED) {
+        if (self->callbacks_.open_lexicon) self->callbacks_.open_lexicon(hwnd, self->draft_.preview_theme);
+        return 0;
+      }
+      if (LOWORD(wparam) == 441 && HIWORD(wparam) == BN_CLICKED) {
+        if (self->callbacks_.move_buffer_to_screen) self->callbacks_.move_buffer_to_screen();
+        return 0;
+      }
+      if (LOWORD(wparam) >= 450 && LOWORD(wparam) <= 454 && HIWORD(wparam) == BN_CLICKED) {
+        const auto action = LOWORD(wparam) - 450;
+        if (action < 3) {
+          if (!self->callbacks_.open_maintenance_location || !self->callbacks_.open_maintenance_location(action))
+            self->SaveError(L"目录暂不可用，请检查安装及数据路径。");
+        } else if (action == 3) {
+          if (self->pending_save_ && !self->CommitSave()) return 0;
+          std::string error;
+          if (!self->callbacks_.restart_broker || !self->callbacks_.restart_broker(&error))
+            self->SaveError(error.empty() ? L"无法启动新输入法进程，当前进程保持运行。" : Wide(error));
+        }
+        return 0;
+      }
+      if (HIWORD(wparam) == BN_CLICKED && (LOWORD(wparam) == 409 || LOWORD(wparam) == 410 || LOWORD(wparam) == 418 || LOWORD(wparam) == 419 || (LOWORD(wparam) >= 436 && LOWORD(wparam) <= 438))) {
+        const int recording = LOWORD(wparam) >= 436 ? LOWORD(wparam) - 432 : LOWORD(wparam) >= 418 ? LOWORD(wparam) - 416 : LOWORD(wparam) - 409;
         const bool stop = self->recording_shortcut_ == recording;
         self->StopRecording();
         if (!stop) {
           self->recording_shortcut_ = recording;
-          SetWindowTextW(recording >= 2 ? self->record_plugin_[recording - 2] : recording ? self->record_send_ : self->record_hotkey_, L"请按快捷键…");
+          SetWindowTextW(recording >= 4 ? self->record_global_[recording - 4] : recording >= 2 ? self->record_plugin_[recording - 2] : recording ? self->record_send_ : self->record_hotkey_, L"请按快捷键…");
           SetWindowTextW(self->shortcut_feedback_, L"按下新的组合键；Esc 取消，Delete 恢复此项默认。完成修改后立即生效。");
         }
         return 0;
@@ -1162,9 +1251,12 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
         SetWindowTextW(self->edit_send_, L"Enter");
         SetWindowTextW(self->edit_plugin_[0], L"Up");
         SetWindowTextW(self->edit_plugin_[1], L"Down");
-        for (const HWND combo : {self->combo_hotkey_modifiers_, self->combo_send_modifiers_, self->combo_plugin_modifiers_[0], self->combo_plugin_modifiers_[1]})
+        SetWindowTextW(self->edit_global_[0], L"S");
+        SetWindowTextW(self->edit_global_[1], L"V");
+        SetWindowTextW(self->edit_global_[2], L"4");
+        for (const HWND combo : {self->combo_hotkey_modifiers_, self->combo_send_modifiers_, self->combo_plugin_modifiers_[0], self->combo_plugin_modifiers_[1], self->combo_global_modifiers_[0], self->combo_global_modifiers_[1], self->combo_global_modifiers_[2]})
           SendMessageW(combo, CB_SETCURSEL, BufferHotkeyChoiceIndex(MOD_ALT | MOD_SHIFT), 0);
-        SetWindowTextW(self->shortcut_feedback_, L"已恢复默认 Alt+Shift+B / Enter / ↑ / ↓。");
+        SetWindowTextW(self->shortcut_feedback_, L"已恢复默认 Alt+Shift+B / Enter / ↑ / ↓ / S / V / 4。");
         self->QueueSave(true);
         return 0;
       }
@@ -1205,6 +1297,8 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
           case 403: self->draft_.ascii_punctuation = !self->draft_.ascii_punctuation; break;
           case 404: self->draft_.vertical_candidates = !self->draft_.vertical_candidates; break;
           case 412: self->draft_.close_after_send = !self->draft_.close_after_send; break;
+          case 439: self->draft_.align_to_input_box = !self->draft_.align_to_input_box; break;
+          case 440: self->draft_.reset_on_app_switch = !self->draft_.reset_on_app_switch; break;
           default: return 0;
         }
         self->QueueSave(true);
@@ -1217,7 +1311,7 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
       if (self->parity_ && self->parity_->DrawControl(*draw, self->draft_.preview_theme, self->dpi_, self->fonts_.body)) return TRUE;
       if (draw->CtlType != ODT_BUTTON && draw->CtlType != ODT_COMBOBOX) break;
       const auto& p = ui::Palette(self->draft_.preview_theme);
-      if (draw->CtlType == ODT_COMBOBOX || !(draw->CtlID >= 401 && draw->CtlID <= 404 || draw->CtlID == 412 || draw->CtlID == 424)) {
+      if (draw->CtlType == ODT_COMBOBOX || !(draw->CtlID >= 401 && draw->CtlID <= 404 || draw->CtlID == 412 || draw->CtlID == 424 || draw->CtlID == 439 || draw->CtlID == 440)) {
         const bool selected = (draw->itemState & ODS_SELECTED) != 0 ||
             GetPropW(draw->hwndItem, L"RimesSelectedSegment") != nullptr;
         const bool disabled = (draw->itemState & ODS_DISABLED) != 0;
@@ -1246,6 +1340,8 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
       ui::FillRectColor(draw->hDC, draw->rcItem,
                        ui::ToColorRef(draw->CtlID == 412 ? p.surface_secondary : p.settings_background));
       const bool checked = draw->CtlID == 401 ? self->draft_.ascii
+          : draw->CtlID == 439 ? self->draft_.align_to_input_box
+          : draw->CtlID == 440 ? self->draft_.reset_on_app_switch
           : draw->CtlID == 424 ? self->clipboard_recording_enabled_
           : draw->CtlID == 402 ? self->draft_.traditional
                                : draw->CtlID == 403 ? self->draft_.ascii_punctuation
@@ -1473,10 +1569,14 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
       self->recording_shortcut_ = -1; self->recorded_key_ = 0;
       self->edit_send_ = self->combo_send_modifiers_ = nullptr;
       self->edit_plugin_ = {}; self->combo_plugin_modifiers_ = {}; self->record_plugin_ = {};
+      self->edit_global_ = {}; self->combo_global_modifiers_ = {}; self->record_global_ = {};
+      self->check_align_ = self->check_reset_app_ = self->move_buffer_ = nullptr;
+      self->maintenance_actions_ = {};
       self->record_hotkey_ = self->record_send_ = self->reset_shortcuts_ = self->shortcut_feedback_ = nullptr;
       KillTimer(hwnd, 11);
       self->hwnd_ = nullptr;
       self->schemes_button_ = self->imported_label_ = self->input_habits_ = nullptr;
+      self->lexicon_button_ = nullptr;
       self->peripheral_open_ = self->home_action_ = nullptr;
       self->clipboard_recording_ = nullptr;
       self->plugin_filter_ = self->plugin_previous_ = self->plugin_next_ = self->plugin_page_ = nullptr;

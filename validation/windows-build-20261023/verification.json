@@ -1,0 +1,34 @@
+﻿{
+    "verified":  true,
+    "version":  "1.1.8",
+    "commit":  "b5fcaff1914bbd5e61d828cbfb162463270917a7",
+    "directory":  "C:\\Program Files\\RIMES\\versions\\1.1.8-b5fcaff1914b-b66ea1b75c7c",
+    "installedBinariesMatched":  7,
+    "brokerPid":  83924,
+    "settingsUnchanged":  true,
+    "retainedFiles":  {
+                          "peripherals-v1":  99,
+                          "official-plugins-v1":  2
+                      },
+    "backupDirectory":  "C:\\Users\\young\\AppData\\Local\\RIMES\\backups\\before-1.1.8-20261023-172252",
+    "requiresSignOut":  true,
+    "tests":  {
+                  "ctestX64":  38,
+                  "ctestX86":  38,
+                  "python":  18,
+                  "installerChecks":  72,
+                  "productSchemesPerArchitecture":  7,
+                  "tsfE2EArchitectures":  [
+                                              "x64",
+                                              "x86"
+                                          ],
+                  "setupPayloadVerified":  true
+              },
+    "observations":  [
+                         "First x64 CTest run failed Codex worker recovery; isolated retry and unchanged full rerun passed.",
+                         "First x86 CTest run failed settings opening/tray assertions; isolated retry and unchanged full rerun passed.",
+                         "Product probe crashed with Unicode data/log paths (0xc0000409). The identical binary and data passed for both architectures using a real ASCII temporary directory. Root cause remains unconfirmed. Installed machine paths are ASCII.",
+                         "Tests use isolated fixtures and real TSF/Broker/librime components, not a manual acceptance pass in all user applications."
+                     ],
+    "verifiedAt":  "2026-10-23T17:23:40.9089336+08:00"
+}

@@ -391,6 +391,24 @@ void TestInputStateRoundTripAndValidation() {
   EXPECT(EncodeInputState(pending, &pending_bytes));
   EXPECT(DecodeInputState(pending_bytes, &pending_decoded));
   EXPECT(pending_decoded.state_flags == pending.state_flags && pending_decoded.composition.empty());
+  pending.state_flags |= static_cast<std::uint32_t>(InputStateFlags::kLastCandidatePage);
+  EXPECT(!EncodeInputState(pending, &pending_bytes));
+  auto last_page = MakeInputState();
+  last_page.state_flags |= static_cast<std::uint32_t>(InputStateFlags::kLastCandidatePage);
+  EXPECT(EncodeInputState(last_page, &pending_bytes));
+  EXPECT(DecodeInputState(pending_bytes, &pending_decoded));
+  EXPECT(pending_decoded.state_flags == last_page.state_flags);
+  last_page.state_flags |= static_cast<std::uint32_t>(InputStateFlags::kMinusPageUp) |
+      static_cast<std::uint32_t>(InputStateFlags::kMinusPagingOnly) |
+      static_cast<std::uint32_t>(InputStateFlags::kEqualPageDown);
+  EXPECT(EncodeInputState(last_page, &pending_bytes));
+  EXPECT(DecodeInputState(pending_bytes, &pending_decoded));
+  EXPECT(pending_decoded.state_flags == last_page.state_flags);
+  last_page.state_flags |= static_cast<std::uint32_t>(InputStateFlags::kMinusPageDown);
+  EXPECT(!EncodeInputState(last_page, &pending_bytes));
+  last_page = MakeInputState();
+  last_page.state_flags |= static_cast<std::uint32_t>(InputStateFlags::kEqualPagingOnly);
+  EXPECT(!EncodeInputState(last_page, &pending_bytes));
   const InputState input = MakeInputState();
   std::vector<std::byte> encoded;
   EXPECT(EncodeInputState(input, &encoded));

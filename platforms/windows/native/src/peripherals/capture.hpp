@@ -2,7 +2,7 @@
 #include <functional>
 #include <memory>
 
-#include "store.hpp"
+#include "media.hpp"
 
 namespace rimes::windows::peripherals {
 struct CaptureImage {
@@ -16,15 +16,16 @@ CaptureImage LoadCapture(const std::filesystem::path&);
 std::string EncodeCapture(const CaptureImage&);
 // Both PNG and DIB are published so editors and chat applications receive
 // pixels.
-bool CopyCapture(HWND, const CaptureImage&);
-bool CopyCapsuleAsset(HWND, Store&, const Json&);
+ClipboardWriteResult CopyCapture(HWND, const CaptureImage&);
+ClipboardWriteResult CopyCapsuleAsset(HWND, Store&, const Json&);
 CaptureImage RenderCapture(const CaptureImage&, const Json& operations);
 
 class CaptureWindows {
  public:
   using Screenshot = std::function<std::pair<CaptureImage, RECT>()>;
+  using Copy = std::function<ClipboardWriteResult(HWND, Store&, const Json&)>;
   CaptureWindows(Store&, std::function<void()> changed,
-                 std::function<std::string()> theme, Screenshot = {});
+                 std::function<std::string()> theme, Screenshot = {}, Copy = {});
   ~CaptureWindows();
   void Start();
   void Edit(const Json&);
@@ -33,6 +34,8 @@ class CaptureWindows {
   HWND SelectionWindow() const;
   HWND StackWindow() const;
   HWND EditorWindow() const;
+  bool Preparing() const;
+  void RefreshTheme();
   std::set<std::string> ActiveRecords() const;
 
  private:

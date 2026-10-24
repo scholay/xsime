@@ -120,12 +120,38 @@ std::optional<std::size_t> CandidateWindow::MatrixDigitIndex(std::size_t digit) 
   return std::nullopt;
 }
 
+std::optional<std::size_t> CandidateWindow::CompactDigitIndex(std::size_t digit) const noexcept {
+  if (!IsCompact() || !numeric_labels_ || compact_.pages.empty()) return std::nullopt;
+  const auto page = compact_.pages[compact_.page_index];
+  return digit < page.end - page.begin ? std::optional(page.begin + digit) : std::nullopt;
+}
+
+std::optional<std::size_t> CandidateWindow::CompactPageIndex(int delta) const noexcept {
+  if (!IsCompact() || compact_.pages.empty()) return std::nullopt;
+  if (delta < 0 && compact_.page_index > 0) return compact_.pages[compact_.page_index - 1].begin;
+  if (delta > 0 && compact_.page_index + 1 < compact_.pages.size())
+    return compact_.pages[compact_.page_index + 1].begin;
+  return std::nullopt;
+}
+
+std::optional<std::size_t> CandidateWindow::CompactEdgeIndex(int direction) const noexcept {
+  if (!IsCompact() || compact_.pages.empty()) return std::nullopt;
+  return direction < 0 ? compact_.pages.back().begin : compact_.pages.front().begin;
+}
+
+bool CandidateWindow::CanPage(int direction) const noexcept {
+  return IsCompact() && (CompactPageIndex(direction).has_value() ||
+      (direction < 0 ? snapshot_.has_previous_page : snapshot_.has_next_page));
+}
+
 void CandidateWindow::Hide() noexcept {
   snapshot_ = {};
   hover_index_ = -1;
   pressed_index_ = -1;
   if (window_ && GetCapture() == window_) ReleaseCapture();
   hit_pills_.clear();
+  compact_ = {};
+  numeric_labels_ = false;
   PublishSnapshot(snapshot_);
   if (window_ != nullptr && IsWindowVisible(window_)) {
     NotifyWinEvent(EVENT_OBJECT_IME_HIDE, window_, OBJID_CLIENT, CHILDID_SELF);
@@ -167,6 +193,8 @@ int CandidateWindow::HitIndex(int x_px, int y_px) const noexcept {
     return -1;
   for (std::size_t i = 0; i < hit_pills_.size(); ++i)
     if (hit_pills_[i].contains(x, y)) return static_cast<int>(i);
+  if (compact_.previous.contains(x, y) && CanPage(-1)) return static_cast<int>(hit_pills_.size());
+  if (compact_.next.contains(x, y) && CanPage(1)) return static_cast<int>(hit_pills_.size() + 1);
   return -1;
 }
 
@@ -195,6 +223,10 @@ void CandidateWindow::Update(const CandidateSnapshot& snapshot) noexcept {
 
 void CandidateWindow::LayoutAndShow(
     const CandidateSnapshot& snapshot) {
+  // Settings/DPI/selection changes invalidate an in-flight press as well as
+  // changes to the engine items, because its old rectangle may now mean a page.
+  pressed_index_ = hover_index_ = -1;
+  if (window_ && GetCapture() == window_) ReleaseCapture();
   const unsigned int dpi = WindowDpi(window_);
   const auto metrics = Metrics();
   const ScreenRect work = WorkAreaFromCaret(snapshot.caret_rect);
@@ -211,6 +243,13 @@ void CandidateWindow::LayoutAndShow(
 
   std::vector<ui::CandidateStripItem> items;
   items.reserve(snapshot.items.size());
+  numeric_labels_ = std::all_of(snapshot.items.begin(), snapshot.items.end(),
+      [](const CandidateItem& item) { return item.label.empty() ||
+          (item.label.size() == 1 && item.label[0] >= L'1' && item.label[0] <= L'9'); });
+  int digit_width_px = 0;
+  if (device && numeric_labels_)
+    for (wchar_t digit = L'1'; digit <= L'9'; ++digit)
+      digit_width_px = (std::max)(digit_width_px, MeasureText(device, label_font, std::wstring(1, digit)));
   for (const auto& item : snapshot.items) {
     ui::CandidateStripItem out;
     out.label = item.label;
@@ -219,13 +258,17 @@ void CandidateWindow::LayoutAndShow(
           CandidateSelectionKey(item.label, items.size());
       if (key != 0) out.label.assign(1, key);
     }
+    // Numeric labels restart within each visible subpage. Measure one stable
+    // maximum digit width so changing highlight/page cannot move boundaries.
+    if (!vertical_ && snapshot.matrix_rows.empty() && numeric_labels_) out.label = L"8";
     out.text = item.text;
     out.comment = item.comment;
     // Always reserve semibold width so selection never shifts layout.
     int width_px = 0;
     if (device) {
       if (!out.label.empty()) {
-        width_px += MeasureText(device, label_font, out.label);
+        width_px += !vertical_ && snapshot.matrix_rows.empty() && numeric_labels_
+            ? digit_width_px : MeasureText(device, label_font, out.label);
         width_px += ui::ScaleDip(4, dpi);
       }
       width_px += MeasureText(device, cand_bold, out.text);
@@ -249,13 +292,25 @@ void CandidateWindow::LayoutAndShow(
   if (label_font) DeleteObject(label_font);
   if (ann_font) DeleteObject(ann_font);
 
-  const auto layout = !snapshot.matrix_rows.empty()
-      ? ui::LayoutCandidateMatrixMeasured(items, snapshot.matrix_rows, metrics, (std::min)(available_dip, 640.f), snapshot.highlighted)
-      : ui::LayoutCandidateStripMeasured(
-      items, metrics, available_dip, vertical_,
-      static_cast<float>((std::max)(1L, work.bottom -
-          (std::max)(work.top, snapshot.caret_rect.top))) * 96.f / static_cast<float>(dpi));
+  compact_ = {};
+  ui::CandidateStripLayout layout;
+  if (!snapshot.matrix_rows.empty()) {
+    layout = ui::LayoutCandidateMatrixMeasured(items, snapshot.matrix_rows, metrics,
+        (std::min)(available_dip, 640.f), snapshot.highlighted);
+  } else if (vertical_) {
+    layout = ui::LayoutCandidateStripMeasured(items, metrics, available_dip, true,
+        static_cast<float>((std::max)(1L, work.bottom -
+            (std::max)(work.top, snapshot.caret_rect.top))) * 96.f / static_cast<float>(dpi));
+  } else {
+    compact_ = ui::LayoutCandidateCompactMeasured(items, metrics, available_dip,
+        9, snapshot.highlighted, snapshot.has_previous_page || snapshot.has_next_page);
+    layout = compact_;
+  }
   hit_pills_ = layout.pills;
+  snapshot_.visible_indices.clear();
+  for (std::size_t i = 0; i < hit_pills_.size(); ++i)
+    if (hit_pills_[i].width() > 0 && hit_pills_[i].height() > 0)
+      snapshot_.visible_indices.push_back(i);
   matrix_labels_.assign(snapshot.items.size(), L"");
   std::size_t offset = 0;
   for (const auto count : snapshot.matrix_rows) {
@@ -263,6 +318,11 @@ void CandidateWindow::LayoutAndShow(
     for (std::size_t i = offset; i < offset + count && i < hit_pills_.size(); ++i)
       if (hit_pills_[i].width() > 0) matrix_labels_[i] = std::to_wstring(++number);
     offset += count;
+  }
+  if (!compact_.pages.empty() && numeric_labels_) {
+    const auto page = compact_.pages[compact_.page_index];
+    for (std::size_t i = page.begin; i < page.end; ++i)
+      matrix_labels_[i] = std::to_wstring(i - page.begin + 1);
   }
   layout_width_dip_ = layout.width_dip;
   layout_height_dip_ = layout.height_dip;
@@ -347,7 +407,8 @@ void CandidateWindow::Paint(HDC) const {
                           ui::ToColorRef(palette.border));
     }
 
-    std::wstring label = snapshot_.matrix_rows.empty() ? snapshot_.items[i].label : matrix_labels_[i];
+    std::wstring label = (!snapshot_.matrix_rows.empty() || (!compact_.pages.empty() && numeric_labels_))
+        ? matrix_labels_[i] : snapshot_.items[i].label;
     if (label.empty()) {
       const wchar_t key = CandidateSelectionKey(label, i);
       if (key) label.assign(1, key);
@@ -403,13 +464,31 @@ void CandidateWindow::Paint(HDC) const {
   for (std::size_t i = 1; i < hit_pills_.size(); ++i) {
     const auto& before = hit_pills_[i - 1];
     const auto& after = hit_pills_[i];
-    if (before.top != after.top) continue;
+    if (before.width() <= 0 || after.width() <= 0 || before.top != after.top) continue;
     RECT separator = to_px({before.right, before.top, after.left, after.bottom});
     DrawTextW(mem, L"|", 1, &separator,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
   SelectObject(mem, previous_separator);
   DeleteObject(separator_font);
+
+  // Standard text chevrons keep the pager crisp at the host's DPI; these are
+  // font glyphs, not hand-drawn icon paths or externally loaded resources.
+  if (compact_.previous.width() > 0) {
+    HFONT pager_font = MakeFont(ui::ScaleDip(20, dpi), FW_NORMAL, false);
+    const auto previous = SelectObject(mem, pager_font);
+    for (int direction : {-1, 1}) {
+      RECT box = to_px(direction < 0 ? compact_.previous : compact_.next);
+      const bool enabled = CanPage(direction);
+      const auto index = static_cast<int>(hit_pills_.size()) + (direction > 0 ? 1 : 0);
+      if (enabled && hover_index_ == index)
+        ui::FillRoundRect(mem, box, ui::ScaleDip(4, dpi), ui::ToColorRef(palette.surface_tertiary));
+      SetTextColor(mem, ui::ToColorRef(enabled ? palette.text_secondary : palette.text_muted));
+      DrawTextW(mem, direction < 0 ? L"\u2039" : L"\u203a", 1, &box,
+          DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
+    SelectObject(mem, previous); DeleteObject(pager_font);
+  }
 
   if (label_font) DeleteObject(label_font);
   if (cand_font) DeleteObject(cand_font);
@@ -497,8 +576,14 @@ LRESULT CALLBACK CandidateWindow::WindowProcedure(HWND window, UINT message,
                                        static_cast<short>(HIWORD(lparam)));
         self->pressed_index_ = -1;
         if (GetCapture() == window) ReleaseCapture();
-        if (self->snapshot_.visible && self->select_ && hit >= 0 && hit == pressed) {
-          try { self->select_(static_cast<std::size_t>(hit)); }
+        if (self->snapshot_.visible && hit >= 0 && hit == pressed) {
+          try {
+            if (static_cast<std::size_t>(hit) < self->hit_pills_.size()) {
+              if (self->select_) self->select_(static_cast<std::size_t>(hit));
+            } else if (self->page_) {
+              self->page_(static_cast<std::size_t>(hit) == self->hit_pills_.size() ? -1 : 1);
+            }
+          }
           catch (...) { self->Hide(); }
         }
       }

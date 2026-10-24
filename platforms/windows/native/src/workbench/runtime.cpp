@@ -3,6 +3,8 @@
 #include "local_translation.hpp"
 #include "translation_languages.hpp"
 #include "official_features.hpp"
+#include "connector_ui.hpp"
+#include "codex_cli.hpp"
 #include "../core/buffer_keys.hpp"
 
 #include <algorithm>
@@ -10,9 +12,36 @@
 namespace rimes::windows::workbench {
 using core::Json;
 Runtime::Runtime(APIGenerator generate, TranslationResources resources,
-                 std::function<std::uint64_t()> clock, std::function<std::uint32_t()> foreground)
+                 std::function<std::uint64_t()> clock, std::function<std::uint32_t()> foreground,
+                 ReadinessProbe readiness)
     : translation_resources_(std::move(resources)), generate_(std::move(generate)),
-      foreground_(std::move(foreground)), clock_(std::move(clock)) {
+      readiness_probe_(std::move(readiness)), foreground_(std::move(foreground)), clock_(std::move(clock)) {
+  // Warm ICU/NLS while the Broker starts, before the first commit enters its
+  // bounded synchronous key-response path. Statistics remain best effort.
+  try { (void)metrics::Characters("a"); } catch (...) {}
+  using NativeGenerator = bool (*)(const Settings&, const Generation&,
+      const std::function<bool(const std::string&)>&, const std::function<bool()>&, std::string*);
+  const auto native = generate_.target<NativeGenerator>();
+  // An injected generator is a complete transport fixture. Production always
+  // probes its real connector off the UI/engine threads before enabling send.
+  if (!readiness_probe_ && native && *native == GenerateText) {
+    readiness_probe_ = [](const Settings& config, const std::function<bool()>& cancelled) -> Readiness {
+      if (config.ai_connector == "codex-cli") {
+        try {
+          const auto exe = ResolveCodex(config.codex_path);
+          std::string error;
+          if (RunCodexControl(exe, {L"login", L"status"}, cancelled, &error)) return {true, {}};
+          return {false, "请在设置 > 连接器中登录 ChatGPT。"};
+        } catch (...) { return {false, "未找到 Codex CLI，请在设置 > 连接器中配置。"}; }
+      }
+      if (!ValidConnectionURL(config.base_url) || config.model.empty())
+        return {false, "请在设置 > 连接器中配置地址和模型。"};
+      ConnectionProfile profile{CredentialIdentity(config), {}, "openai-compatible", config.base_url, config.model, {}};
+      if (!config.base_url.starts_with("http://") && !HasConnectionSecret(profile))
+        return {false, "请在设置 > 连接器中填写此 Provider 的 API Key。"};
+      return {true, {}};
+    };
+  }
   std::string error;
   settings_valid_ = LoadSettings(&settings_, &error);
   if (!settings_valid_) model_.status = error;
@@ -24,6 +53,8 @@ Runtime::Runtime(APIGenerator generate, TranslationResources resources,
 }
 Runtime::~Runtime() {
   Stop();
+  readiness_worker_.request_stop();
+  if (readiness_worker_.joinable()) readiness_worker_.join();
   if (api_worker_.joinable()) api_worker_.join();
   if (plugin_worker_.joinable()) plugin_worker_.join();
   if (translation_worker_.joinable()) translation_worker_.join();
@@ -95,6 +126,7 @@ void Runtime::Focus(Target target) {
 }
 void Runtime::FocusLocked(Target target) {
   if (target.process == GetCurrentProcessId()) target = {};
+  ObserveAppSwitchLocked(target.process);
   if (model_.live != target) ++peripheral_focus_revision_;
   if (model_.live == target && model_.capture) return;
   if (peripheral_target_ != target) RevokePeripheral();
@@ -579,13 +611,17 @@ Json Runtime::Control(const Json& message, std::uint32_t process) {
 }
 Json Runtime::Snapshot() {
   std::lock_guard lock(mutex_);
+  if (model_.visible && (ai_mode_ || model_.translate)) RefreshReadinessLocked(model_.translate);
+  const auto readiness = GenerationReadinessLocked(model_.translate);
   Json source = Json::array(), result = Json::array(), streaming = Json::array();
   for (const auto& b : model_.source)
     source.push_back({{"id", b.id}, {"text", b.text}, {"age_ms", auto_clock_.Age(b.id)}});
   for (const auto& b : model_.result)
     result.push_back({{"id", b.id}, {"text", b.text}});
   for (const auto& b : model_.streaming) streaming.push_back({{"id", b.id}, {"text", b.text}});
-  return {{"stream_blocks", streaming}, {"reasoning_summary", model_.reasoning_summary},
+  return {{"generation_ready", readiness.ready}, {"generation_unavailable", readiness.message},
+          {"waiting_seconds", model_.busy ? (clock_() - generation_started_) / 1000 : 0},
+          {"stream_blocks", streaming}, {"reasoning_summary", model_.reasoning_summary},
           {"source_blocks", source},
           {"result_blocks", result},
           {"visible", model_.visible},
@@ -703,6 +739,8 @@ bool Runtime::Configure(Settings value, const std::wstring& key,
     return false;
   }
   settings_ = std::move(value);
+  readiness_worker_.request_stop();
+  readiness_cache_.clear();
   RevokePeripheral();
   PrepareTranslationResources();
   if (model_.translate) {
@@ -774,8 +812,20 @@ void Runtime::PauseCapture() {
   CaptureChanged();
   Changed();
 }
+void Runtime::ObserveAppSwitchLocked(std::uint32_t process) {
+  if (!process || process == GetCurrentProcessId()) return;
+  const auto previous = last_external_process_;
+  last_external_process_ = process;
+  if (!settings_.reset_on_app_switch || !previous || previous == process ||
+      std::any_of(model_.source.begin(), model_.source.end(), [](const auto& block) { return block.external; })) return;
+  const bool translation = model_.translate;
+  DiscardBufferLocked();
+  model_.translate = translation;
+  Changed();
+}
 void Runtime::ObserveForeground(std::uint32_t process) {
   std::lock_guard lock(mutex_);
+  ObserveAppSwitchLocked(process);
   if (model_.live && model_.live.process != process) ++peripheral_focus_revision_;
   if (model_.capture && model_.bound == model_.live && model_.bound.process != process) {
     const auto target = model_.bound;
@@ -1040,6 +1090,54 @@ void Runtime::PublishCaret(const RECT& caret) {
       {"rect", {caret.left, caret.top, caret.right, caret.bottom}}});
   event_.notify_all();
 }
+bool Runtime::EffectiveGenerationSettings(bool translation, Settings* effective) {
+  *effective = settings_;
+  if (translation || ai_plugin_.empty()) return true;
+  const std::string kind = ai_plugin_ == official::kCodex ? "codex-cli" : "openai-compatible";
+  if (effective->ai_connector == kind) return true;
+  const auto found = std::find_if(effective->connections.begin(), effective->connections.end(),
+      [&](const auto& p) { return p.kind == kind; });
+  return found != effective->connections.end() && SelectConnection(effective, found->id);
+}
+Runtime::Readiness Runtime::GenerationReadinessLocked(bool translation) {
+  if (!settings_valid_) return {false, "设置不可用，请先修复设置文件。"};
+  if (translation && settings_.translation_provider == "local")
+    return {!translation_resources_.ready || translation_ready_, translation_ready_ ? "" : translation_status_};
+  Settings effective;
+  if (!EffectiveGenerationSettings(translation, &effective))
+    return {false, "请先在设置 > 连接器中配置该插件的模型。"};
+  if (!readiness_probe_) return {true, {}};
+  const auto key = std::to_string(settings_.revision) + ":" + effective.active_connection;
+  const auto found = readiness_cache_.find(key);
+  return found == readiness_cache_.end() ? Readiness{false, "正在检查连接器…"} : found->second.value;
+}
+void Runtime::RefreshReadinessLocked(bool translation) {
+  if (!readiness_probe_ || readiness_running_ || stopping_ ||
+      (translation && settings_.translation_provider == "local")) return;
+  Settings effective;
+  if (!EffectiveGenerationSettings(translation, &effective)) return;
+  const auto key = std::to_string(settings_.revision) + ":" + effective.active_connection;
+  const auto found = readiness_cache_.find(key);
+  if (found != readiness_cache_.end() && clock_() < found->second.expires) return;
+  readiness_running_ = true;
+  readiness_worker_ = std::jthread([this, effective, key](std::stop_token stop) {
+    Readiness result;
+    try { result = readiness_probe_(effective, [stop] { return stop.stop_requested(); }); }
+    catch (...) { result = {false, "连接器状态检查失败，请在设置中检查连接。"}; }
+    std::lock_guard lock(mutex_);
+    readiness_running_ = false;
+    if (stopping_) return;
+    // A configuration edit revokes the check as well as its cached result.
+    // Notify again when a cancelled probe retires so the UI can check the new
+    // connector without waiting for another user action.
+    if (stop.stop_requested() || effective.revision != settings_.revision) {
+      Changed();
+      return;
+    }
+    readiness_cache_[key] = {std::move(result), clock_() + 30000};
+    Changed();
+  });
+}
 void Runtime::StartGeneration(bool translation, bool complete_sentence_only) {
   if (!settings_valid_ || stopping_ || model_.busy || model_.Pending() ||
       (!translation && !model_.result.empty()))
@@ -1076,6 +1174,9 @@ void Runtime::StartGeneration(bool translation, bool complete_sentence_only) {
     Changed();
     return;
   }
+  RefreshReadinessLocked(translation);
+  const auto readiness = GenerationReadinessLocked(translation);
+  if (!readiness.ready) { model_.status = readiness.message; Changed(); return; }
   translation_pending_ = false;
   const std::string connector = !local && effective.ai_connector == "codex-cli" ? official::kCodex : "";
   const auto connector_grant = connector.empty() ? std::string{} : plugins_.Grant(connector);
@@ -1088,6 +1189,7 @@ void Runtime::StartGeneration(bool translation, bool complete_sentence_only) {
   auto job = model_.Generate(settings_.revision, translation,
                              complete_sentence_only);
   if (!model_.busy) return;
+  generation_started_ = clock_(); generation_elapsed_second_ = 0;
   if (local) model_.status = "正在本机翻译…";
   job.plugin_id = plugin; job.plugin_grant = grant; job.instruction = instruction;
   if (plugin == official::kCodex) { job.model = settings_.chatgpt_model; job.effort = settings_.chatgpt_effort; }
@@ -1271,6 +1373,10 @@ void Runtime::Tick() {
   if (translation_pending_ && translation_ready_ && model_.translate && model_.visible && !translation_paused_)
     StartGeneration(true);
   const auto now = clock_();
+  if (model_.visible && model_.busy && (now - generation_started_) / 1000 != generation_elapsed_second_) {
+    generation_elapsed_second_ = (now - generation_started_) / 1000;
+    Changed();
+  }
   if (fold_at_ && now >= *fold_at_) {
     fold_at_.reset();
     folded_ = focus_follow_ && model_.visible && !model_.capture;
@@ -1319,6 +1425,7 @@ void Runtime::Tick() {
 void Runtime::Stop() {
   std::lock_guard lock(mutex_);
   stopping_ = true;
+  readiness_worker_.request_stop();
   translation_worker_.request_stop();
   DiscardBufferLocked();
   api_event_.notify_all();

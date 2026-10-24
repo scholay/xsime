@@ -30,6 +30,18 @@ int wmain(int argc, wchar_t** argv) {
     ComPtr<IDWriteTextFormat> body, label;
     write->CreateTextFormat(L"Microsoft YaHei UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12, L"zh-CN", &body);
     write->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 10, L"zh-CN", &label);
+    ui::BufferPaintState composition;
+    composition.source_blocks = {{L"已有内容", false}};
+    composition.insertion = 1;
+    const auto start = ui::MeasureBufferCaret(write.Get(), body.Get(), composition, true);
+    for (const auto* preedit : {L"n", L"nihao", L"ni"}) {
+      composition.preedit = preedit;
+      composition.preedit_caret = static_cast<unsigned>(composition.preedit.size());
+      Check(ui::MeasureBufferCaret(write.Get(), body.Get(), composition, true) == start,
+          "Buffer candidate anchor remains at composition start while editing");
+      Check(ui::MeasureBufferCaret(write.Get(), body.Get(), composition) > start,
+          "Buffer editing caret still advances independently of candidate placement");
+    }
     const HWND window = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
         L"STATIC", L"Surface fixture", WS_POPUP, 0, 0, 760, 120, nullptr, nullptr, nullptr, nullptr);
     Check(window != nullptr, "layered fixture window");

@@ -1,9 +1,13 @@
+#include <windows.h>
+#include <windowsx.h>
+#include <commctrl.h>
 #include <richedit.h>
 #include <wincodec.h>
 #include <wrl/client.h>
 
 #include <filesystem>
 #include <iostream>
+#include <map>
 
 #include "capture.hpp"
 #include "messages.hpp"
@@ -11,6 +15,7 @@
 #include "terminal.hpp"
 #include "window.hpp"
 #include "interaction.hpp"
+#include "../workbench/official_features.hpp"
 
 using namespace rimes::windows;
 using namespace rimes::windows::peripherals;
@@ -254,6 +259,192 @@ void HistoryOrdering(const std::filesystem::path& root) {
   const auto tied = Store(root).List(Module::Notes);
   Check(tied[0]["id"].get<std::string>() < tied[1]["id"].get<std::string>(),
       "equal timestamps have stable identifier ordering");
+}
+void ClipboardArchives(const std::filesystem::path& root) {
+  const auto unicode = [](const std::wstring& text) {
+    return std::string(reinterpret_cast<const char*>(text.c_str()), (text.size() + 1) * sizeof(wchar_t));
+  };
+  std::map<std::string, std::string> offered{
+      {"CF_UNICODETEXT", unicode(L"原始格式 · rich text")},
+      {"HTML Format", "Version:1.0\r\nStartHTML:0000000105\r\n<b>rich text</b>"},
+      {"Rich Text Format", "{\\rtf1\\ansi rich \\b text\\b0}"},
+      {"Untrusted.Private.Object", "not a self-contained supported format"}};
+  ClipboardReadAccess access{
+      [&](const std::string& name) { return offered.contains(name); },
+      [&](const std::string& name, std::size_t limit) {
+        const auto& bytes = offered.at(name);
+        if (bytes.size() > limit) throw std::runtime_error("fixture oversize");
+        return bytes;
+      }};
+  auto rich = ReadClipboardSnapshot(access);
+  Check(rich.opened && rich.formats.size() == 3 && rich.text == workbench::Utf8(L"原始格式 · rich text"),
+        "Unicode, HTML and RTF are captured together without replaying private objects");
+  const auto rtf = offered.at("Rich Text Format");
+  offered["Rich Text Format"].clear();
+  const auto unavailable = ReadClipboardSnapshot(access);
+  Check(!unavailable.opened && unavailable.formats.empty() && unavailable.text.empty(),
+        "a delayed rich format retries the whole snapshot instead of recording partial text");
+  offered["Rich Text Format"] = rtf;
+  for (const auto* format : {"CanIncludeInClipboardHistory", "CanUploadToCloudClipboard", "CF_HDROP"}) {
+    offered[format] = {};
+    const auto delayed = ReadClipboardSnapshot(access);
+    Check(!delayed.opened && delayed.formats.empty() && delayed.text.empty() && delayed.files.empty(),
+          "unreadable privacy policy or file list retries without admitting an earlier text representation");
+    offered.erase(format);
+  }
+  for (const auto* policy : {"ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"}) {
+    offered[policy] = std::string(sizeof(DWORD), '\0');
+    const auto excluded = ReadClipboardSnapshot(access);
+    Check(excluded.formats.empty() && excluded.text.empty() && excluded.files.empty(),
+          "all existing privacy exclusion formats suppress the entire rich snapshot");
+    offered.erase(policy);
+  }
+  Store store(root / L"rich");
+  auto item = store.RecordClipboard(rich);
+  Check(ClipboardRequiresNativePaste(item), "rich text requires native paste rather than plain TSF insertion");
+  const auto classification = [](std::initializer_list<const char*> names, bool files = false) {
+    Json formats = Json::array();
+    for (const auto* name : names) formats.push_back({{"name", name}});
+    return Json{{"clipboard", {{"formats", formats}, {"files", files ? Json::array({"fixture"}) : Json::array()}}}};
+  };
+  Check(!ClipboardRequiresNativePaste(classification({"CF_UNICODETEXT"})) &&
+        ClipboardRequiresNativePaste(classification({"HTML Format"})) &&
+        ClipboardRequiresNativePaste(classification({"PNG"})) &&
+        ClipboardRequiresNativePaste(classification({"CF_UNICODETEXT", "Rich Text Format"})) &&
+        !ClipboardRequiresNativePaste(classification({}, true)) &&
+        !ClipboardRequiresNativePaste(Json{{"body", "Legacy text"}}),
+        "plain text retains direct insertion while rich/image formats use native paste and files stay copy-only");
+  const auto original = item;
+  unsigned publications = 0;
+  DWORD clipboard_sequence = 123;
+  const auto publish = [&](HWND, const std::vector<ClipboardFormat>& formats, DWORD expected) -> ClipboardWriteResult {
+    if (expected != clipboard_sequence) return {};
+    Check(formats.size() == 3, "copy restores the complete format set");
+    for (const auto& format : formats)
+      Check(offered.at(format.name) == format.bytes, "roundtrip retains the exact original representation bytes");
+    ++publications; return {true, ++clipboard_sequence};
+  };
+  const auto sequence = [&] { return clipboard_sequence; };
+  Check(CopyClipboardArchive(nullptr, store, Store(store.Root()).Get(item.at("id")), publish, sequence) && publications == 1,
+        "rich clipboard archive survives restarting the store without using the system clipboard");
+  Check(!CopyClipboardArchive(nullptr, store, item,
+      [&](HWND owner, const auto& formats, DWORD expected) {
+        ++clipboard_sequence;
+        return publish(owner, formats, expected);
+      }, sequence) && publications == 1,
+      "a concurrent copy while restoring an archive preserves the newer clipboard contents");
+  const auto raced = CopyClipboardArchive(nullptr, store, item,
+      [&](HWND owner, const auto& formats, DWORD expected) {
+        const auto written = publish(owner, formats, expected);
+        ++clipboard_sequence;  // Another owner copies after publication releases its lock.
+        return written;
+      }, sequence);
+  Check(raced.success && raced.sequence + 1 == clipboard_sequence,
+        "archive restoration returns its own write sequence even if a new copy arrives before the caller resumes");
+  const PasteTarget target{reinterpret_cast<HWND>(1), reinterpret_cast<HWND>(2), 123, 456};
+  unsigned native_pastes = 0;
+  PastePlatform paste{[&] { return target; }, sequence, [] { return true; }, [] { return true; },
+      [&](UINT, INPUT*, int) { ++native_pastes; return UINT{4}; }};
+  Check(PasteClipboardImage(target, raced.sequence, paste) == PasteResult::ClipboardChanged && native_pastes == 0,
+        "a new copy after restoration cannot be pasted using the preceding archive's activation");
+  item = Store(store.Root()).RecordClipboard(rich);
+  Check(item.at("id") == original.at("id") && store.List(Module::Temporary).size() == 1,
+        "a repeated rich copy promotes its existing identity");
+  auto other = rich; other.formats[1].bytes += " changed formatting";
+  Check(store.RecordClipboard(other).at("id") != item.at("id"),
+        "matching visible text never collapses different rich representations");
+  const auto legacy = store.RecordClipboardText(rich.text);
+  Check(!legacy.contains("clipboard") && legacy.at("id") != item.at("id"),
+        "legacy text records stay readable without accidentally inheriting rich payloads");
+  item["body"] = "Edited text";
+  item = store.Save(item, item.at("revision"));
+  Check(!item.contains("clipboard"), "editing text detaches its stale original rich archive");
+  Check(!ClipboardRequiresNativePaste(item), "an edited plain preview no longer routes through its removed rich archive");
+
+  CaptureImage image{2, 2, {0xff00ff00, 0xff0000ff, 0xffff0000, 0xffffffff}};
+  offered["PNG"] = EncodeCapture(image);
+  BITMAPINFOHEADER header{sizeof(BITMAPINFOHEADER), 2, -2, 1, 32, BI_RGB};
+  offered["CF_DIB"] = std::string(reinterpret_cast<const char*>(&header), sizeof(header)) +
+      std::string(reinterpret_cast<const char*>(image.pixels.data()), image.pixels.size() * 4);
+  auto mixed = ReadClipboardSnapshot(access);
+  Check(mixed.formats.size() == 5 && mixed.extension == ".png" && !mixed.text.empty(),
+        "image preview does not discard associated text, HTML, RTF or DIB representations");
+  auto mixed_item = store.RecordClipboard(mixed);
+  const auto restored = store.ClipboardFormats(mixed_item);
+  Check(restored.size() == 5 && ReadFile(store.Asset(mixed_item)) == offered.at("PNG"),
+        "PNG preview shares the exact archived PNG while the other formats remain restorable");
+  for (const auto& format : restored)
+    Check(format.bytes == offered.at(format.name), "mixed image/text bytes survive archive restoration");
+  auto corrupted = mixed_item;
+  const auto archive_asset = store.Asset(corrupted.at("clipboard").at("formats").at(0));
+  AtomicWrite(archive_asset, "damaged");
+  const auto before = publications;
+  Reject([&] { CopyClipboardArchive(nullptr, store, corrupted, publish, sequence); },
+         "corrupt archive rejects before emptying or publishing to the clipboard");
+  Check(publications == before, "corrupt archive never reaches the clipboard publication boundary");
+  Reject([&] { ValidateClipboardFormats({{"CF_BITMAP", "handle bytes"}}); },
+         "handle-based and unrecognized formats cannot be replayed");
+  Reject([&] { ValidateClipboardFormats({{"CF_UNICODETEXT", "bad"}}); },
+         "malformed Unicode cannot reach clipboard consumers");
+  Reject([&] { ValidateClipboardFormats({{"PNG", "one"}, {"PNG", "two"}}); },
+         "a persisted archive cannot contain ambiguous duplicate formats");
+
+  Store files(root / L"files");
+  const auto a = root / L"source-a", b = root / L"source-b";
+  std::filesystem::create_directories(a); std::filesystem::create_directories(b);
+  const auto first = a / L"同名.txt", second = b / L"同名.txt";
+  AtomicWrite(first, "first bytes"); AtomicWrite(second, "second bytes");
+  ClipboardContent group; group.opened = true; group.files = {first, second};
+  group.text = "file preview";
+  group.formats = {{"CF_UNICODETEXT", unicode(L"file preview")},
+      {"HTML Format", "<b>file preview</b>"}, {"Rich Text Format", "{\\rtf1 file preview}"}};
+  auto grouped = files.RecordClipboard(group);
+  Check(files.List(Module::Temporary).size() == 1 && grouped.at("clipboard").at("files").size() == 2,
+        "one multiple-file copy stays one card with all ordered files");
+  auto file_formats = files.ClipboardFormats(grouped);
+  std::map<std::string, std::string> file_offered;
+  for (const auto& format : file_formats) file_offered[format.name] = format.bytes;
+  const auto decoded_files = ReadClipboardSnapshot({
+      [&](const std::string& name) { return file_offered.contains(name); },
+      [&](const std::string& name, std::size_t) { return file_offered.at(name); }});
+  Check(decoded_files.files.size() == 2 && decoded_files.files[0].filename() == first.filename() &&
+        decoded_files.files[1].filename() == second.filename() && decoded_files.files[0] != decoded_files.files[1] &&
+        ReadFile(decoded_files.files[0]) == "first bytes" && ReadFile(decoded_files.files[1]) == "second bytes",
+        "a restored HDROP retains file order, duplicate leaf names and private snapshot bytes");
+  AtomicWrite(first, "changed source");
+  Check(ReadFile(decoded_files.files[0]) == "first bytes", "later source edits never modify the clipboard history snapshot");
+  Reject([&] { files.Asset({{"asset", "../source-a/同名.txt"}}); }, "archive paths cannot escape managed assets");
+  const auto original_files = grouped.at("clipboard").at("files");
+  const auto original_primary = grouped.at("asset");
+  grouped["title"] = "renamed group"; grouped["summary"] = "new annotation"; grouped["kind"] = "text";
+  grouped = files.Save(grouped, grouped.at("revision"));
+  Check(grouped.at("kind") == "document" && grouped.at("clipboard").at("formats").size() == 3 &&
+      grouped.at("clipboard").at("files") == original_files && grouped.at("asset") == original_primary,
+      "file group title/summary editing preserves type, exact original representations and all attachments");
+  grouped["body"] = "updated preview"; grouped["asset"] = "replacement.txt"; grouped["kind"] = "text";
+  grouped = files.Save(grouped, grouped.at("revision"));
+  Check(grouped.at("kind") == "document" && grouped.at("asset") == original_primary &&
+      grouped.at("clipboard").at("files") == original_files && grouped.at("clipboard").at("formats").empty(),
+      "changed file preview removes stale text formats without losing or replacing any original file");
+  CleanupPolicy immediate; immediate.orphan_grace = 0;
+  files.Cleanup({}, immediate);
+  Check(files.ClipboardFormats(grouped).size() == 1 && ReadFile(decoded_files.files[0]) == "first bytes" &&
+      ReadFile(decoded_files.files[1]) == "second bytes", "cleanup after file preview editing keeps the complete restorable group");
+  auto shared = grouped; shared.erase("id"); shared.erase("revision"); shared["module"] = "notes";
+  shared = files.Save(shared);
+  CleanupPolicy zero; zero.recent_items = 0; zero.orphan_grace = 0;
+  files.Cleanup({}, zero);
+  Check(files.List(Module::Temporary).empty() && files.ClipboardFormats(shared).size() == 1,
+        "cleanup retains every archived file still referenced by a saved card");
+  files.Erase(shared.at("id"), shared.at("revision")); files.Cleanup({}, zero);
+  Check(std::filesystem::is_empty(files.Root() / L"assets") && ReadFile(first) == "changed source" &&
+        ReadFile(second) == "second bytes", "cleanup reclaims all managed archive files and containers without deleting source files");
+  const auto oversized = root / L"oversized.bin";
+  AtomicWrite(oversized, "x"); std::filesystem::resize_file(oversized, kClipboardArchiveLimit + 1);
+  group.files = {second, oversized};
+  Reject([&] { files.RecordClipboard(group); }, "an oversized file rejects the whole group, never only its trailing files");
+  Check(files.List(Module::Temporary).empty() && std::filesystem::is_empty(files.Root() / L"assets"),
+        "failed group admission leaves no partial card or unmanaged payload");
 }
 void ImagePasteGuards() {
   PasteTarget target{reinterpret_cast<HWND>(1), reinterpret_cast<HWND>(2), 123, 456};
@@ -537,6 +728,7 @@ void ClipboardCardActions(const std::filesystem::path& root) {
   DWORD sequence = 1;
   ULONGLONG now = 100;
   unsigned reads = 0, writes = 0, pastes = 0;
+  unsigned archive_writes = 0;
   bool writable = true;
   PasteResult outcome = PasteResult::Sent;
   std::string copied;
@@ -544,14 +736,20 @@ void ClipboardCardActions(const std::filesystem::path& root) {
     ++reads; ClipboardContent result; result.opened = true; result.text = "Fixture clipboard"; return result;
   }};
   ClipboardActions actions;
-  actions.text = [&](HWND, const std::string& text, bool) {
-    if (!writable) return false;
-    copied = text; ++writes; ++sequence; return true;
+  actions.text = [&](HWND, const std::string& text, bool) -> ClipboardWriteResult {
+    if (!writable) return {};
+    copied = text; ++writes; return {true, ++sequence};
   };
-  actions.asset = [&](HWND, Store& source_store, const Json& item) {
-    if (!writable) return false;
+  actions.asset = [&](HWND, Store& source_store, const Json& item) -> ClipboardWriteResult {
+    if (!writable) return {};
     Check(ReadFile(source_store.Asset(item)) == ReadFile(store.Asset(image)), "copy uses selected image bytes");
-    ++writes; ++sequence; return true;
+    ++writes; return {true, ++sequence};
+  };
+  actions.archive = [&](HWND, Store& source_store, const Json& item) -> ClipboardWriteResult {
+    if (!writable) return {};
+    const auto formats = source_store.ClipboardFormats(item);
+    Check(formats.size() == 3, "rich card copy sends all captured formats to the clipboard writer");
+    ++archive_writes; ++writes; return {true, ++sequence};
   };
   actions.target = [&] { return native; };
   actions.now = [&] { return now; };
@@ -562,9 +760,10 @@ void ClipboardCardActions(const std::filesystem::path& root) {
   };
   peripherals::Windows windows(runtime, root, workbench::GenerateText, source, actions);
   const auto open = [&] {
-    windows.Open(Module::Temporary);
     runtime.Focus(target);
-    Check(runtime.BorrowPeripheral(peer), "fixture acquires exact TSF target without activating a user app");
+    windows.Open(Module::Temporary);
+    Check(runtime.PeripheralPasteTarget().target == target,
+          "opening the fixture borrows its already focused TSF target without activating a user app");
   };
   const auto activate = [&] {
     const auto pane = windows.Handle(false);
@@ -591,7 +790,7 @@ void ClipboardCardActions(const std::filesystem::path& root) {
       "image double-click copies and closes before dispatch");
   now += 49; windows.Tick(); Check(pastes == 0, "paste waits for closing to settle");
   now += 2; windows.Tick(); windows.Tick();
-  Check(pastes == 1 && FindWindowW(L"XSIME.Clipboard.Feedback", L"已发送图片粘贴"),
+  Check(pastes == 1 && FindWindowW(L"XSIME.Clipboard.Feedback", L"已发送粘贴"),
       "one image activation dispatches once after closing");
   open(); activate(); runtime.Focus(other); runtime.Focus(target);
   now += 60; windows.Tick();
@@ -625,6 +824,47 @@ void ClipboardCardActions(const std::filesystem::path& root) {
   Check(copied == "Exact note contents" && !IsWindowVisible(windows.Handle(false)) && reads == 0 &&
       store.Get(note.at("id")) == note && store.List(Module::Temporary).size() == 1,
       "saved card copy preserves exact content, saved ordering and separate Recent history");
+  ClipboardContent rich; rich.opened = true; rich.text = "Rich card plain text";
+  const auto wide = workbench::Wide(rich.text);
+  rich.formats = {{"CF_UNICODETEXT", std::string(reinterpret_cast<const char*>(wide.c_str()), (wide.size() + 1) * sizeof(wchar_t))},
+                  {"HTML Format", "<b>Rich card plain text</b>"}, {"Rich Text Format", "{\\rtf1 Rich card plain text}"}};
+  store.RecordClipboard(rich);
+  open(); SendMessageW(windows.Handle(false), WM_COMMAND, 203, 0);
+  Check(archive_writes == 1 && !IsWindowVisible(windows.Handle(false)),
+        "rich history card copy restores its archive and keeps copy-close behavior");
+  open(); SendMessageW(windows.Handle(false), WM_COMMAND, 218, 0);
+  Check(store.List(Module::Notes)[0].contains("clipboard") &&
+        store.ClipboardFormats(store.List(Module::Notes)[0]).size() == 3,
+        "saving a rich history card to Capsule keeps its full archive, not only the text preview");
+  open(); const auto before_rich_insert = writes;
+  const auto before_rich_paste = pastes;
+  SendMessageW(windows.Handle(false), WM_COMMAND, 238, 0);
+  Check(writes == before_rich_insert + 1 && archive_writes == 2 && !IsWindowVisible(windows.Handle(false)),
+        "rich card activation restores every format and closes before native paste");
+  now += 60; windows.Tick();
+  Check(pastes == before_rich_paste + 1, "rich card activation preserves formatting through guarded native paste");
+  const auto plain = store.RecordClipboardText("Ordinary plain text");
+  open();
+  // Reopening intentionally preserves the selected rich card. Select this
+  // fixture's new record explicitly rather than depending on insertion order.
+  const auto rows = store.List(Module::Temporary);
+  std::size_t plain_index = 0;
+  while (plain_index < rows.size() && rows[plain_index].at("id") != plain.at("id")) ++plain_index;
+  Check(plain_index < rows.size(), "new plain-text card is present in the fixture's history");
+  const auto pane = windows.Handle(false), list = GetDlgItem(pane, 102);
+  Check(SendMessageW(list, LB_SETCURSEL, plain_index, 0) != LB_ERR,
+        "fixture explicitly selects the plain-text card");
+  SendMessageW(pane, WM_COMMAND, MAKEWPARAM(102, LBN_SELCHANGE), reinterpret_cast<LPARAM>(list));
+  const auto before_text_insert = writes;
+  SendMessageW(windows.Handle(false), WM_COMMAND, 238, 0);
+  Check(writes == before_text_insert && !runtime.PeripheralPasteTarget(),
+        "plain text activation reserves TSF delivery without replacing the system clipboard");
+  auto delivery = runtime.Control({{"op", "wait"}, {"session", 801}}, peer);
+  if (delivery.value("kind", "") == "capture")
+    delivery = runtime.Control({{"op", "wait"}, {"session", 801}}, peer);
+  Check(delivery.value("kind", "") == "deliver" && delivery.value("text", "") == "Ordinary plain text" &&
+        delivery.value("context", 0ULL) == 901ULL,
+        "plain card activation queues its exact text for the borrowed context");
   runtime.Stop();
 }
 void CapsuleCancellation(const std::filesystem::path& root) {
@@ -693,6 +933,406 @@ void CapsuleCancellation(const std::filesystem::path& root) {
   bound.Open(); runtime.ReleasePeripheral(); bound.Tick();
   Check(!IsWindowVisible(bound.Handle(false)), "losing the borrowed input lease dismisses the rail");
   DestroyWindow(outside); runtime.Stop();
+}
+void CapsuleNavigation(const std::filesystem::path& root, bool native_click = false) {
+  struct NativeTrace {
+    struct Event {
+      const char* kind = "";
+      ULONGLONG time = 0;
+      UINT message = 0;
+      WPARAM wp = 0;
+      LPARAM lp = 0;
+      POINT point{};
+      ULONG_PTR marker = 0;
+      HWND hit = nullptr, foreground = nullptr;
+      DWORD process = 0;
+      RECT bounds{};
+      wchar_t name[128]{};
+      BOOL visible = FALSE;
+    };
+    HWND pane = nullptr;
+    HHOOK hook = nullptr;
+    std::vector<Event>& events;
+    static NativeTrace*& Active() { static thread_local NativeTrace* active = nullptr; return active; }
+    NativeTrace(HWND window, std::vector<Event>& values) : pane(window), events(values) {
+      Check(SetWindowSubclass(pane, Window, 79, reinterpret_cast<DWORD_PTR>(this)) != FALSE,
+            "native fixture installs window tracing");
+      Active() = this;
+      hook = SetWindowsHookExW(WH_MOUSE_LL, Mouse, GetModuleHandleW(nullptr), 0);
+      if (!hook) {
+        Active() = nullptr;
+        RemoveWindowSubclass(pane, Window, 79);
+        throw std::runtime_error("native fixture installs independent mouse tracing");
+      }
+      Event event; event.kind = "start"; Hit(event, pane); Record(event);
+    }
+    ~NativeTrace() {
+      if (hook) UnhookWindowsHookEx(hook);
+      RemoveWindowSubclass(pane, Window, 79);
+      Active() = nullptr;
+    }
+    static void Hit(Event& event, HWND window) {
+      event.hit = window;
+      GetClassNameW(window, event.name, 128);
+      GetWindowThreadProcessId(window, &event.process);
+      const auto previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+      GetWindowRect(window, &event.bounds);
+      if (previous) SetThreadDpiAwarenessContext(previous);
+    }
+    void Record(Event event) {
+      event.time = GetTickCount64();
+      event.foreground = GetForegroundWindow();
+      event.visible = IsWindowVisible(pane);
+      // Preallocated storage avoids I/O or allocation inside the input hook.
+      if (events.size() < events.capacity()) events.push_back(event);
+    }
+    void Inject(int id, POINT physical, HWND button) {
+      Event event; event.kind = "inject"; event.message = static_cast<UINT>(id); event.point = physical;
+      Hit(event, button); Record(event);
+    }
+    void Pointer(int id, POINT physical, HWND hit, bool moved, bool read) {
+      Event event; event.kind = "pointer"; event.message = static_cast<UINT>(id); event.point = physical;
+      event.wp = moved; event.lp = read; Hit(event, hit); Record(event);
+    }
+    static void Print(const std::vector<Event>& events) {
+      for (const auto& event : events)
+        std::cout << "TRACE " << event.kind << "=" << event.message << " time=" << event.time
+                  << " wp=" << event.wp << " lp=" << event.lp
+                  << " raw=" << event.point.x << "," << event.point.y << " marker=" << event.marker
+                  << " hwnd=" << reinterpret_cast<std::uintptr_t>(event.hit)
+                  << " class=" << workbench::Utf8(event.name) << " pid=" << event.process
+                  << " bounds=" << event.bounds.left << "," << event.bounds.top << ","
+                  << event.bounds.right << "," << event.bounds.bottom
+                  << " foreground=" << reinterpret_cast<std::uintptr_t>(event.foreground)
+                  << " visible=" << event.visible << '\n';
+    }
+    static LRESULT CALLBACK Mouse(int code, WPARAM message, LPARAM data) {
+      if (code == HC_ACTION && Active() &&
+          (message == WM_LBUTTONDOWN || message == WM_LBUTTONUP || message == WM_LBUTTONDBLCLK)) {
+        const auto& input = *reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
+        Event event; event.kind = "mouse"; event.message = static_cast<UINT>(message);
+        event.point = input.pt; event.marker = input.dwExtraInfo;
+        Hit(event, OutsideClick::HitTest(input.pt));
+        Active()->Record(event);
+      }
+      return CallNextHookEx(nullptr, code, message, data);
+    }
+    static LRESULT CALLBACK Window(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
+                                   UINT_PTR, DWORD_PTR data) {
+      if (message == WM_ACTIVATE || message == WM_SHOWWINDOW || message == OutsideClick::kDismiss) {
+        Event event; event.kind = "window"; event.message = message; event.wp = wp; event.lp = lp;
+        Hit(event, message == WM_ACTIVATE ? reinterpret_cast<HWND>(lp) : hwnd);
+        reinterpret_cast<NativeTrace*>(data)->Record(event);
+      }
+      return DefSubclassProc(hwnd, message, wp, lp);
+    }
+  };
+  std::vector<NativeTrace::Event> trace_events;
+  trace_events.reserve(2048);
+  struct TraceDump {
+    std::vector<NativeTrace::Event>& events;
+    ~TraceDump() { NativeTrace::Print(events); }
+  } trace_dump{trace_events};
+  struct MouseCycle {
+    HWND target;
+    ULONG_PTR marker;
+    unsigned down = 0, up = 0;
+    unsigned any_down = 0, any_up = 0;
+    ULONG_PTR actual_marker = 0;
+    UINT down_message = 0;
+    POINT up_point{};
+    bool outside = false;
+    ~MouseCycle() { RemoveWindowSubclass(target, Observe, 78); }
+    static LRESULT CALLBACK Observe(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
+                                    UINT_PTR, DWORD_PTR data) {
+      auto& cycle = *reinterpret_cast<MouseCycle*>(data);
+      if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK) ++cycle.any_down;
+      if (message == WM_LBUTTONUP) ++cycle.any_up;
+      if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK || message == WM_LBUTTONUP)
+        cycle.actual_marker = static_cast<ULONG_PTR>(GetMessageExtraInfo());
+      if (static_cast<ULONG_PTR>(GetMessageExtraInfo()) == cycle.marker) {
+        if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK) {
+          ++cycle.down; cycle.down_message = message;
+        }
+        if (message == WM_LBUTTONUP) {
+          ++cycle.up; cycle.up_point = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+        }
+      }
+      if (cycle.outside && message == WM_MOUSEACTIVATE) return MA_NOACTIVATE;
+      return DefSubclassProc(hwnd, message, wp, lp);
+    }
+  };
+  struct PointerClip {
+    RECT previous{};
+    bool saved = false;
+    explicit PointerClip(POINT point) {
+      saved = GetClipCursor(&previous) != FALSE;
+      RECT pixel{point.x, point.y, point.x + 1, point.y + 1};
+      if (!saved || !ClipCursor(&pixel)) throw std::runtime_error("cannot confine fixture mouse input");
+    }
+    ~PointerClip() { if (saved) ClipCursor(&previous); }
+  };
+  ULONG_PTR input_marker = 0x58534900;
+  const auto inject_click = [](POINT screen, ULONG_PTR marker) {
+    const auto width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const auto height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    const auto normalized = [](LONG position, int origin, int span) {
+      return static_cast<LONG>(((static_cast<std::int64_t>(position) - origin) * 2 + 1) * 65536 / (span * 2));
+    };
+    INPUT input[2]{};
+    for (auto& event : input) {
+      event.type = INPUT_MOUSE;
+      event.mi.dx = normalized(screen.x, GetSystemMetrics(SM_XVIRTUALSCREEN), width);
+      event.mi.dy = normalized(screen.y, GetSystemMetrics(SM_YVIRTUALSCREEN), height);
+      event.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
+      event.mi.dwExtraInfo = marker;
+    }
+    input[0].mi.dwFlags |= MOUSEEVENTF_LEFTDOWN;
+    input[1].mi.dwFlags |= MOUSEEVENTF_LEFTUP;
+    // Move and click in the same input batch; a later cursor move must not
+    // redirect an already queued click to a different desktop window.
+    return SendInput(2, input, sizeof(INPUT)) == 2;
+  };
+  struct PointerRestore {
+    POINT saved{};
+    bool enabled;
+    explicit PointerRestore(bool value) : enabled(value) { GetCursorPos(&saved); }
+    ~PointerRestore() { if (enabled) SetCursorPos(saved.x, saved.y); }
+  } pointer_restore(native_click);
+  // Exercise the real mouse route. WM_COMMAND alone skips HandleMessage's
+  // dialog preprocessing and the button's focus/capture/default processing.
+  const std::vector<std::vector<std::string>> kinds{
+      {"text", "image", "other"}, {"image", "video"},
+      {"bullet", "markdown", "text"},
+      {"literature", "document", "project", "skill", "other"},
+      {"login", "key", "other"}};
+  for (const bool borrowed : {false, true}) {
+    const auto scenario = borrowed ? "borrowed" : "detached";
+    const auto directory = root / workbench::Wide(scenario);
+    Store store(directory);
+    for (unsigned module = 0; module < kinds.size(); ++module)
+      for (const auto& kind : kinds[module])
+        store.Save({{"module", kModuleIds[module]}, {"kind", kind},
+                    {"title", std::string(kModuleIds[module]) + "-" + kind},
+                    {"body", "isolated navigation fixture"}});
+    workbench::Runtime runtime;
+    const auto peer = GetCurrentProcessId() + 301;
+    const auto target = runtime.Register(peer, 993, 994);
+    const auto other = runtime.Register(peer, 995, 996);
+    if (borrowed) runtime.Focus(target);
+    const ClipboardSource source{[] { return DWORD{5}; }, [] { return true; },
+                                 [](HWND) { return ClipboardContent{}; }};
+    ClipboardActions actions;
+    actions.target = [&] {
+      return borrowed ? PasteTarget{reinterpret_cast<HWND>(1),
+                                    reinterpret_cast<HWND>(2), peer, 1}
+                      : PasteTarget{};
+    };
+    peripherals::Windows windows(runtime, directory, {}, source, actions);
+    windows.Open(Module::Temporary);
+    const auto pane = windows.Handle(false);
+    auto trace = std::make_unique<NativeTrace>(pane, trace_events);
+    const auto lease = runtime.PeripheralPasteTarget();
+    const auto opening = runtime.Snapshot().at("opening_revision");
+    const auto foreground = GetForegroundWindow();
+    const auto require = [&](bool ok, const std::string& step) {
+      if (!ok) throw std::runtime_error(std::string("Capsule navigation ") +
+                                       scenario + ": " + step);
+    };
+    require(IsWindowVisible(pane) && static_cast<bool>(lease) == borrowed,
+            "fixture opens with the expected input lease");
+    require(!borrowed || lease.target == target,
+            "fixture borrows the exact target");
+    const auto check_lease = [&] {
+      const auto current = runtime.PeripheralPasteTarget();
+      require(current.target == lease.target &&
+                  current.focus_revision == lease.focus_revision &&
+                  runtime.Snapshot().at("opening_revision") == opening &&
+                  runtime.Capturing(target) == borrowed &&
+                  !runtime.Capturing(other),
+              "internal navigation must not replace or release the target lease");
+      require(!borrowed || GetForegroundWindow() == foreground,
+              "borrowed navigation must not activate Capsule");
+    };
+    const auto drain = [&] {
+      // Do not Tick a synthetic external process: BorrowedInput correctly
+      // rejects a peer that does not own the desktop foreground. Dispatch
+      // queued messages without that probe. Native input uses the production
+      // thread-wide queue; per-HWND filtering would reorder cancellation and
+      // input to the external fixture window.
+      MSG queued{};
+      unsigned count = 0;
+      while (PeekMessageW(&queued, native_click ? nullptr : pane, 0, 0, PM_REMOVE)) {
+        require(++count < 4096, "message queue settles");
+        if (!windows.HandleMessage(&queued)) {
+          TranslateMessage(&queued);
+          DispatchMessageW(&queued);
+        }
+      }
+    };
+    if (!borrowed) {
+      SendMessageW(pane, WM_ACTIVATE, WA_INACTIVE, 0);
+      drain();
+      require(IsWindowVisible(pane),
+              "transient deactivation without a destination does not cancel the next internal click");
+      check_lease();
+    }
+    const auto click = [&](int id) {
+      const auto button = GetDlgItem(pane, id);
+      require(button && IsWindowVisible(button) && IsWindowEnabled(button),
+              "navigation control is visible and enabled: " + std::to_string(id));
+      RECT rect{};
+      GetClientRect(button, &rect);
+      POINT point{(rect.right - rect.left) / 2, (rect.bottom - rect.top) / 2};
+      POINT screen = point;
+      ClientToScreen(button, &screen);
+      const auto ui_dpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_UNAWARE);
+      const auto hit = OutsideClick::HitTest(screen);
+      const bool restored = AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), DPI_AWARENESS_CONTEXT_UNAWARE);
+      SetThreadDpiAwarenessContext(ui_dpi);
+      if (hit != button || !restored) {
+        wchar_t hit_class[128]{};
+        DWORD hit_process = 0;
+        GetClassNameW(hit, hit_class, 128);
+        GetWindowThreadProcessId(hit, &hit_process);
+        RECT expected_rect{}, actual_rect{};
+        GetWindowRect(button, &expected_rect);
+        GetWindowRect(hit, &actual_rect);
+        const auto bounds = [](const RECT& value) {
+          return std::to_string(value.left) + "," + std::to_string(value.top) + "," +
+              std::to_string(value.right) + "," + std::to_string(value.bottom);
+        };
+        require(false, "physical tab hit testing survives the hook's unaware DPI context: " + std::to_string(id) +
+            " (point=" + std::to_string(screen.x) + "," + std::to_string(screen.y) +
+            ", expected=" + bounds(expected_rect) + ", hit=" + bounds(actual_rect) +
+            ", class=" + workbench::Utf8(hit_class) + ", pid=" + std::to_string(hit_process) +
+            ", fixturePid=" + std::to_string(GetCurrentProcessId()) +
+            ", restored=" + std::to_string(restored) + ", dpi=" + std::to_string(GetDpiForWindow(pane)) + ")");
+      }
+      trace->Inject(id, screen, button);
+      if (native_click) {
+        PointerClip clip(screen);
+        MouseCycle cycle{button, ++input_marker};
+        require(SetWindowSubclass(button, MouseCycle::Observe, 78,
+                                  reinterpret_cast<DWORD_PTR>(&cycle)) != FALSE,
+                "fixture observes the complete native button click");
+        POINT actual{};
+        const bool moved = SetCursorPos(screen.x, screen.y) != FALSE;
+        const bool read = GetPhysicalCursorPos(&actual) != FALSE;
+        const auto pointer_hit = OutsideClick::HitTest(actual);
+        trace->Pointer(id, actual, pointer_hit, moved, read);
+        require(moved && read &&
+                    actual.x == screen.x && actual.y == screen.y &&
+                    pointer_hit == button,
+                "native pointer targets only the fixture button: " + std::to_string(id));
+        require(inject_click(screen, cycle.marker), "native fixture mouse input accepted");
+        const auto until = GetTickCount64() + 1000;
+        do {
+          drain();
+          if (cycle.up && GetCapture() == nullptr) break;
+          Sleep(1);
+        } while (GetTickCount64() < until);
+        require(cycle.down == 1 && cycle.up == 1 && GetCapture() == nullptr,
+                "native button completes down/up and releases capture: " + std::to_string(id) +
+                    " (down=" + std::to_string(cycle.down) + ", up=" + std::to_string(cycle.up) +
+                    ", capture=" + std::to_string(GetCapture() != nullptr) + ", downMessage=" +
+                    std::to_string(cycle.down_message) + ", upAt=" + std::to_string(cycle.up_point.x) +
+                    "," + std::to_string(cycle.up_point.y) + ", anyDown=" + std::to_string(cycle.any_down) +
+                    ", anyUp=" + std::to_string(cycle.any_up) + ", marker=" + std::to_string(cycle.actual_marker) + ")");
+        require(IsWindowVisible(pane), "native click must not close Capsule: " + std::to_string(id));
+        check_lease();
+        return;
+      }
+      for (const auto message : {WM_LBUTTONDOWN, WM_LBUTTONUP}) {
+        MSG mouse{};
+        mouse.hwnd = button;
+        mouse.message = message;
+        mouse.wParam = message == WM_LBUTTONDOWN ? MK_LBUTTON : 0;
+        mouse.lParam = MAKELPARAM(point.x, point.y);
+        mouse.pt = screen;
+        mouse.time = GetTickCount();
+        if (!windows.HandleMessage(&mouse)) DispatchMessageW(&mouse);
+        drain();
+        require(IsWindowVisible(pane),
+                "internal mouse event must not close Capsule: " + std::to_string(id));
+        check_lease();
+      }
+      require(GetCapture() != button, "button releases mouse capture after click");
+    };
+    const auto check_rows = [&](unsigned module, const std::string& kind) {
+      require(Store(directory).CapsuleSelection() == static_cast<Module>(module),
+              "navigation immediately persists the selected module");
+      const auto list = GetDlgItem(pane, 102);
+      std::vector<std::wstring> actual, expected;
+      const auto count = SendMessageW(list, LB_GETCOUNT, 0, 0);
+      require(count != LB_ERR, "visible card projection has a list model");
+      for (LRESULT index = 0; index < count; ++index) {
+        const auto length = SendMessageW(list, LB_GETTEXTLEN, index, 0);
+        require(length >= 0 && length < 1024, "card title is bounded");
+        std::wstring title(static_cast<std::size_t>(length) + 1, L'\0');
+        SendMessageW(list, LB_GETTEXT, index, reinterpret_cast<LPARAM>(title.data()));
+        title.resize(static_cast<std::size_t>(length));
+        actual.push_back(std::move(title));
+      }
+      for (const auto& candidate : kinds[module])
+        if (kind.empty() || candidate == kind)
+          expected.push_back(workbench::Wide(std::string(kModuleIds[module]) + "-" + candidate));
+      std::sort(actual.begin(), actual.end());
+      std::sort(expected.begin(), expected.end());
+      require(actual == expected,
+              "card results match module/category: " + std::string(kModuleIds[module]) + "/" + kind);
+    };
+    for (unsigned module = 0; module < kinds.size(); ++module) {
+      click(300 + static_cast<int>(module));
+      check_rows(module, "");
+      for (unsigned category = 0; category < kinds[module].size(); ++category) {
+        click(241 + static_cast<int>(category));
+        check_rows(module, kinds[module][category]);
+      }
+      click(240);
+      check_rows(module, "");
+    }
+    // Also cross the last-to-first boundary through the horizontal tabs.
+    click(300);
+    check_rows(0, "");
+    if (native_click) {
+      RECT frame{}; GetWindowRect(pane, &frame);
+      const auto outside = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+          L"STATIC", L"Capsule outside-click fixture", WS_POPUP | WS_VISIBLE | SS_NOTIFY,
+          frame.left, frame.top - 50, 60, 40, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+      MouseCycle cycle{outside, ++input_marker}; cycle.outside = true;
+      require(SetWindowSubclass(outside, MouseCycle::Observe, 78,
+                                reinterpret_cast<DWORD_PTR>(&cycle)) != FALSE,
+              "outside fixture observes mouse input");
+      require(GetCapture() == nullptr, "previous button has released capture before the external click");
+      const POINT point{frame.left + 20, frame.top - 30};
+      PointerClip clip(point);
+      POINT actual{};
+      require(SetCursorPos(point.x, point.y) && GetPhysicalCursorPos(&actual) &&
+                  actual.x == point.x && actual.y == point.y &&
+                  OutsideClick::HitTest(actual) == outside,
+              "external click targets only the fixture window");
+      require(inject_click(point, cycle.marker), "outside fixture click accepted");
+      // Wait for both cancellation and the complete marked click. SendInput
+      // only queues events; do not move the pointer while a button holds capture.
+      const auto until = GetTickCount64() + 1000;
+      do {
+        drain();
+        if (!IsWindowVisible(pane) && cycle.up && !runtime.PeripheralPasteTarget()) break;
+        Sleep(1);
+      } while (GetTickCount64() < until);
+      DestroyWindow(outside);
+      require(!IsWindowVisible(pane) && cycle.down == 1 && cycle.up == 1 && !runtime.PeripheralPasteTarget(),
+              "real outside click closes Capsule, releases the lease, and reaches its target" +
+                  std::string(" (visible=") + std::to_string(IsWindowVisible(pane) != FALSE) +
+                  ", down=" + std::to_string(cycle.down) + ", up=" + std::to_string(cycle.up) + ", lease=" +
+                  std::to_string(static_cast<bool>(runtime.PeripheralPasteTarget())) + ")");
+    }
+    SendMessageW(pane, WM_CLOSE, 0, 0);
+    require(!IsWindowVisible(pane) && !runtime.PeripheralPasteTarget(),
+            "explicit close releases the fixture lease");
+    runtime.Stop();
+  }
 }
 void CaptureUI(HWND hwnd, const std::filesystem::path& path,
                IWICImagingFactory* imaging) {
@@ -1002,11 +1642,17 @@ void CardHover(const std::filesystem::path& root,
     ValidateRect(cards, nullptr);
     SendMessageW(cards, WM_MOUSEMOVE, 0, point(20, 60));
     RECT damage{};
-    Check(GetUpdateRect(cards, &damage, FALSE) && damage.left == 0 &&
-              damage.right <= MulDiv(206, dpi, 96),
-          "entering a card invalidates only that card");
+    Check(GetUpdateRect(cards, &damage, FALSE) && damage.left == MulDiv(174, dpi, 96) &&
+              damage.top == MulDiv(98, dpi, 96) && damage.right <= MulDiv(200, dpi, 96),
+          "entering a card invalidates only its action glyph, never the thumbnail or text");
     const auto hover = render();
     Check(hover != normal, "hover presents the Fluent copy affordance");
+    for (int y = 0; y < bounds.bottom; ++y) for (int x = 0; x < bounds.right; ++x) {
+      if (x >= MulDiv(174, dpi, 96) && x < MulDiv(200, dpi, 96) &&
+          y >= MulDiv(98, dpi, 96) && y < MulDiv(124, dpi, 96)) continue;
+      Check(normal[y * bounds.right + x] == hover[y * bounds.right + x],
+          "hover never changes pixels outside the copy action");
+    }
     canvas.Save(output / workbench::Wide(std::string(ui::ThemeIdString(theme)) +
                                          "-card-hover.png"), imaging.Get());
     ValidateRect(cards, nullptr);
@@ -1038,6 +1684,12 @@ void CardHover(const std::filesystem::path& root,
 }
 void UI(const std::filesystem::path& root,
         const std::filesystem::path& output) {
+  // This isolated Mailbox fixture explicitly chooses ChatGPT. Fresh production
+  // profiles keep it disabled until the user opts in.
+  workbench::OfficialPluginStore fixture_plugins;
+  Check(fixture_plugins.Install(official::kCodex, nullptr) &&
+        fixture_plugins.Enable(official::kCodex, true, nullptr),
+        "Mailbox fixture explicitly installs and enables its ChatGPT connector");
   Store store(root);
   FixtureImage(store);
   store.Save({{"module", "notes"},
@@ -1461,6 +2113,91 @@ void UI(const std::filesystem::path& root,
 }
 }  // namespace
 
+void PumpCaptureUntil(CaptureWindows& ui, const std::function<bool()>& done) {
+  const auto deadline = GetTickCount64() + 10000;
+  while (!done() && GetTickCount64() < deadline) {
+    MSG message{};
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+      if (!ui.HandleMessage(&message)) {
+        TranslateMessage(&message); DispatchMessageW(&message);
+      }
+    }
+    MsgWaitForMultipleObjects(0, nullptr, FALSE, 5, QS_ALLINPUT);
+  }
+  Check(done(), "capture background preparation completes within its bounded deadline");
+}
+
+void CapturePerformance(const std::filesystem::path& root) {
+  Store store(root);
+  CaptureImage image{3840, 2160, {}};
+  image.pixels.resize(3840 * 2160);
+  for (std::size_t i = 0; i < image.pixels.size(); ++i)
+    image.pixels[i] = 0xff000000U | static_cast<std::uint32_t>(i * 101);
+  CaptureWindows ui(store, {}, [] { return "night"; },
+      [&] { return std::make_pair(image, RECT{0, 0, 3840, 2160}); });
+  ui.Start();
+  const auto window = ui.SelectionWindow();
+  Canvas frame(3840, 2160);
+  const auto resources = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+  LARGE_INTEGER frequency{}, before{}, after{};
+  QueryPerformanceFrequency(&frequency); QueryPerformanceCounter(&before);
+  SendMessageW(window, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(100, 100));
+  for (int i = 0; i < 60; ++i) {
+    SendMessageW(window, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(2000 + i, 1500));
+    SendMessageW(window, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(frame.dc), PRF_CLIENT);
+  }
+  GdiFlush(); QueryPerformanceCounter(&after);
+  const auto pixels = frame.Pixels();
+  Check(pixels[200 * 3840 + 200] == image.pixels[200 * 3840 + 200],
+      "4K selection preview retains exact unscaled selected pixels");
+  Check((pixels[50 * 3840 + 50] & 0xffffff) != (image.pixels[50 * 3840 + 50] & 0xffffff),
+      "outside selection is dimmed from the frozen desktop");
+  Check(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) <= resources + 4,
+      "repeated 4K selection frames do not accumulate GDI resources");
+  std::cout << "Capture 4K full-frame paint mean_ms="
+      << (after.QuadPart - before.QuadPart) * 1000.0 / frequency.QuadPart / 60 << std::endl;
+  QueryPerformanceCounter(&before);
+  SendMessageW(window, WM_LBUTTONUP, 0, MAKELPARAM(3800, 2100));
+  QueryPerformanceCounter(&after);
+  Check(ui.Preparing() && !IsWindowVisible(window),
+      "large capture encoding runs after selection releases the desktop");
+  std::cout << "Capture 4K selection-release_ms="
+      << (after.QuadPart - before.QuadPart) * 1000.0 / frequency.QuadPart << std::endl;
+  ui.Protect();
+  PumpCaptureUntil(ui, [&] { return !ui.Preparing(); });
+  Check(store.List(Module::Capture).empty(), "shielded 4K worker cannot publish or reopen its capture");
+}
+
+void CapturePreview(const std::filesystem::path& root) {
+  Store store(root);
+  CaptureImage image{640, 400, {}};
+  image.pixels.resize(640 * 400);
+  for (int y = 0; y < 400; ++y) for (int x = 0; x < 640; ++x)
+    image.pixels[y * 640 + x] = 0xff000000U | ((40 + x / 4) << 16) |
+        ((50 + y / 3) << 8) | 110;
+  CaptureWindows ui(store, {}, [] { return "night"; },
+      [&] { return std::make_pair(image, RECT{0, 0, 640, 400}); },
+      [](HWND, Store&, const Json&) { return ClipboardWriteResult{true, 1}; });
+  for (int i = 0; i < 3; ++i) {
+    ui.Start();
+    auto select = ui.SelectionWindow();
+    SendMessageW(select, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(5, 5));
+    SendMessageW(select, WM_LBUTTONUP, 0, MAKELPARAM(635 - i * 150, 395));
+    PumpCaptureUntil(ui, [&] { return !ui.Preparing(); });
+    SetWindowTextW(ui.StackWindow(), (L"截图堆栈 · 测试 " + std::to_wstring(i + 1)).c_str());
+  }
+  std::cout << "READY: isolated capture preview; synthetic copy leaves the system clipboard untouched" << std::endl;
+  const auto until = GetTickCount64() + 180000;
+  while (!ui.ActiveRecords().empty() && GetTickCount64() < until) {
+    MSG message{};
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+      if (!ui.HandleMessage(&message)) { TranslateMessage(&message); DispatchMessageW(&message); }
+    }
+    MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
+  }
+  ui.Protect();
+}
+
 void CaptureFeatures(const std::filesystem::path& root,
                      const std::filesystem::path& output) {
   Store store(root);
@@ -1500,9 +2237,14 @@ void CaptureFeatures(const std::filesystem::path& root,
       },
       "invalid project coordinates rejected");
   int notifications = 0;
+  bool copy_available = false;
+  std::string copied_id, capture_theme = "night";
   CaptureWindows ui(
-      store, [&] { ++notifications; }, [] { return "night"; },
-      [&] { return std::make_pair(base, RECT{40, 40, 680, 440}); });
+      store, [&] { ++notifications; }, [&] { return capture_theme; },
+      [&] { return std::make_pair(base, RECT{40, 40, 680, 440}); },
+      [&](HWND, Store&, const Json& card) {
+        copied_id = card.at("id"); return ClipboardWriteResult{copy_available, 1};
+      });
   ui.Start();
   auto select = ui.SelectionWindow();
   Check(select && IsWindowVisible(select),
@@ -1510,6 +2252,8 @@ void CaptureFeatures(const std::filesystem::path& root,
   SendMessageW(select, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20, 20));
   SendMessageW(select, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(600, 360));
   SendMessageW(select, WM_LBUTTONUP, 0, MAKELPARAM(600, 360));
+  Check(!IsWindowVisible(select), "selection releases the desktop before PNG encoding completes");
+  PumpCaptureUntil(ui, [&] { return notifications == 1; });
   Check(!IsWindowVisible(select) && IsWindowVisible(ui.StackWindow()) &&
             notifications == 1,
         "selection stores automatically and presents stack");
@@ -1519,6 +2263,25 @@ void CaptureFeatures(const std::filesystem::path& root,
   auto captureImage = LoadCapture(store.Asset(captured));
   Check(captureImage.width == 580 && captureImage.height == 340,
         "selection is saved at physical resolution");
+  const auto first_card = ui.StackWindow();
+  RECT first_bounds{}; GetWindowRect(first_card, &first_bounds);
+  const auto dpi = GetDpiForWindow(first_card);
+  Check(first_bounds.right - first_bounds.left == MulDiv(208, dpi, 96) &&
+      first_bounds.bottom - first_bounds.top == MulDiv(148, dpi, 96),
+      "stack uses macOS 208 x 148 point thumbnail dimensions");
+  Check(!IsWindowVisible(GetDlgItem(first_card, 200)) &&
+      !GetDlgItem(first_card, 220) && !IsWindowEnabled(GetDlgItem(first_card, 204)),
+      "resting thumbnail has no permanent button row or pagination; pin stays disabled");
+  const auto prior_focus = GetForegroundWindow();
+  SendMessageW(first_card, WM_MOUSEMOVE, 0, MAKELPARAM(40, 40));
+  Check(IsWindowVisible(GetDlgItem(first_card, 200)) &&
+      IsWindowVisible(GetDlgItem(first_card, 201)) &&
+      SendMessageW(first_card, WM_MOUSEACTIVATE, 0, 0) == MA_NOACTIVATE &&
+      GetForegroundWindow() == prior_focus,
+      "hover reveals real controls without activating the input method");
+  SendMessageW(first_card, WM_COMMAND, 200, 0);
+  Check(IsWindow(first_card) && copied_id == captured.at("id").get<std::string>(),
+      "clipboard failure preserves the exact original card for retry");
   ui.Start();
   SendMessageW(ui.SelectionWindow(), WM_KEYDOWN, VK_ESCAPE, 0);
   Check(store.List(Module::Capture).size() == 2 &&
@@ -1563,11 +2326,51 @@ void CaptureFeatures(const std::filesystem::path& root,
           "capture fixture imaging");
     CaptureUI(editor, output / L"capture-editor.png", imaging.Get());
     CaptureUI(ui.StackWindow(), output / L"capture-stack.png", imaging.Get());
+    for (const auto& theme : {"night", "day", "rasta", "quiet"}) {
+      capture_theme = theme;
+      SendMessageW(first_card, WM_MOUSEMOVE, 0, MAKELPARAM(40, 40));
+      CaptureUI(first_card, output / (workbench::Wide(theme) + L"-capture-stack-hover.png"), imaging.Get());
+    }
   }
-  SendMessageW(ui.StackWindow(), WM_COMMAND, 203, 0);
-  Check(store.List(Module::Capture).size() == 2,
-        "closing stack card never deletes history");
+  SendMessageW(editor, WM_CLOSE, 0, 0);
+  Check(ui.StackWindow() == first_card, "editing updates the same window and stack slot");
+  for (int i = 0; i < 6; ++i) {
+    ui.Start();
+    SendMessageW(select, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20, 20));
+    SendMessageW(select, WM_LBUTTONUP, 0, MAKELPARAM(180 + i, 150));
+    const auto expected = notifications + 1;
+    PumpCaptureUntil(ui, [&] { return notifications == expected; });
+  }
+  const auto newest_card = ui.StackWindow();
+  RECT newest_bounds{}; GetWindowRect(newest_card, &newest_bounds);
+  MONITORINFO info{sizeof(info)};
+  GetMonitorInfoW(MonitorFromWindow(newest_card, MONITOR_DEFAULTTONEAREST), &info);
+  Check(newest_bounds.bottom == info.rcWork.bottom - MulDiv(18, dpi, 96) &&
+      ui.ActiveRecords().size() == 7,
+      "newest capture is nearest bottom corner; overflow retains every live asset lease");
+  RECT older_bounds{}; GetWindowRect(first_card, &older_bounds);
+  Check(!IsWindowVisible(first_card) || older_bounds.bottom < newest_bounds.top,
+      "older cards ascend without overlap; screen overflow is hidden");
+  const auto history_count = store.List(Module::Capture).size();
+  copy_available = true;
+  SendMessageW(newest_card, WM_COMMAND, 200, 0);
+  Check(!IsWindow(newest_card) && ui.ActiveRecords().size() == 6 &&
+      store.List(Module::Capture).size() == history_count,
+      "successful copy removes only its overlay, retaining capture history");
+  while (ui.StackWindow() && ui.StackWindow() != first_card)
+    SendMessageW(ui.StackWindow(), WM_COMMAND, 203, 0);
+  RECT restored_bounds{}; GetWindowRect(first_card, &restored_bounds);
+  Check(IsWindowVisible(first_card) && EqualRect(&first_bounds, &restored_bounds),
+      "dismissal reveals overflow and restores the original card to the corner");
+  ui.Start();
+  SendMessageW(select, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20, 20));
+  SendMessageW(select, WM_LBUTTONUP, 0, MAKELPARAM(600, 360));
   ui.Protect();
+  // Pump the queued completion after shielding: it must never reopen a card
+  // or publish the captured pixels into persistent history.
+  PumpCaptureUntil(ui, [&] { return !ui.Preparing(); });
+  Check(store.List(Module::Capture).size() == history_count && ui.ActiveRecords().empty(),
+      "protection discards in-flight preparation and all overlay leases");
   Check(!IsWindowVisible(editor) && !IsWindowVisible(ui.StackWindow()),
         "lock hides all capture surfaces");
   store.Enable(Module::Capture, false);
@@ -1577,13 +2380,37 @@ void CaptureFeatures(const std::filesystem::path& root,
 int wmain(int argc, wchar_t** argv) {
   try {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    if (argc == 2 && std::wstring(argv[1]) == L"--capsule-navigation-native")
+      SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    else
+      SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     auto root = std::filesystem::temp_directory_path() /
                 (L"xsime-peripheral-test-" + workbench::Wide(NewId()));
     std::filesystem::create_directories(root);
     SetEnvironmentVariableW(L"LOCALAPPDATA", root.c_str());
+    if (argc == 2 && std::wstring(argv[1]) == L"--capture-preview") {
+      CapturePreview(root / L"capture-preview");
+      std::filesystem::remove_all(root);
+      CoUninitialize(); return 0;
+    }
+    if (argc >= 2 && std::wstring(argv[1]) == L"--capture-ui") {
+      CaptureFeatures(root / L"capture", argc == 3 ? std::filesystem::path(argv[2]) : std::filesystem::path{});
+      CapturePerformance(root / L"capture-performance");
+      std::cout << "PASS: capture stack parity, hover, editing, overflow, copy and protection" << std::endl;
+      std::filesystem::remove_all(root);
+      CoUninitialize(); return 0;
+    }
+    if (argc == 2 && (std::wstring(argv[1]) == L"--capsule-navigation" ||
+                      std::wstring(argv[1]) == L"--capsule-navigation-native")) {
+      CapsuleNavigation(root / L"capsule-navigation", std::wstring(argv[1]) == L"--capsule-navigation-native");
+      std::cout << "PASS: Capsule mouse navigation in detached and borrowed modes" << std::endl;
+      std::filesystem::remove_all(root);
+      CoUninitialize();
+      return 0;
+    }
     Storage(root / L"store");
     HistoryOrdering(root / L"history-ordering");
+    ClipboardArchives(root / L"clipboard-archives");
     HistoryCleanup(root / L"history-cleanup");
     ImagePasteGuards();
     CapsulePreferences(root / L"capsule-preferences");
@@ -1627,6 +2454,7 @@ int wmain(int argc, wchar_t** argv) {
       CapsuleReopening(root / L"capsule-reopening");
       ClipboardCardActions(root / L"clipboard-actions");
       CapsuleCancellation(root / L"capsule-cancellation");
+      CapsuleNavigation(root / L"capsule-navigation");
       MailboxReopening(root / L"mailbox-reopening");
       CardHover(root / L"card-hover", argv[2]);
       UI(root / L"ui", argv[2]);

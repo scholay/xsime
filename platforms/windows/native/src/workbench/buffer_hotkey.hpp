@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Windows.h>
+#include <functional>
+#include <span>
 #include "buffer_hotkey_config.hpp"
 
 namespace rimes::windows::workbench {
@@ -87,5 +89,36 @@ class BufferHotkeyRegistration {
   unsigned modifiers_ = 0, key_ = 0;
   bool owned_[2] = {false, false};
 };
+
+struct GlobalHotkeyBinding {
+  BufferHotkeyRegistration* registration;
+  unsigned modifiers, key;
+  bool changed = true;
+};
+
+// Keep every old registration until all candidates are reserved and the one
+// configuration write succeeds. An inner failure unwinds all reservations.
+inline HotkeyUpdate UpdateGlobalHotkeys(std::span<const GlobalHotkeyBinding> bindings,
+                                      const std::function<bool()>& save,
+                                      std::size_t* failed_index = nullptr) {
+  auto failure = HotkeyUpdate::kSaved;
+  const auto apply = [&](auto&& next, std::size_t index) -> bool {
+    if (index == bindings.size()) {
+      if (save()) return true;
+      failure = HotkeyUpdate::kSaveFailed; return false;
+    }
+    const auto& item = bindings[index];
+    // An unavailable startup binding remains unavailable until explicitly
+    // edited. It must not block an unrelated settings or credential save.
+    if (!item.changed) return next(next, index + 1);
+    const auto result = item.registration->Update(item.modifiers, item.key, [&] { return next(next, index + 1); });
+    if (result == HotkeyUpdate::kInvalid || result == HotkeyUpdate::kUnavailable) {
+      failure = result;
+      if (failed_index) *failed_index = index;
+    }
+    return result == HotkeyUpdate::kSaved;
+  };
+  return apply(apply, 0) ? HotkeyUpdate::kSaved : failure;
+}
 
 }  // namespace rimes::windows::workbench

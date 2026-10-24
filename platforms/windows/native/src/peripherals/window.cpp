@@ -152,20 +152,20 @@ std::string ClipboardText(HWND owner) {
   CloseClipboard();
   return text;
 }
-bool WriteClipboard(HWND owner, const std::string& value, bool secret) {
+ClipboardWriteResult WriteClipboard(HWND owner, const std::string& value, bool secret) {
   const auto text = Wide(value);
   auto memory = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t));
-  if (!memory) return false;
+  if (!memory) return {};
   auto* p = GlobalLock(memory);
   if (!p) {
     GlobalFree(memory);
-    return false;
+    return {};
   }
   memcpy(p, text.c_str(), (text.size() + 1) * sizeof(wchar_t));
   GlobalUnlock(memory);
   if (!OpenClipboard(owner)) {
     GlobalFree(memory);
-    return false;
+    return {};
   }
   bool ok = EmptyClipboard() != FALSE;
   if (ok && secret) {
@@ -191,8 +191,9 @@ bool WriteClipboard(HWND owner, const std::string& value, bool secret) {
     GlobalFree(memory);
     ok = false;
   }
+  const ClipboardWriteResult result{ok, ok ? GetClipboardSequenceNumber() : 0};
   CloseClipboard();
-  return ok;
+  return result;
 }
 std::vector<std::pair<const char*, const wchar_t*>> Kinds(Module m) {
   switch (m) {
@@ -1234,9 +1235,11 @@ void Windows::Impl::Pane::HoverCard(int index) {
   GetClientRect(C(Cards), &client);
   for (const auto card : {previous, index}) {
     if (card < card_offset || card >= static_cast<int>(rows.size())) continue;
+    // Hover changes only the copy glyph. Keep the preview/text/background
+    // outside the damage region, including across rapid enter/leave cycles.
     const auto rect = p.R((card - card_offset) *
-                             (appearance::kCardWidth + appearance::kCardGap),
-                         0, appearance::kCardWidth, appearance::kCardHeight);
+                             (appearance::kCardWidth + appearance::kCardGap) + 174,
+                         98, 26, 26);
     RECT damage{};
     if (IntersectRect(&damage, &rect, &client))
       InvalidateRect(C(Cards), &damage, FALSE);
@@ -1365,14 +1368,15 @@ void Windows::Impl::Pane::ItemMenu() {
     AppendMenuW(menu, MF_STRING | (enabled ? 0 : MF_GRAYED), id, title);
   };
   if (!mail) {
-    if (module != Module::Passwords && module != Module::Resources)
+    if (module != Module::Passwords && module != Module::Resources) {
+      const bool asset = selected.contains("asset") && selected.value("kind", "") != "text";
+      const bool image = asset && selected.value("kind", "") == "image";
       add(238,
-          selected.contains("asset") && selected.value("kind", "") != "text"
-              ? L"自动粘贴图片 / 文件（尚未实现）"
-              : L"插入到当前输入框\tEnter",
-          borrowed && !selected.empty() &&
-              (!selected.contains("asset") ||
-               selected.value("kind", "") == "text"));
+          image ? L"粘贴图片到当前输入框\tEnter"
+                : asset ? L"自动粘贴文件（尚未实现）"
+                        : L"插入到当前输入框\tEnter",
+          borrowed && !selected.empty() && (!asset || image));
+    }
     add(Edit, selected.value("kind", "") == "image" ? L"编辑图片" : L"编辑条目",
         !selected.empty() && selected.value("kind", "") != "video");
     add(New, L"新建条目", module != Module::Capture);
@@ -1858,8 +1862,11 @@ void Windows::Impl::Pane::Load() {
   }
   // Multiline Win32 edit controls do not support ES_PASSWORD. Locked records
   // contain no plaintext in the control; reveal is explicitly time limited.
+  const bool file_group = ClipboardHasFiles(selected);
   SendMessageW(C(Body), EM_SETREADONLY,
-               mail || (module == Module::Passwords && !gate.Authorized()), 0);
+               mail || file_group || (module == Module::Passwords && !gate.Authorized()), 0);
+  EnableWindow(C(Kind), !file_group);
+  if (file_group) SendMessageW(C(Kind), CB_SETCURSEL, static_cast<WPARAM>(-1), 0);
   const auto kind = selected.value("kind", "text");
   for (std::size_t i = 1; i < kinds.size(); ++i)
     if (kind == kinds[i].first) SendMessageW(C(Kind), CB_SETCURSEL, i - 1, 0);
@@ -1895,11 +1902,13 @@ void Windows::Impl::Pane::SaveRecord() {
   auto value = selected;
   value["title"] = Get(Title);
   if (!mail) {
-    value["body"] = Get(Body);
     value["summary"] = Get(Summary);
-    const auto kind = SendMessageW(C(Kind), CB_GETCURSEL, 0, 0);
-    if (kind >= 0 && static_cast<std::size_t>(kind + 1) < kinds.size())
-      value["kind"] = kinds[kind + 1].first;
+    if (!ClipboardHasFiles(selected)) {
+      value["body"] = Get(Body);
+      const auto kind = SendMessageW(C(Kind), CB_GETCURSEL, 0, 0);
+      if (kind >= 0 && static_cast<std::size_t>(kind + 1) < kinds.size())
+        value["kind"] = kinds[kind + 1].first;
+    }
   }
   selected = host.store.Save(value, value.value("revision", 0ULL));
   dirty = false;
@@ -1987,30 +1996,34 @@ void Windows::Impl::Pane::Challenge(unsigned key, bool down) {
 }
 void Windows::Impl::Pane::ModulesMenu() { host.Manage(*this); }
 void Windows::Impl::Pane::CopySelection(bool paste_image) {
+  const bool archive = !mail && !dirty && !detail && module != Module::Passwords && selected.contains("clipboard");
   const bool asset = !mail && selected.contains("asset") &&
                      selected.value("kind", "") != "text";
   const bool image = asset && selected.value("kind", "") == "image";
+  const bool native_paste = image || (archive && ClipboardRequiresNativePaste(selected));
   const bool secret = module == Module::Passwords;
-  const auto ticket = paste_image && image
+  const auto ticket = paste_image && native_paste
       ? host.runtime.PeripheralPasteTarget() : workbench::Runtime::PeripheralPasteTicket{};
   const auto target = opening_paste_target;
   host.pending_paste.reset();
-  if (asset) {
-    if (!host.actions.asset(hwnd, host.store, selected))
-      throw std::runtime_error("剪贴板忙，请重试。");
+  ClipboardWriteResult copied;
+  if (archive) {
+    copied = host.actions.archive(hwnd, host.store, selected);
+  } else if (asset) {
+    copied = host.actions.asset(hwnd, host.store, selected);
   } else {
     auto text = CopyText();
     if (text.empty()) return;
-    const auto copied = host.actions.text(hwnd, text, secret);
+    copied = host.actions.text(hwnd, text, secret);
     Wipe(text);
-    if (!copied) throw std::runtime_error("剪贴板忙，请重试。");
   }
+  if (!copied) throw std::runtime_error("剪贴板忙，请重试。");
   // Own writes are already represented by the selected card. Do not import
   // them again (including saved Notes/Resources and protected credentials).
-  host.clipboard_sequence = host.clipboard.sequence();
+  host.clipboard_sequence = copied.sequence;
   host.clipboard_retry = 0;
   host.clipboard_attempts = 0;
-  host.clipboard_record = asset ? selected.value("id", "") : "";
+  host.clipboard_record = asset || archive ? selected.value("id", "") : "";
   if (secret) {
     host.secret_sequence = host.clipboard_sequence;
     host.secret_until = GetTickCount64() + 60000;
@@ -2020,15 +2033,15 @@ void Windows::Impl::Pane::CopySelection(bool paste_image) {
     selected = host.store.PromoteTemporary(selected);
   SendMessageW(hwnd, WM_CLOSE, 0, 0);
   if (IsWindowVisible(hwnd)) { StatusText("已复制。"); return; }
-  if (paste_image && image && ticket && target &&
+  if (paste_image && native_paste && ticket && target &&
       ticket.target.process == target.process && host.actions.target() == target &&
       host.runtime.CanPastePeripheral(ticket)) {
     const auto now = host.actions.now();
-    host.pending_paste = PendingPaste{ticket, target, host.clipboard_sequence, now + 50, now + 900};
+    host.pending_paste = PendingPaste{ticket, target, copied.sequence, now + 50, now + 900};
     return;
   }
-  host.feedback.Show(secret ? L"已安全复制 · 60 秒后清除" : paste_image && image
-      ? L"已复制图片 · 请在目标输入框粘贴" : image ? L"已复制图片" : asset ? L"已复制文件" : L"已复制",
+  host.feedback.Show(secret ? L"已安全复制 · 60 秒后清除" : paste_image && native_paste
+      ? L"已复制 · 请在目标输入框粘贴" : image ? L"已复制图片" : asset ? L"已复制文件" : L"已复制",
       theme, hwnd);
 }
 void Windows::Impl::Pane::Act(int id) {
@@ -2057,6 +2070,10 @@ void Windows::Impl::Pane::Act(int id) {
         break;
       if (selected.contains("asset") && selected.value("kind", "") != "text") {
         CopySelection(selected.value("kind", "") == "image");
+        break;
+      }
+      if (!dirty && !detail && ClipboardRequiresNativePaste(selected)) {
+        CopySelection(true);
         break;
       }
       auto text = CopyText();
@@ -2277,13 +2294,15 @@ void Windows::Impl::Pane::Act(int id) {
       if (!Leave()) break;
       auto content = ReadClipboard(hwnd);
       Json item;
-      if (!content.bytes.empty())
+      if (!mail && (!content.formats.empty() || !content.files.empty()))
+        item = host.store.RecordClipboard(content, module);
+      else if (!content.bytes.empty())
         item = host.store.ImportData(module, "剪贴板图片", content.extension,
                                      content.bytes);
       else if (!content.files.empty()) {
-        for (const auto& file : content.files)
-          item = host.store.Import(module, file);
-      } else if (!content.text.empty())
+        for (const auto& file : content.files) item = host.store.Import(module, file);
+      }
+      else if (!content.text.empty())
         item = host.store.Save(
             {{"module", kModuleIds[static_cast<unsigned>(module)]},
              {"kind", "text"},
@@ -2418,7 +2437,12 @@ void Windows::Impl::Pane::Act(int id) {
       if (!host.store.Enabled(selected.contains("asset") ? Module::Capture
                                                          : Module::Notes))
         throw std::runtime_error("请先在 Capsule 启用目标模块。");
-      if (selected.contains("asset"))
+      if (!mail && selected.contains("clipboard") && !dirty && !detail) {
+        value = selected;
+        value.erase("id"); value.erase("revision"); value.erase("promoted");
+        value["module"] = selected.contains("asset") ? "capture" : "notes";
+        value = host.store.Save(value);
+      } else if (selected.contains("asset"))
         value = host.store.Import(Module::Capture, host.store.Asset(selected));
       else {
         auto text = CopyText();
@@ -3063,7 +3087,10 @@ LRESULT CALLBACK Windows::Impl::Pane::Proc(HWND hwnd, UINT message, WPARAM wp,
       case WM_ACTIVATE:
         if (LOWORD(wp) == WA_INACTIVE) {
           self->Lock();
-          if (!self->mail && self->capsule_mode == 0 && self->standalone_search)
+          // Native activation can briefly have no destination while a first
+          // internal click is being routed. A null HWND is not an outside hit;
+          // the physical mouse hook still handles actual outside clicks.
+          if (lp && !self->mail && self->capsule_mode == 0 && self->standalone_search)
             self->outside_click.Observe(reinterpret_cast<HWND>(lp));
         }
         return 0;
@@ -3582,9 +3609,9 @@ void Windows::Impl::Tick() {
         actions.paste(pending.target, pending.sequence);
     if (result != PasteResult::Waiting || actions.now() >= pending.deadline) {
       pending_paste.reset();
-      feedback.Show(result == PasteResult::Sent ? L"已发送图片粘贴" :
+      feedback.Show(result == PasteResult::Sent ? L"已发送粘贴" :
           result == PasteResult::ClipboardChanged ? L"剪贴板已变化 · 未粘贴" :
-          L"已复制图片 · 请在目标输入框粘贴", CurrentTheme(), capsule ? capsule->hwnd : nullptr);
+          L"已复制 · 请在目标输入框粘贴", CurrentTheme(), capsule ? capsule->hwnd : nullptr);
     }
   }
   for (auto* pane : {capsule.get(), mailbox.get()})
@@ -3703,19 +3730,8 @@ void Windows::Impl::ClipboardChanged() {
   clipboard_sequence = sequence;
   // A damaged library must not grow without a verifiable cleanup boundary.
   Cleanup();
-  if (!content.bytes.empty())
-    store.ImportData(Module::Temporary, "剪贴板图片", content.extension,
-                     content.bytes);
-  else if (!content.files.empty()) {
-    for (const auto& file : content.files) {
-      store.Import(Module::Temporary, file);
-      Cleanup();
-    }
-  } else {
-    const auto& text = content.text;
-    if (text.empty() || text.size() > 256 * 1024) return;
-    store.RecordClipboardText(text);
-  }
+  if (content.formats.empty() && content.bytes.empty() && content.files.empty() && content.text.empty()) return;
+  store.RecordClipboard(content);
   Cleanup();
   if (capsule && capsule->module == Module::Temporary) capsule->Refresh();
 }
@@ -3802,13 +3818,7 @@ void Windows::PreviewTheme(std::optional<ui::ThemeId> theme) {
   for (auto* pane : {impl_->capsule.get(), impl_->mailbox.get()})
     if (pane && pane->hwnd && pane->theme != impl_->CurrentTheme())
       pane->Theme();
-  if (impl_->capture) {
-    for (const auto window :
-         {impl_->capture->StackWindow(), impl_->capture->EditorWindow()})
-      if (window)
-        RedrawWindow(window, nullptr, nullptr,
-                     RDW_INVALIDATE | RDW_ALLCHILDREN);
-  }
+  if (impl_->capture) impl_->capture->RefreshTheme();
 }
 void Windows::ClipboardChanged() { impl_->ClipboardChanged(); }
 bool Windows::CollectClipboard() const { return impl_->store.CollectClipboard(); }

@@ -26,10 +26,15 @@ struct CandidateSnapshot {
   std::uint16_t highlighted = 0xffff;
   std::uint16_t page_start = 0;
   std::uint16_t page_size = 0;
+  bool has_previous_page = false;
+  bool has_next_page = false;
   RECT window_rect{};
   RECT caret_rect{};
   std::wstring composition;
   std::vector<CandidateItem> items;
+  // Indices actually painted in the current viewport, after native measurement.
+  // Engine-page items remain intact for TSF accessibility and selection guards.
+  std::vector<std::size_t> visible_indices;
   std::vector<std::size_t> matrix_rows;
 };
 
@@ -52,6 +57,7 @@ class CandidateWindow {
   void SetSelect(std::function<void(std::size_t)> select) {
     select_ = std::move(select);
   }
+  void SetPage(std::function<void(int)> page) { page_ = std::move(page); }
   void SetFont(unsigned size) {
     size = (std::clamp)(size, 10U, 40U);
     if (font_size_ == size) return;
@@ -86,6 +92,14 @@ class CandidateWindow {
   [[nodiscard]] CandidateSnapshot snapshot() const noexcept;
 
   std::optional<std::size_t> MatrixDigitIndex(std::size_t digit) const noexcept;
+  bool IsCompact() const noexcept {
+    return IsVisible() && !vertical_ && snapshot_.matrix_rows.empty();
+  }
+  bool UsesNumericSelectionKeys() const noexcept { return numeric_labels_; }
+  std::optional<std::size_t> CompactDigitIndex(std::size_t digit) const noexcept;
+  std::optional<std::size_t> CompactPageIndex(int delta) const noexcept;
+  std::optional<std::size_t> CompactEdgeIndex(int direction) const noexcept;
+  bool CanPage(int direction) const noexcept;
 
   static bool GetLastSnapshot(CandidateSnapshot* snapshot) noexcept;
 
@@ -101,6 +115,7 @@ class CandidateWindow {
   static void PublishSnapshot(const CandidateSnapshot& snapshot) noexcept;
 
   std::function<void(std::size_t)> select_;
+  std::function<void(int)> page_;
   unsigned font_size_ = 16;
   unsigned max_width_ = 460, strip_height_ = 34, label_size_ = 10;
   bool vertical_ = false;
@@ -113,6 +128,8 @@ class CandidateWindow {
   // Last computed DIP hit rectangles in window client space (DIP).
   mutable std::vector<ui::DipRect> hit_pills_;
   std::vector<std::wstring> matrix_labels_;
+  ui::CandidateCompactLayout compact_;
+  bool numeric_labels_ = false;
   mutable float layout_width_dip_ = 0;
   mutable float layout_height_dip_ = 0;
 };

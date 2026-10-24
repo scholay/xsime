@@ -9,7 +9,7 @@
 namespace rimes::windows::tsf {
 struct CaretRegressionProbe {
   static void BufferAnchor(TextService& service, bool enabled, RECT caret) {
-    service.capture_active_ = enabled; service.buffer_caret_ = caret;
+    service.SetCapture(enabled); service.buffer_caret_ = caret;
   }
   static bool Bind(TextService& service, ITfContext* context) {
     service.client_id_ = 1;
@@ -27,14 +27,19 @@ struct CaretRegressionProbe {
   static RECT Query(TextService& service, ITfContext* context) {
     return service.QueryCaretRect(context, 0);
   }
+  static CandidateSnapshot Snapshot(TextService& service) {
+    return service.candidate_window_.snapshot();
+  }
   static CandidateSnapshot Present(TextService& service, ITfContext* context) {
     BrokerInputState state;
     state.candidates_visible = true;
     state.composing = true;
     state.composition = L"ni";
+    state.caret_utf16 = 2;
+    state.buffer_capture = service.capture_active_;
     state.page_size = 5;
     state.candidates.push_back({0, L"test", L"", L"1"});
-    service.UpdateCandidateWindow(context, state, 0);
+    service.ApplyDocumentState(context, state, 0);
     return service.candidate_window_.snapshot();
   }
 };
@@ -49,7 +54,7 @@ int main() {
   }
   e2e::FakeDocument document;
   auto* context = new e2e::FakeContext(&document);
-  auto* service = new tsf::TextService();
+  auto* service = new tsf::TextService(nullptr);
   int failures = 0;
   auto expect = [&](bool ok, const char* message) {
     if (!ok) {
@@ -57,6 +62,7 @@ int main() {
       std::cerr << "FAIL: " << message << '\n';
     }
   };
+  expect(tsf::CaretRegressionProbe::Bind(*service, context), "caret fixture binds");
   document.refuse_caret = true;
   expect(!tsf::CaretRegressionProbe::Present(*service, context).visible,
          "first candidates without verified geometry remain hidden");
@@ -119,6 +125,87 @@ int main() {
          "valid TSF geometry at the screen origin still works");
   DestroyCaret();
   DestroyWindow(frame);
+
+  // A real composition range and moving selection must produce different
+  // rectangles. Querying only the selection would fail these assertions.
+  e2e::FakeDocument anchor_document;
+  anchor_document.text = L"prefix";
+  anchor_document.range_advance = 12;
+  auto* anchor_context = new e2e::FakeContext(&anchor_document);
+  auto* anchor_service = new tsf::TextService(nullptr);
+  expect(tsf::CaretRegressionProbe::Bind(*anchor_service, anchor_context),
+         "composition anchor fixture binds");
+  tsf::BrokerInputState typing;
+  typing.composing = typing.candidates_visible = typing.has_snapshot = true;
+  typing.candidates.push_back({0, L"test", L"", L"1"});
+  typing.page_size = 5;
+  const LONG start_x = anchor_document.caret_rect.left + 6 * anchor_document.range_advance;
+  for (const auto* text : {L"n", L"nihao", L"ni"}) {
+    typing.composition = text;
+    typing.caret_utf16 = static_cast<std::uint32_t>(typing.composition.size());
+    expect(SUCCEEDED(tsf::CaretRegressionProbe::Apply(*anchor_service, anchor_context, typing)),
+           "preedit update succeeds");
+    const auto actual = tsf::CaretRegressionProbe::Snapshot(*anchor_service);
+    const auto selection = tsf::CaretRegressionProbe::Query(*anchor_service, anchor_context);
+    expect(actual.visible && actual.caret_rect.left == start_x && selection.left > start_x,
+           "typing and backspace retain composition origin while selection moves");
+    expect(anchor_document.composition == text,
+           "querying candidate origin does not collapse or mutate live composition");
+  }
+  typing.page_start = 5;
+  typing.caret_utf16 = 1;
+  tsf::CaretRegressionProbe::Apply(*anchor_service, anchor_context, typing);
+  expect(tsf::CaretRegressionProbe::Snapshot(*anchor_service).caret_rect.left == start_x,
+         "candidate paging and movement inside preedit retain its origin");
+  anchor_document.caret_rect.left += 80; anchor_document.caret_rect.right += 80;
+  anchor_document.caret_rect.top += 40; anchor_document.caret_rect.bottom += 40;
+  anchor_service->OnLayoutChange(anchor_context, TF_LC_CHANGE, nullptr);
+  const auto relocated = tsf::CaretRegressionProbe::Snapshot(*anchor_service);
+  expect(relocated.caret_rect.left == start_x + 80 &&
+             relocated.caret_rect.top == anchor_document.caret_rect.top,
+         "host scroll/window layout relocates the composition origin");
+  anchor_document.refuse_caret = true;
+  typing.composition = L"nihao"; typing.caret_utf16 = 5;
+  tsf::CaretRegressionProbe::Apply(*anchor_service, anchor_context, typing);
+  auto retained = tsf::CaretRegressionProbe::Snapshot(*anchor_service);
+  expect(EqualRect(&retained.caret_rect, &relocated.caret_rect),
+         "temporary missing range geometry retains this composition's verified origin");
+  anchor_document.refuse_caret = false;
+  typing.commit_text = L"你"; typing.composition = L"hao"; typing.caret_utf16 = 3;
+  tsf::CaretRegressionProbe::Apply(*anchor_service, anchor_context, typing);
+  expect(tsf::CaretRegressionProbe::Snapshot(*anchor_service).caret_rect.left == start_x + 92,
+         "partial commit starts the remaining composition after committed text");
+  tsf::BrokerInputState cancelled;
+  tsf::CaretRegressionProbe::Apply(*anchor_service, anchor_context, cancelled);
+  anchor_document.refuse_caret = true;
+  typing.commit_text.clear();
+  tsf::CaretRegressionProbe::Apply(*anchor_service, anchor_context, typing);
+  expect(!tsf::CaretRegressionProbe::Snapshot(*anchor_service).visible,
+         "new composition without geometry cannot reuse the cancelled origin");
+  tsf::CaretRegressionProbe::Apply(*anchor_service, anchor_context, cancelled);
+  anchor_document.refuse_caret = false;
+  anchor_document.selection_acp = static_cast<LONG>(anchor_document.text.size());
+  anchor_context->defer_edits = true;
+  tsf::CaretRegressionProbe::Apply(*anchor_service, anchor_context, typing);
+  const auto deferred = tsf::CaretRegressionProbe::Snapshot(*anchor_service);
+  expect(deferred.visible && deferred.caret_rect.left == start_x + 92,
+         "deferred first preedit uses its pre-write insertion anchor");
+  anchor_context->DrainEdits();
+  anchor_context->defer_edits = false;
+  anchor_service->OnLayoutChange(anchor_context, TF_LC_CHANGE, nullptr);
+  retained = tsf::CaretRegressionProbe::Snapshot(*anchor_service);
+  expect(EqualRect(&retained.caret_rect, &deferred.caret_rect),
+         "accepting deferred preedit does not move candidates to its tail");
+  e2e::FakeDocument other_document;
+  other_document.refuse_caret = true;
+  auto* other_context = new e2e::FakeContext(&other_document);
+  tsf::CaretRegressionProbe::Bind(*anchor_service, other_context);
+  tsf::CaretRegressionProbe::Apply(*anchor_service, other_context, typing);
+  expect(!tsf::CaretRegressionProbe::Snapshot(*anchor_service).visible,
+         "switching input contexts cannot reuse the previous composition origin");
+  anchor_service->Release();
+  other_context->Release();
+  anchor_context->Release();
 
   // An idle Shift tap returns an authoritative modifier snapshot but has no
   // document mutation. Hosts can refuse write locks at this point; this must

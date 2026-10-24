@@ -10,8 +10,11 @@
 #include <wrl/client.h>
 
 #include <cmath>
+#include <future>
+#include <atomic>
 
 #include "appearance.hpp"
+#include "../ui/layered_frame.hpp"
 
 namespace rimes::windows::peripherals {
 using Microsoft::WRL::ComPtr;
@@ -151,6 +154,68 @@ RECT Fit(const CaptureImage& image, RECT box) {
              y = box.top + (box.bottom - box.top - h) / 2;
   return {x, y, x + w, y + h};
 }
+// Reuse the desktop and composition surfaces for the entire selection. Mouse
+// movement must not allocate or resample a multi-monitor screenshot.
+struct CaptureSurface {
+  HDC dc = nullptr;
+  HBITMAP bitmap = nullptr;
+  HGDIOBJ old = nullptr;
+  std::uint32_t* pixels = nullptr;
+  ~CaptureSurface() { Reset(); }
+  void Reset() {
+    if (dc && old) SelectObject(dc, old);
+    if (bitmap) DeleteObject(bitmap);
+    if (dc) DeleteDC(dc);
+    dc = nullptr; bitmap = nullptr; old = nullptr; pixels = nullptr;
+  }
+  void Create(int width, int height) {
+    Reset();
+    BITMAPINFO info{};
+    info.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32, BI_RGB};
+    dc = CreateCompatibleDC(nullptr);
+    bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS,
+        reinterpret_cast<void**>(&pixels), nullptr, 0);
+    Require(dc && bitmap && pixels);
+    old = SelectObject(dc, bitmap);
+  }
+};
+CaptureImage Thumbnail(const CaptureImage& image) {
+  const auto r = Fit(image, {0, 0, 512, 364});
+  CaptureImage preview;
+  preview.width = r.right - r.left; preview.height = r.bottom - r.top;
+  preview.pixels.resize(static_cast<std::size_t>(preview.width) * preview.height);
+  Gdiplus::Bitmap source(image.width, image.height, image.width * 4,
+      PixelFormat32bppARGB, reinterpret_cast<BYTE*>(const_cast<std::uint32_t*>(image.pixels.data())));
+  Gdiplus::Bitmap target(preview.width, preview.height, preview.width * 4,
+      PixelFormat32bppARGB, reinterpret_cast<BYTE*>(preview.pixels.data()));
+  Gdiplus::Graphics graphics(&target);
+  graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+  graphics.DrawImage(&source, 0, 0, preview.width, preview.height);
+  return preview;
+}
+class CaptureDragSource final : public IDropSource {
+ public:
+  explicit CaptureDragSource(std::shared_ptr<std::atomic<bool>> cancelled)
+      : cancelled_(std::move(cancelled)) {}
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+    if (!out) return E_POINTER;
+    *out = nullptr;
+    if (iid != IID_IUnknown && iid != IID_IDropSource) return E_NOINTERFACE;
+    *out = static_cast<IDropSource*>(this); AddRef(); return S_OK;
+  }
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+  ULONG STDMETHODCALLTYPE Release() override {
+    const auto refs = --references_; if (!refs) delete this; return refs;
+  }
+  HRESULT STDMETHODCALLTYPE QueryContinueDrag(BOOL escape, DWORD keys) override {
+    if (escape || cancelled_->load()) return DRAGDROP_S_CANCEL;
+    return (keys & MK_LBUTTON) ? S_OK : DRAGDROP_S_DROP;
+  }
+  HRESULT STDMETHODCALLTYPE GiveFeedback(DWORD) override { return DRAGDROP_S_USEDEFAULTCURSORS; }
+ private:
+  ULONG references_ = 1;
+  std::shared_ptr<std::atomic<bool>> cancelled_;
+};
 }  // namespace
 
 bool CaptureImage::Valid() const {
@@ -250,7 +315,7 @@ std::string EncodeCapture(const CaptureImage& image) {
   GlobalUnlock(memory);
   return result;
 }
-bool CopyCapture(HWND owner, const CaptureImage& image) {
+ClipboardWriteResult CopyCapture(HWND owner, const CaptureImage& image) {
   auto png = EncodeCapture(image);
   BITMAPINFOHEADER header{sizeof(BITMAPINFOHEADER),
                           image.width,
@@ -264,25 +329,26 @@ bool CopyCapture(HWND owner, const CaptureImage& image) {
              image.pixels.size() * 4);
   auto pngMemory = Memory(png.data(), png.size()),
        dibMemory = Memory(dib.data(), dib.size());
-  bool copied = false;
+  ClipboardWriteResult copied;
   if (pngMemory && dibMemory && OpenClipboard(owner)) {
     if (EmptyClipboard()) {
       if (SetClipboardData(RegisterClipboardFormatW(L"PNG"), pngMemory)) {
-        copied = true;
+        copied.success = true;
         pngMemory = nullptr;
       }
       if (SetClipboardData(CF_DIB, dibMemory)) {
-        copied = true;
+        copied.success = true;
         dibMemory = nullptr;
       }
     }
+    if (copied) copied.sequence = GetClipboardSequenceNumber();
     CloseClipboard();
   }
   if (pngMemory) GlobalFree(pngMemory);
   if (dibMemory) GlobalFree(dibMemory);
   return copied;
 }
-bool CopyCapsuleAsset(HWND owner, Store& store, const Json& item) {
+ClipboardWriteResult CopyCapsuleAsset(HWND owner, Store& store, const Json& item) {
   if (item.value("kind", "") == "image")
     return CopyCapture(owner, LoadCapture(store.Asset(item)));
   const auto path = store.Asset(item).wstring();
@@ -294,13 +360,14 @@ bool CopyCapsuleAsset(HWND owner, Store& store, const Json& item) {
                (path.size() + 1) * sizeof(wchar_t));
   bytes.append(sizeof(wchar_t), '\0');
   auto memory = Memory(bytes.data(), bytes.size());
-  bool ok = false;
+  ClipboardWriteResult result;
   if (memory && OpenClipboard(owner)) {
-    ok = EmptyClipboard() && SetClipboardData(CF_HDROP, memory);
+    result.success = EmptyClipboard() && SetClipboardData(CF_HDROP, memory);
+    if (result) result.sequence = GetClipboardSequenceNumber();
     CloseClipboard();
   }
-  if (!ok && memory) GlobalFree(memory);
-  return ok;
+  if (!result && memory) GlobalFree(memory);
+  return result;
 }
 CaptureImage RenderCapture(const CaptureImage& base, const Json& operations) {
   Require(base.Valid() && operations.is_array() && operations.size() <= 500);
@@ -330,10 +397,15 @@ struct CaptureWindows::Impl {
   std::function<void()> changed;
   std::function<std::string()> theme;
   Screenshot screenshot;
+  Copy copy;
   std::shared_ptr<ui::SmoothShapesSession> shapes = ui::AcquireSmoothShapes();
   HWND selection = nullptr, stack = nullptr, editor = nullptr;
   HFONT font = nullptr;
   CaptureImage desktop, original, rendered;
+  CaptureSurface selection_image, selection_dim, selection_frame;
+  struct PreparedCapture { std::string png; CaptureImage preview; };
+  std::future<PreparedCapture> preparation;
+  bool discard_preparation = false, laying_out = false;
   RECT desktop_rect{}, canvas{};
   POINT start{}, current{};
   bool dragging = false, dirty = false;
@@ -341,23 +413,108 @@ struct CaptureWindows::Impl {
   Json pending, operations = Json::array(), redo = Json::array(), record;
   std::vector<Json> cards;
   std::vector<CaptureImage> previews;
-  std::size_t stack_offset = 0;
+  std::vector<HWND> card_windows;
+  HWND hovered_card = nullptr;
+  HWND drag_card = nullptr;
+  POINT drag_start{};
+  std::string dragged_record;
+  std::shared_ptr<std::atomic<bool>> drag_cancelled;
   unsigned color_index = 0;
-  std::wstring status, stack_status;
+  std::wstring status;
+  std::map<HWND, std::wstring> card_status;
   HMONITOR monitor = nullptr;
   HWND previous_foreground = nullptr;
   static constexpr std::uint32_t colors[] = {0xffff4254U, 0xff22c55eU,
                                              0xff2787ffU, 0xff141414U};
   Impl(Store& s, std::function<void()> c, std::function<std::string()> t,
-       Screenshot shot)
+       Screenshot shot, Copy writer)
       : store(s),
         changed(std::move(c)),
         theme(std::move(t)),
-        screenshot(shot ? std::move(shot) : DesktopImage) {}
+        screenshot(shot ? std::move(shot) : DesktopImage),
+        copy(writer ? std::move(writer) : CopyCapsuleAsset) {}
   ~Impl() {
-    for (auto h : {selection, stack, editor})
+    for (auto h : card_windows) DestroyWindow(h);
+    for (auto h : {selection, editor})
       if (h) DestroyWindow(h);
     if (font) DeleteObject(font);
+  }
+  bool IsCard(HWND h) const {
+    return std::find(card_windows.begin(), card_windows.end(), h) != card_windows.end();
+  }
+  void Hover(HWND h) {
+    if (hovered_card == h) return;
+    const auto old = hovered_card;
+    hovered_card = h;
+    for (auto card : {old, h}) if (card && IsWindow(card)) {
+      for (int id = 200; id <= 204; ++id)
+        ShowWindow(GetDlgItem(card, id), card == h ? SW_SHOWNOACTIVATE : SW_HIDE);
+      RedrawWindow(card, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+    }
+  }
+  void TrackHover(HWND h) {
+    TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, h, 0};
+    TrackMouseEvent(&track);
+    Hover(IsCard(h) ? h : GetParent(h));
+  }
+  void LeaveHover() {
+    POINT point{}; GetCursorPos(&point);
+    const auto hit = WindowFromPoint(point);
+    const auto root = GetAncestor(hit, GA_ROOT);
+    Hover(IsCard(root) ? root : nullptr);
+  }
+  void DragCard(HWND h) {
+    const auto index = static_cast<std::size_t>(std::find(card_windows.begin(), card_windows.end(), h) - card_windows.begin());
+    if (index >= cards.size() || !store.Enabled(Module::Capture)) return;
+    const auto item = store.Get(cards[index].at("id"));
+    const auto path = store.Asset(item);
+    const auto initialized = OleInitialize(nullptr);
+    Require(initialized);
+    auto pidl = ILCreateFromPathW(path.c_str());
+    if (!pidl) { OleUninitialize(); throw std::runtime_error("图片已不可用，请刷新捕获历史。"); }
+    IShellFolder* folder = nullptr;
+    PCUITEMID_CHILD child = nullptr;
+    auto result = SHBindToParent(pidl, IID_PPV_ARGS(&folder), &child);
+    ComPtr<IDataObject> data;
+    if (SUCCEEDED(result)) {
+      result = folder->GetUIObjectOf(h, 1, &child, IID_IDataObject, nullptr,
+          reinterpret_cast<void**>(data.GetAddressOf()));
+      folder->Release();
+    }
+    if (SUCCEEDED(result)) {
+      dragged_record = item.at("id");
+      drag_cancelled = std::make_shared<std::atomic<bool>>(false);
+      auto* source = new CaptureDragSource(drag_cancelled);
+      DWORD effect = 0;
+      // Copy-only: dropping a thumbnail must never move a managed asset.
+      DoDragDrop(data.Get(), source, DROPEFFECT_COPY, &effect);
+      source->Release();
+      dragged_record.clear(); drag_cancelled.reset();
+    }
+    ILFree(pidl);
+    data.Reset(); OleUninitialize();
+    Require(result);
+  }
+  static LRESULT CALLBACK CardButton(HWND h, UINT msg, WPARAM w, LPARAM l,
+      UINT_PTR, DWORD_PTR data) {
+    auto* self = reinterpret_cast<Impl*>(data);
+    if (msg == WM_MOUSEMOVE) self->TrackHover(h);
+    if (msg == WM_MOUSELEAVE) self->LeaveHover();
+    if (msg == WM_MOUSEACTIVATE) return MA_NOACTIVATE;
+    // Native buttons retain input/accessibility, but all visual content belongs
+    // to the parent's single buffered frame. Independently exposed child
+    // backgrounds used to flash while hover controls appeared or disappeared.
+    if (msg == WM_ERASEBKGND) return 1;
+    if (msg == WM_PAINT) {
+      PAINTSTRUCT paint{}; BeginPaint(h, &paint); EndPaint(h, &paint); return 0;
+    }
+    if (msg == WM_NCDESTROY) RemoveWindowSubclass(h, CardButton, 1);
+    const auto parent = GetParent(h);
+    const auto result = DefSubclassProc(h, msg, w, l);
+    if (IsWindow(parent) && (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP ||
+        msg == WM_CAPTURECHANGED || msg == BM_SETSTATE || msg == WM_SETFOCUS || msg == WM_KILLFOCUS))
+      InvalidateRect(parent, nullptr, FALSE);
+    return result;
   }
   HWND Make(const wchar_t* name, const wchar_t* title, DWORD style, DWORD ex,
             int x, int y, int w, int h) {
@@ -381,6 +538,26 @@ struct CaptureWindows::Impl {
     Require(h != nullptr);
   }
   int S(HWND h, int v) { return MulDiv(v, GetDpiForWindow(h), 96); }
+  RECT SelectionHint(POINT point) const {
+    const LONG x = (std::max)(0L, (std::min)(point.x + 18, desktop.width - 370L));
+    const LONG y = (std::max)(0L, (std::min)(point.y + 22, desktop.height - 48L));
+    return {x, y, (std::min)(static_cast<LONG>(desktop.width), x + 360),
+        (std::min)(static_cast<LONG>(desktop.height), y + 36)};
+  }
+  void MoveSelection(POINT next) {
+    const auto previous = current;
+    current = next;
+    if (previous.x == next.x && previous.y == next.y) return;
+    for (const auto point : {previous, next}) {
+      auto hint = SelectionHint(point);
+      InvalidateRect(selection, &hint, FALSE);
+      if (dragging) {
+        auto area = CaptureSelection(start, point, desktop.width, desktop.height);
+        InflateRect(&area, 3, 3);
+        InvalidateRect(selection, &area, FALSE);
+      }
+    }
+  }
   void Place(HWND h, int id, int x, int y, int w, int height,
              bool visible = true) {
     SetWindowPos(GetDlgItem(h, id), nullptr, S(h, x), S(h, y), S(h, w),
@@ -389,8 +566,8 @@ struct CaptureWindows::Impl {
                      (visible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
   }
   void Error(HWND h, const std::exception& e) {
-    if (h == stack)
-      stack_status = Wide(e.what());
+    if (IsCard(h))
+      card_status[h] = Wide(e.what());
     else
       status = Wide(e.what());
     if (h == selection) {
@@ -404,6 +581,7 @@ struct CaptureWindows::Impl {
     if (GetCapture() == selection) ReleaseCapture();
     if (selection) ShowWindow(selection, SW_HIDE);
     desktop = {};
+    selection_image.Reset(); selection_dim.Reset(); selection_frame.Reset();
     LayoutStack();
     if (previous_foreground && IsWindow(previous_foreground))
       SetForegroundWindow(previous_foreground);
@@ -412,18 +590,30 @@ struct CaptureWindows::Impl {
     if (!store.Enabled(Module::Capture))
       throw std::runtime_error("捕获模块已停用，请先在插件中启用。");
     if (selection && IsWindowVisible(selection)) return;
+    if (preparation.valid()) return;
     if (editor && IsWindowVisible(editor)) {
       SetForegroundWindow(editor);
       throw std::runtime_error("请先保存或关闭当前截图编辑。");
     }
     previous_foreground = GetForegroundWindow();
-    if (stack) ShowWindow(stack, SW_HIDE);
+    Hover(nullptr);
+    for (auto h : card_windows) ShowWindow(h, SW_HIDE);
     DwmFlush();
     try {
       auto shot = screenshot();
       desktop = std::move(shot.first);
       desktop_rect = shot.second;
       Require(desktop.Valid());
+      selection_image.Create(desktop.width, desktop.height);
+      selection_dim.Create(desktop.width, desktop.height);
+      selection_frame.Create(desktop.width, desktop.height);
+      memcpy(selection_image.pixels, desktop.pixels.data(), desktop.pixels.size() * 4);
+      for (std::size_t i = 0; i < desktop.pixels.size(); ++i) {
+        const auto pixel = desktop.pixels[i];
+        selection_dim.pixels[i] = 0xff000000U |
+            (((pixel >> 16 & 255) * 145 / 255) << 16) |
+            (((pixel >> 8 & 255) * 145 / 255) << 8) | ((pixel & 255) * 145 / 255);
+      }
     } catch (...) {
       LayoutStack();
       throw;
@@ -433,6 +623,7 @@ struct CaptureWindows::Impl {
           Make(L"Rimes.Capture.Selection", L"框选截图 · 拖动选择，Esc 取消",
                WS_POPUP, WS_EX_TOPMOST | WS_EX_TOOLWINDOW, 0, 0, 1, 1);
     dragging = false;
+    start = current = {};
     SetWindowPos(selection, HWND_TOPMOST, desktop_rect.left, desktop_rect.top,
                  desktop.width, desktop.height, SWP_SHOWWINDOW);
     SetForegroundWindow(selection);
@@ -446,100 +637,121 @@ struct CaptureWindows::Impl {
       CancelSelection();
       return;
     }
-    auto image = CropCapture(desktop, rect);
+    auto image = std::move(desktop);
     POINT location{desktop_rect.left + rect.left, desktop_rect.top + rect.top};
-    monitor = MonitorFromPoint(location, MONITOR_DEFAULTTONEAREST);
+    if (!monitor || cards.empty()) monitor = MonitorFromPoint(location, MONITOR_DEFAULTTONEAREST);
     dragging = false;
     ReleaseCapture();
     ShowWindow(selection, SW_HIDE);
     desktop = {};
-    auto item = store.ImportData(Module::Capture, workbench::Utf8(Stamp()),
-                                 ".png", EncodeCapture(image), "", true);
-    ShowCard(item);
-    if (changed) changed();
+    selection_image.Reset(); selection_dim.Reset(); selection_frame.Reset();
+    discard_preparation = false;
+    preparation = std::async(std::launch::async, [image = std::move(image), rect] {
+      const auto com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+      try {
+        auto cropped = CropCapture(image, rect);
+        PreparedCapture result{EncodeCapture(cropped), Thumbnail(cropped)};
+        if (SUCCEEDED(com)) CoUninitialize();
+        return result;
+      } catch (...) {
+        if (SUCCEEDED(com)) CoUninitialize();
+        throw;
+      }
+    });
+    SetTimer(selection, 1, 15, nullptr);
+    LayoutStack();
     if (previous_foreground && IsWindow(previous_foreground))
       SetForegroundWindow(previous_foreground);
   }
-  void ShowCard(const Json& item) {
+  void CompleteCapture() {
+    if (!preparation.valid() || preparation.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    KillTimer(selection, 1);
+    if (discard_preparation || !store.Enabled(Module::Capture)) {
+      try { preparation.get(); } catch (...) {}
+      return;
+    }
+    auto ready = preparation.get();
+    auto item = store.ImportData(Module::Capture, workbench::Utf8(Stamp()),
+        ".png", ready.png, "", true);
+    ShowCard(item, std::move(ready.preview));
+    if (changed) changed();
+  }
+  void ShowCard(const Json& item, CaptureImage preview = {}) {
     const auto id = item.at("id");
+    if (!preview.Valid()) preview = Thumbnail(LoadCapture(store.Asset(item)));
     for (std::size_t i = 0; i < cards.size(); ++i)
       if (cards[i].at("id") == id) {
-        cards.erase(cards.begin() + i);
-        previews.erase(previews.begin() + i);
-        break;
+        cards[i] = item;
+        previews[i] = std::move(preview);
+        card_status.erase(card_windows[i]);
+        InvalidateRect(card_windows[i], nullptr, FALSE);
+        return; // Editing updates this card in place, never its stack identity.
       }
-    auto image = LoadCapture(store.Asset(item));
-    const auto r = Fit(image, {0, 0, 240, 148});
-    // Keep only bounded thumbnails in the stack, never a full desktop per card.
-    CaptureImage preview;
-    preview.width = r.right - r.left;
-    preview.height = r.bottom - r.top;
-    preview.pixels.resize(static_cast<std::size_t>(preview.width) *
-                          preview.height);
-    Gdiplus::Bitmap source(image.width, image.height, image.width * 4,
-                           PixelFormat32bppARGB,
-                           reinterpret_cast<BYTE*>(image.pixels.data()));
-    Gdiplus::Bitmap destination(preview.width, preview.height,
-                                preview.width * 4, PixelFormat32bppARGB,
-                                reinterpret_cast<BYTE*>(preview.pixels.data()));
-    {
-      Gdiplus::Graphics g(&destination);
-      g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-      g.DrawImage(&source, 0, 0, preview.width, preview.height);
+    auto h = Make(L"Rimes.Capture.Stack", L"截图堆栈", WS_POPUP,
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED, 0, 0, 1, 1);
+    const wchar_t* labels[] = {L"复制并移除卡片", L"标注", L"保存", L"关闭卡片", L"贴图（尚未实现）"};
+    for (int i = 0; i < 5; ++i) {
+      Button(h, 200 + i, labels[i]);
+      auto button = GetDlgItem(h, 200 + i);
+      SetWindowLongPtrW(button, GWL_EXSTYLE, GetWindowLongPtrW(button, GWL_EXSTYLE) | WS_EX_TRANSPARENT);
+      ShowWindow(button, SW_HIDE);
+      SetWindowSubclass(button, CardButton, 1, reinterpret_cast<DWORD_PTR>(this));
     }
+    auto tooltip = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE, TOOLTIPS_CLASSW,
+        nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX, CW_USEDEFAULT, CW_USEDEFAULT,
+        CW_USEDEFAULT, CW_USEDEFAULT, h, nullptr, GetModuleHandleW(nullptr), nullptr);
+    for (int i = 0; i < 5; ++i) {
+      TOOLINFOW tool_info{sizeof(tool_info)};
+      tool_info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+      tool_info.hwnd = h;
+      tool_info.uId = reinterpret_cast<UINT_PTR>(GetDlgItem(h, 200 + i));
+      tool_info.lpszText = const_cast<wchar_t*>(labels[i]);
+      SendMessageW(tooltip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&tool_info));
+    }
+    EnableWindow(GetDlgItem(h, 204), FALSE);
+    // Exclude our own chrome where the OS supports capture exclusion.
+    SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE);
     cards.insert(cards.begin(), item);
     previews.insert(previews.begin(), std::move(preview));
+    card_windows.insert(card_windows.begin(), h);
+    stack = h;
     if (cards.size() > 50) {
+      if (hovered_card == card_windows.back()) Hover(nullptr);
+      card_status.erase(card_windows.back());
+      DestroyWindow(card_windows.back());
+      card_windows.pop_back();
       cards.pop_back();
       previews.pop_back();
     }
-    stack_offset = 0;
-    if (!stack) {
-      stack =
-          Make(L"Rimes.Capture.Stack", L"截图堆栈", WS_POPUP,
-               WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST, 0, 0, 1, 1);
-      for (int row = 0; row < 3; ++row) {
-        Button(stack, 200 + row * 4, L"复制");
-        Button(stack, 201 + row * 4, L"编辑");
-        Button(stack, 202 + row * 4, L"另存");
-        Button(stack, 203 + row * 4, L"关闭");
-      }
-      Button(stack, 220, L"较新");
-      Button(stack, 221, L"较早");
-    }
-    stack_status.clear();
     LayoutStack();
   }
   void LayoutStack() {
-    if (!stack) return;
-    if (cards.empty()) {
-      ShowWindow(stack, SW_HIDE);
-      return;
-    }
-    if (stack_offset >= cards.size()) stack_offset = 0;
+    if (!stack || laying_out) return;
+    laying_out = true;
     MONITORINFO info{sizeof(info)};
     if (!monitor || !GetMonitorInfoW(monitor, &info))
       GetMonitorInfoW(MonitorFromWindow(stack, MONITOR_DEFAULTTOPRIMARY),
                       &info);
-    const int count =
-        (std::min)(3, static_cast<int>(cards.size() - stack_offset));
-    const int rows = (std::max)(
-        1, (std::min)(count, static_cast<int>((info.rcWork.bottom -
-                                               info.rcWork.top - S(stack, 80)) /
-                                              S(stack, 178))));
-    const int height = rows * 178 + 38;
-    SetWindowPos(stack, HWND_TOPMOST, info.rcWork.left + S(stack, 16),
-                 info.rcWork.bottom - S(stack, height + 16), S(stack, 264),
-                 S(stack, height), SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    for (int row = 0; row < 3; ++row)
-      for (int col = 0; col < 4; ++col)
-        Place(stack, 200 + row * 4 + col, 8 + col * 62, row * 178 + 142, 58, 28,
-              row < rows);
-    Place(stack, 220, 8, height - 32, 54, 26);
-    Place(stack, 221, 68, height - 32, 54, 26);
-    EnableWindow(GetDlgItem(stack, 220), stack_offset > 0);
-    EnableWindow(GetDlgItem(stack, 221), stack_offset + rows < cards.size());
-    InvalidateRect(stack, nullptr, FALSE);
+    int bottom = info.rcWork.bottom - S(stack, 18);
+    for (auto h : card_windows) {
+      // Move onto the destination display before measuring its DPI.
+      SetWindowPos(h, nullptr, info.rcWork.left + S(h, 18), bottom - S(h, 148),
+          0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+      const int width = S(h, 208), height = S(h, 148);
+      const bool fits = bottom - height >= info.rcWork.top + S(h, 18) &&
+          width <= info.rcWork.right - info.rcWork.left - S(h, 36);
+      SetWindowPos(h, HWND_TOPMOST, info.rcWork.left + S(h, 18), bottom - height,
+          width, height, SWP_NOACTIVATE | (fits ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+      const bool controls = h == hovered_card && fits;
+      Place(h, 200, 78, 44, 52, 26, controls);
+      Place(h, 202, 78, 78, 52, 26, controls);
+      Place(h, 203, 7, 7, 22, 22, controls);
+      Place(h, 201, 7, 119, 22, 22, controls);
+      Place(h, 204, 179, 7, 22, 22, controls);
+      InvalidateRect(h, nullptr, FALSE);
+      bottom -= height + S(h, 8);
+    }
+    laying_out = false;
   }
   void Edit(const Json& item) {
     if (!store.Enabled(Module::Capture))
@@ -664,7 +876,7 @@ struct CaptureWindows::Impl {
     dialog.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     if (GetSaveFileNameW(&dialog)) {
       AtomicWrite(path, EncodeCapture(image));
-      (owner == stack ? stack_status : status) = L"已导出 PNG";
+      (IsCard(owner) ? card_status[owner] : status) = L"已导出 PNG";
       InvalidateRect(owner, nullptr, FALSE);
     }
   }
@@ -688,35 +900,30 @@ struct CaptureWindows::Impl {
       Protect();
       return;
     }
-    if (h == stack) {
-      if (id == 220) {
-        if (stack_offset) --stack_offset;
-        LayoutStack();
-        return;
-      }
-      if (id == 221) {
-        if (stack_offset + 1 < cards.size()) ++stack_offset;
-        LayoutStack();
-        return;
-      }
-      if (id < 200 || id >= 212) return;
-      const auto index =
-          stack_offset + static_cast<std::size_t>((id - 200) / 4);
+    if (IsCard(h)) {
+      if (id < 200 || id > 203) return;
+      const auto index = static_cast<std::size_t>(
+          std::find(card_windows.begin(), card_windows.end(), h) - card_windows.begin());
       if (index >= cards.size()) return;
       const auto item = store.Get(cards[index].at("id"));
-      const int action = (id - 200) % 4;
+      const int action = id - 200;
       if (action == 1) {
         Edit(item);
         return;
       }
       if (action == 2) {
-        Export(stack, LoadCapture(store.Asset(item)));
+        Export(h, LoadCapture(store.Asset(item)));
         return;
       }
-      if (action == 0 && !CopyCapsuleAsset(stack, store, item))
+      if (action == 0 && !copy(h, store, item))
         throw std::runtime_error("剪贴板忙，卡片已保留，请重试。");
+      if (hovered_card == h) Hover(nullptr);
       cards.erase(cards.begin() + index);
       previews.erase(previews.begin() + index);
+      card_windows.erase(card_windows.begin() + index);
+      card_status.erase(h);
+      DestroyWindow(h);
+      stack = card_windows.empty() ? nullptr : card_windows.front();
       LayoutStack();
       return;
     }
@@ -761,19 +968,14 @@ struct CaptureWindows::Impl {
     const auto& palette =
         ui::Palette(ui::ThemeIdOrDefault(theme ? theme() : "night"));
     appearance::Paint p(dc, GetDpiForWindow(h));
-    p.Fill(r, palette.settings_background);
     if (h == selection) {
-      DrawImage(dc, desktop, r);
-      Gdiplus::Graphics g(dc);
-      Gdiplus::SolidBrush shade(Gdiplus::Color(110, 0, 0, 0));
-      g.FillRectangle(&shade, 0, 0, r.right, r.bottom);
+      if (!selection_dim.dc) return;
+      BitBlt(dc, 0, 0, r.right, r.bottom, selection_dim.dc, 0, 0, SRCCOPY);
       if (dragging) {
         auto area =
             CaptureSelection(start, current, desktop.width, desktop.height);
-        int saved = SaveDC(dc);
-        IntersectClipRect(dc, area.left, area.top, area.right, area.bottom);
-        DrawImage(dc, desktop, r);
-        RestoreDC(dc, saved);
+        BitBlt(dc, area.left, area.top, area.right - area.left,
+            area.bottom - area.top, selection_image.dc, area.left, area.top, SRCCOPY);
         ui::StrokeRoundRect(dc, area, 0, RGB(34, 197, 94), 2);
       }
       auto text =
@@ -781,32 +983,44 @@ struct CaptureWindows::Impl {
                          std::to_wstring(std::abs(current.y - start.y)) +
                          L"  松开完成 · Esc 取消"
                    : L"拖动选择截图区域 · Esc 取消";
-      const LONG x = (std::max)(0L, (std::min)(current.x + 18, r.right - 370)),
-                 y = (std::max)(0L, (std::min)(current.y + 22, r.bottom - 48));
-      RECT hint{x, y, (std::min)(r.right, x + 360),
-                (std::min)(r.bottom, y + 36)};
+      const auto hint = SelectionHint(current);
       p.Fill(hint, 0x202020, 8);
       p.Text(text, hint, 12, 0xffffff, FW_NORMAL,
              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    } else if (h == stack) {
-      const int rows = (r.bottom - S(h, 38)) / S(h, 178);
-      for (int row = 0; row < rows && stack_offset + row < cards.size();
-           ++row) {
-        const auto& image = previews[stack_offset + row];
-        auto box = p.R(8, row * 178 + 8, 248, 126);
-        p.Fill(box, palette.surface_secondary, 8);
-        DrawImage(dc, image, Fit(image, box));
+    } else if (IsCard(h)) {
+      const auto index = std::find(card_windows.begin(), card_windows.end(), h) - card_windows.begin();
+      const auto& image = previews[index];
+      p.Fill(r, palette.surface_secondary, 8);
+      DrawImage(dc, image, Fit(image, r));
+      if (hovered_card == h) {
+        {
+          Gdiplus::Graphics graphics(dc);
+          Gdiplus::SolidBrush shade(Gdiplus::Color(110, 0, 0, 0));
+          graphics.FillRectangle(&shade, 0, 0, r.right, r.bottom);
+        }
+        const ui::FluentIcon icons[] = {ui::FluentIcon::kCopy, ui::FluentIcon::kEdit,
+            ui::FluentIcon::kArrowDown, ui::FluentIcon::kClose, ui::FluentIcon::kPin};
+        for (int action = 0; action < 5; ++action) {
+          auto button = GetDlgItem(h, 200 + action);
+          RECT box{}; GetWindowRect(button, &box);
+          MapWindowPoints(nullptr, h, reinterpret_cast<POINT*>(&box), 2);
+          const bool down = (SendMessageW(button, BM_GETSTATE, 0, 0) & BST_PUSHED) != 0;
+          p.Fill(box, down ? palette.accent : palette.surface_secondary, 5);
+          if (GetFocus() == button) p.Stroke(box, palette.accent, 5);
+          const int size = p.S(16);
+          box.left += (box.right - box.left - size) / 2;
+          box.top += (box.bottom - box.top - size) / 2;
+          box.right = box.left + size; box.bottom = box.top + size;
+          ui::DrawFluentIcon(dc, icons[action], box,
+              ui::ToColorRef(IsWindowEnabled(button) ? palette.text_primary : palette.text_muted));
+        }
+        const auto notice = card_status.find(h);
+        if (notice != card_status.end()) p.Text(notice->second, p.R(36, 118, 165, 25),
+            10, 0xffffff, FW_NORMAL, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
       }
-      const auto label = stack_status.empty()
-                             ? std::to_wstring(stack_offset + 1) + L" / " +
-                                   std::to_wstring(cards.size())
-                             : stack_status;
-      p.Text(label,
-             {S(h, 130), r.bottom - S(h, 30), r.right - S(h, 8),
-              r.bottom - S(h, 4)},
-             10, palette.text_secondary, FW_NORMAL,
-             DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+      p.Stroke({0, 0, r.right - 1, r.bottom - 1}, palette.border, 8);
     } else if (rendered.Valid()) {
+      p.Fill(r, palette.settings_background);
       DrawImage(dc, rendered, canvas);
       if (dragging && pending.is_object()) {
         if (tool == "crop") {
@@ -845,11 +1059,19 @@ struct CaptureWindows::Impl {
     }
   }
   void Protect() {
+    if (drag_cancelled) drag_cancelled->store(true);
+    if (drag_card && GetCapture() == drag_card) ReleaseCapture();
+    drag_card = nullptr;
+    discard_preparation = true;
+    Hover(nullptr);
     dragging = false;
     if (GetCapture() == selection || GetCapture() == editor) ReleaseCapture();
-    for (auto h : {selection, stack, editor})
+    for (auto h : card_windows) DestroyWindow(h);
+    card_windows.clear(); stack = nullptr;
+    for (auto h : {selection, editor})
       if (h) ShowWindow(h, SW_HIDE);
     desktop = {};
+    selection_image.Reset(); selection_dim.Reset(); selection_frame.Reset();
     original = {};
     rendered = {};
     pending = nullptr;
@@ -858,6 +1080,7 @@ struct CaptureWindows::Impl {
     dirty = false;
     cards.clear();
     previews.clear();
+    card_status.clear();
   }
   static LRESULT CALLBACK Proc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     auto* self = reinterpret_cast<Impl*>(GetWindowLongPtrW(h, GWLP_USERDATA));
@@ -876,6 +1099,28 @@ struct CaptureWindows::Impl {
           auto dc = BeginPaint(h, &ps);
           RECT r{};
           GetClientRect(h, &r);
+          if (self->IsCard(h)) {
+            ui::LayeredFrame frame;
+            if (frame.Resize(r.right, r.bottom)) {
+              self->Paint(h, frame.dc());
+              frame.RoundAlpha(static_cast<float>(self->S(h, 8)));
+              frame.Present(h);
+            }
+            EndPaint(h, &ps);
+            return 0;
+          }
+          if (h == self->selection && self->selection_frame.dc) {
+            auto frame = self->selection_frame.dc;
+            const auto saved = SaveDC(frame);
+            IntersectClipRect(frame, ps.rcPaint.left, ps.rcPaint.top, ps.rcPaint.right, ps.rcPaint.bottom);
+            self->Paint(h, frame);
+            RestoreDC(frame, saved);
+            BitBlt(dc, ps.rcPaint.left, ps.rcPaint.top,
+                ps.rcPaint.right - ps.rcPaint.left, ps.rcPaint.bottom - ps.rcPaint.top,
+                frame, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
+            EndPaint(h, &ps);
+            return 0;
+          }
           auto frame = CreateCompatibleDC(dc);
           auto bitmap = CreateCompatibleBitmap(dc, (std::max)(1L, r.right),
                                                (std::max)(1L, r.bottom));
@@ -895,6 +1140,11 @@ struct CaptureWindows::Impl {
           const auto* item = reinterpret_cast<DRAWITEMSTRUCT*>(l);
           auto& pal = ui::Palette(
               ui::ThemeIdOrDefault(self->theme ? self->theme() : "night"));
+          if (self->IsCard(h)) {
+            // Painted atomically with the thumbnail in Paint(), never as a
+            // second independent surface on top of a just-exposed background.
+            return TRUE;
+          }
           bool selected = false;
           const char* names[] = {"arrow", "rectangle", "pen", "redact", "crop"};
           if (item->CtlID >= 100 && item->CtlID <= 104)
@@ -938,7 +1188,7 @@ struct CaptureWindows::Impl {
             const auto* r = reinterpret_cast<RECT*>(l);
             SetWindowPos(h, nullptr, r->left, r->top, r->right - r->left,
                          r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
-            if (h == self->stack)
+            if (self->IsCard(h))
               self->LayoutStack();
             else
               self->LayoutEditor();
@@ -947,11 +1197,11 @@ struct CaptureWindows::Impl {
         case WM_DISPLAYCHANGE:
           if (h == self->selection && IsWindowVisible(h))
             self->CancelSelection();
-          else if (h == self->stack)
+          else if (self->IsCard(h))
             self->LayoutStack();
           return 0;
         case WM_MOUSEACTIVATE:
-          if (h == self->stack) return MA_NOACTIVATE;
+          if (self->IsCard(h)) return MA_NOACTIVATE;
           break;
         case WM_SETCURSOR:
           if (h == self->selection) {
@@ -961,7 +1211,9 @@ struct CaptureWindows::Impl {
           break;
         case WM_LBUTTONDOWN: {
           POINT pt{GET_X_LPARAM(l), GET_Y_LPARAM(l)};
-          if (h == self->selection) {
+          if (self->IsCard(h)) {
+            self->drag_card = h; self->drag_start = pt; SetCapture(h);
+          } else if (h == self->selection) {
             self->start = self->current = pt;
             self->dragging = true;
             SetCapture(h);
@@ -981,6 +1233,16 @@ struct CaptureWindows::Impl {
           return 0;
         }
         case WM_MOUSEMOVE:
+          if (self->IsCard(h)) self->TrackHover(h);
+          if (h == self->drag_card && (w & MK_LBUTTON) &&
+              (std::abs(GET_X_LPARAM(l) - self->drag_start.x) >= GetSystemMetrics(SM_CXDRAG) ||
+               std::abs(GET_Y_LPARAM(l) - self->drag_start.y) >= GetSystemMetrics(SM_CYDRAG))) {
+            self->drag_card = nullptr; ReleaseCapture(); self->DragCard(h); return 0;
+          }
+          if (h == self->selection) {
+            self->MoveSelection({GET_X_LPARAM(l), GET_Y_LPARAM(l)});
+            return 0;
+          }
           if (self->dragging) {
             self->current = {GET_X_LPARAM(l), GET_Y_LPARAM(l)};
             if (h == self->editor) {
@@ -994,7 +1256,19 @@ struct CaptureWindows::Impl {
             InvalidateRect(h, nullptr, FALSE);
           }
           return 0;
+        case WM_MOUSELEAVE:
+          if (self->IsCard(h)) self->LeaveHover();
+          return 0;
+        case WM_TIMER:
+          if (h == self->selection && w == 1) self->CompleteCapture();
+          return 0;
+        case WM_LBUTTONDBLCLK:
+          if (self->IsCard(h)) self->Command(h, 201);
+          return 0;
         case WM_LBUTTONUP:
+          if (h == self->drag_card) {
+            self->drag_card = nullptr; ReleaseCapture(); return 0;
+          }
           if (self->dragging) {
             self->current = {GET_X_LPARAM(l), GET_Y_LPARAM(l)};
             if (h == self->selection)
@@ -1018,6 +1292,7 @@ struct CaptureWindows::Impl {
           }
           break;
         case WM_CAPTURECHANGED:
+          if (h == self->drag_card) self->drag_card = nullptr;
           if (self->dragging) {
             self->dragging = false;
             self->pending = nullptr;
@@ -1034,6 +1309,8 @@ struct CaptureWindows::Impl {
             self->CloseEditor();
           else if (h == self->selection)
             self->CancelSelection();
+          else if (self->IsCard(h))
+            self->Command(h, 203);
           else
             ShowWindow(h, SW_HIDE);
           return 0;
@@ -1058,9 +1335,9 @@ struct CaptureWindows::Impl {
   }
 };
 CaptureWindows::CaptureWindows(Store& s, std::function<void()> c,
-                               std::function<std::string()> t, Screenshot shot)
+                                 std::function<std::string()> t, Screenshot shot, Copy writer)
     : impl_(std::make_unique<Impl>(s, std::move(c), std::move(t),
-                                   std::move(shot))) {}
+                                   std::move(shot), std::move(writer))) {}
 CaptureWindows::~CaptureWindows() = default;
 void CaptureWindows::Start() { impl_->Start(); }
 void CaptureWindows::Edit(const Json& record) { impl_->Edit(record); }
@@ -1068,14 +1345,23 @@ void CaptureWindows::Protect() { impl_->Protect(); }
 HWND CaptureWindows::SelectionWindow() const { return impl_->selection; }
 HWND CaptureWindows::StackWindow() const { return impl_->stack; }
 HWND CaptureWindows::EditorWindow() const { return impl_->editor; }
+bool CaptureWindows::Preparing() const { return impl_->preparation.valid(); }
+void CaptureWindows::RefreshTheme() {
+  auto handles = impl_->card_windows; handles.push_back(impl_->editor);
+  for (auto h : handles) if (h)
+    RedrawWindow(h, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+}
 std::set<std::string> CaptureWindows::ActiveRecords() const {
   std::set<std::string> ids;
+  if (!impl_->dragged_record.empty()) ids.insert(impl_->dragged_record);
   if (IsWindowVisible(impl_->editor) && impl_->record.contains("id")) ids.insert(impl_->record.at("id"));
-  if (IsWindowVisible(impl_->stack)) for (const auto& item : impl_->cards) ids.insert(item.at("id"));
+  for (const auto& item : impl_->cards) ids.insert(item.at("id"));
   return ids;
 }
 bool CaptureWindows::HandleMessage(MSG* msg) {
-  for (auto h : {impl_->selection, impl_->editor, impl_->stack})
+  auto handles = impl_->card_windows;
+  handles.push_back(impl_->selection); handles.push_back(impl_->editor);
+  for (auto h : handles)
     if (h && (msg->hwnd == h || IsChild(h, msg->hwnd))) {
       if (msg->message == WM_KEYDOWN && msg->wParam == VK_ESCAPE) {
         SendMessageW(h, WM_KEYDOWN, VK_ESCAPE, 0);

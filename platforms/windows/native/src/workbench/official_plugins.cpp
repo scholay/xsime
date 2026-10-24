@@ -117,7 +117,9 @@ OfficialPluginStore::OfficialPluginStore(std::filesystem::path root) : root_(std
     root_ = std::filesystem::absolute(root_).lexically_normal();
     auto migration = Path("migration.json");
     std::filesystem::create_directories(root_);
-    if (!std::filesystem::exists(migration)) Atomic(migration, Json{{"legacy", std::filesystem::exists(root_.parent_path() / L"settings.json")}}.dump());
+    if (!std::filesystem::exists(migration)) Atomic(migration, Json{
+        {"legacy", std::filesystem::exists(root_.parent_path() / L"settings.json")},
+        {"defaultsVersion", 2}}.dump());
     ready_ = true;
   } catch (...) { ready_ = false; }
 }
@@ -145,8 +147,13 @@ Json OfficialPluginStore::State(const std::string& id) {
     if (state.at("sha256") != entry.at("sha256")) throw std::runtime_error("Plugin state belongs to another package");
     return state;
   }
-  const auto legacy = Json::parse(Read(Path("migration.json"), 4096)).at("legacy").get<bool>();
-  const bool available = legacy || entry.at("platforms").at("windows").at("distribution") == "bundled";
+  const auto migration = Json::parse(Read(Path("migration.json"), 4096));
+  const auto legacy = migration.at("legacy").get<bool>();
+  // Existing stores retain their original implicit defaults. Only a genuinely
+  // new store starts ChatGPT uninstalled; explicit receipts always win above.
+  const bool optional_codex = id == "builtin.codex-cli" && !legacy &&
+      migration.value("defaultsVersion", 1) >= 2;
+  const bool available = !optional_codex && (legacy || entry.at("platforms").at("windows").at("distribution") == "bundled");
   return {{"grant", "bundled-" + entry.at("sha256").get<std::string>()}, {"installed", available},
           {"enabled", available}, {"bundled", true}, {"sha256", entry.at("sha256")}};
 }

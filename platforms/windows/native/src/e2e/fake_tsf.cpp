@@ -330,14 +330,24 @@ HRESULT STDMETHODCALLTYPE FakeContext::GetSelection(TfEditCookie, ULONG, ULONG,
                                                     ULONG* fetched) {
   if (!selection || !fetched) return E_POINTER;
   selection->range = new (std::nothrow)
-      FakeRange(document_, static_cast<LONG>(document_->text.size()), 0);
+      FakeRange(document_, document_->range_advance && document_->selection_acp >= 0
+          ? document_->selection_acp : static_cast<LONG>(document_->text.size()), 0);
   selection->style = {TF_AE_NONE, FALSE};
   *fetched = selection->range ? 1 : 0;
   return selection->range ? S_OK : E_OUTOFMEMORY;
 }
 
-HRESULT STDMETHODCALLTYPE FakeContext::SetSelection(TfEditCookie, ULONG,
-                                                    const TF_SELECTION*) {
+HRESULT STDMETHODCALLTYPE FakeContext::SetSelection(TfEditCookie, ULONG count,
+                                                    const TF_SELECTION* selection) {
+  if (document_->range_advance && count && selection && selection->range) {
+    ITfRangeACP* acp = nullptr;
+    if (SUCCEEDED(selection->range->QueryInterface(IID_ITfRangeACP,
+            reinterpret_cast<void**>(&acp))) && acp) {
+      LONG length = 0;
+      acp->GetExtent(&document_->selection_acp, &length);
+      acp->Release();
+    }
+  }
   return S_OK;
 }
 
@@ -502,7 +512,7 @@ HRESULT STDMETHODCALLTYPE FakeContext::GetRangeFromPoint(TfEditCookie,
   return NotImpl();
 }
 
-HRESULT STDMETHODCALLTYPE FakeContext::GetTextExt(TfEditCookie, ITfRange*,
+HRESULT STDMETHODCALLTYPE FakeContext::GetTextExt(TfEditCookie, ITfRange* range,
                                                   RECT* rect, BOOL* clipped) {
   if (rect == nullptr) {
     return E_POINTER;
@@ -515,6 +525,17 @@ HRESULT STDMETHODCALLTYPE FakeContext::GetTextExt(TfEditCookie, ITfRange*,
     return E_FAIL;
   }
   *rect = document_->caret_rect;
+  if (document_->range_advance && range) {
+    ITfRangeACP* acp = nullptr;
+    if (SUCCEEDED(range->QueryInterface(IID_ITfRangeACP,
+            reinterpret_cast<void**>(&acp))) && acp) {
+      LONG start = 0, length = 0;
+      acp->GetExtent(&start, &length);
+      acp->Release();
+      rect->left += start * document_->range_advance;
+      rect->right += (start + length) * document_->range_advance;
+    }
+  }
   if (clipped != nullptr) {
     *clipped = FALSE;
   }
@@ -687,7 +708,8 @@ HRESULT STDMETHODCALLTYPE FakeRange::IsEmpty(TfEditCookie, BOOL* empty) {
   }
   return S_OK;
 }
-HRESULT STDMETHODCALLTYPE FakeRange::Collapse(TfEditCookie, TfAnchor) {
+HRESULT STDMETHODCALLTYPE FakeRange::Collapse(TfEditCookie, TfAnchor anchor) {
+  if (anchor == TF_ANCHOR_END) start_ += length_;
   length_ = 0;
   return S_OK;
 }

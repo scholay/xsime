@@ -106,6 +106,18 @@ steal focus from the host. Horizontal pages stay on one line within the configur
 maximum width and monitor work area; oversized entries are ellipsized while keeping all
 selection targets. Preedit is displayed only in the host editor or Buffer.
 
+Candidate placement uses a cloned range collapsed to the start of composition,
+not the moving selection caret. Typing, backspace, internal caret movement and
+candidate paging keep this origin; host scrolling/layout changes still relocate
+it with the document. An unavailable rectangle retains only the current
+composition's verified anchor. Commit/cancel, capture changes and focus changes
+discard it. Buffer publishes its preedit start separately from the drawn caret.
+
+Standalone processes that load librime declare UTF-8 as their active Windows
+code page. This keeps the UTF-8 paths passed to librime compatible with its
+dependencies' narrow filesystem calls, including Chinese user/data/log paths.
+The TSF DLL does not change the host application's code page.
+
 For the six product schemas, idle unshifted number-row keys and numeric-keypad
 digits, decimal and operators (also with Shift) pass directly to the host;
 composing candidate selection and Buffer capture still go through the engine.

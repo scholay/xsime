@@ -2,6 +2,7 @@
 #include <iostream>
 #include <atomic>
 #include <filesystem>
+#include <algorithm>
 
 #include "runtime.hpp"
 #include "official_features.hpp"
@@ -1505,11 +1506,120 @@ void TestBufferPluginCycle() {
   Check(runtime.Snapshot().value("visible", false), "next toggle reopens Buffer");
   runtime.Stop();
 }
+void TestFreshProfileRequiresChatGPTOptIn() {
+  workbench::Runtime runtime([](const auto&, const auto&, const auto&, const auto&, std::string*) { return false; });
+  Check(!runtime.Configuration().chord_enabled, "new profile does not activate the chord interceptor");
+  runtime.Bind(0);
+  Check(runtime.Snapshot()["plugin"] == "" && !runtime.SelectBufferPlugin(official::kCodex),
+        "fresh Buffer starts in Default and cannot activate uninstalled ChatGPT");
+  const auto plugins = runtime.BufferPlugins();
+  Check(std::none_of(plugins.begin(), plugins.end(), [](const auto& item) { return item.id == official::kCodex; }),
+        "new toolbar does not expose ChatGPT before explicit installation");
+}
+void TestReadinessConfigurationCancellationAndWaitingClock() {
+  std::atomic<std::uint64_t> now{1000};
+  std::atomic<unsigned> probes{0}, generations{0}, notifications{0};
+  std::atomic<bool> cancelled_first{false}, cancelled_stop{false}, generation_cancelled{false};
+  workbench::Runtime runtime([&](const auto&, const auto&, const auto&,
+      const std::function<bool()>& cancelled, std::string*) {
+    ++generations;
+    while (!cancelled()) Sleep(2);
+    generation_cancelled = true;
+    return false;
+  }, {}, [&] { return now.load(); }, [] { return 0U; },
+  [&](const workbench::Settings&, const std::function<bool()>& cancelled) -> workbench::Runtime::Readiness {
+    const auto index = ++probes;
+    if (index == 1 || index == 4) {
+      while (!cancelled()) Sleep(2);
+      if (index == 1) cancelled_first = true; else cancelled_stop = true;
+      return {true, "retired readiness must not publish"};
+    }
+    return index == 2 ? workbench::Runtime::Readiness{false, "fixture login required"}
+                      : workbench::Runtime::Readiness{true, {}};
+  });
+  const auto original = runtime.Configuration(); auto config = original;
+  Check(workbench::SelectConnection(&config, "codex") && runtime.Configure(config, {}, false, nullptr), "select readiness fixture connector");
+  runtime.SetNotify([&] { ++notifications; });
+  runtime.Bind(0); runtime.Paste("Readiness request.");
+  Check(runtime.SelectBufferPlugin(official::kCodex), "readiness fixture selects ChatGPT");
+  Check(!runtime.Snapshot().value("generation_ready", true), "first readiness snapshot returns while async check is pending");
+  Wait([&] { return probes == 1; }, "first async readiness probe starts");
+  runtime.Generate(false);
+  Check(generations == 0 && !runtime.Snapshot().value("busy", true), "pending readiness cannot launch a provider");
+  config = runtime.Configuration(); ++config.font_size;
+  Check(runtime.Configure(config, {}, false, nullptr), "configuration edit retires old readiness");
+  Wait([&] { return cancelled_first.load(); }, "old readiness receives cancellation promptly");
+  Wait([&] { return runtime.Snapshot()["generation_unavailable"] == "fixture login required"; }, "new configuration checks its own readiness");
+  Check(probes == 2 && !runtime.Snapshot().value("generation_ready", true), "late old readiness cannot enable generation");
+  runtime.Generate(false);
+  Check(generations == 0, "unready connector retains source without starting generation");
+  config = runtime.Configuration(); ++config.font_size;
+  Check(runtime.Configure(config, {}, false, nullptr), "retry after changing connector preferences");
+  Wait([&] { return runtime.Snapshot().value("generation_ready", false); }, "updated connector becomes ready");
+  Check(probes == 3, "successful readiness is cached");
+  runtime.Generate(false);
+  Wait([&] { return generations == 1; }, "ready connector starts injected generator");
+  Check(runtime.Snapshot()["waiting_seconds"] == 0, "generation starts its own elapsed clock");
+  now = 4500; runtime.Tick();
+  Check(runtime.Snapshot()["waiting_seconds"] == 3, "waiting clock updates without provider tokens");
+  const auto notified = notifications.load(); runtime.Tick();
+  Check(notifications == notified, "waiting clock does not repaint repeatedly within one second");
+  runtime.Cancel();
+  Wait([&] { return generation_cancelled.load(); }, "cancel retires active provider");
+  Check(runtime.Snapshot()["waiting_seconds"] == 0 && !runtime.Snapshot().value("busy", true), "cancel removes elapsed waiting state");
+  Check(runtime.Snapshot()["source"] == "Readiness request." && probes == 3, "cancel preserves source and cached readiness");
+  now = 35001; runtime.Snapshot();
+  Wait([&] { return probes == 4; }, "expired readiness refreshes asynchronously");
+  runtime.Stop();
+  Wait([&] { return cancelled_stop.load(); }, "shutdown cancels readiness without waiting for CLI timeout");
+  Check(workbench::SaveSettings(original, nullptr), "restore readiness fixture preferences");
+}
+void TestResetOnApplicationSwitchPreservesExternalDrafts() {
+  workbench::Runtime runtime([](const auto&, const auto&, const auto&, const auto&, std::string*) { return false; });
+  const auto original = runtime.Configuration(); auto config = original;
+  config.reset_on_app_switch = true;
+  Check(runtime.Configure(config, {}, false, nullptr), "enable application switch reset");
+  const auto peer = GetCurrentProcessId() + 1;
+  const auto first = runtime.Register(peer, 2001, 1), same_app = runtime.Register(peer, 2002, 2);
+  const auto other = runtime.Register(peer + 1, 2003, 3);
+  runtime.Focus(first); runtime.Bind(peer);
+  engine::EngineSnapshot input; input.handled = true; input.commit_text = "Local draft.";
+  runtime.Capture(first, &input);
+  Check(runtime.Snapshot()["source"] == "Local draft.", "native capture creates local draft");
+  runtime.ObserveForeground(GetCurrentProcessId()); runtime.Focus({}); runtime.ObserveForeground(0);
+  Check(runtime.Snapshot()["source"] == "Local draft.", "own settings and transient null foreground do not clear draft");
+  runtime.Focus(same_app);
+  Check(runtime.Snapshot()["source"] == "Local draft.", "switching fields within one application preserves draft");
+  runtime.Focus(other);
+  Check(runtime.Snapshot()["source"] == "" && runtime.Snapshot()["result"] == "", "another external application clears local draft");
+  runtime.Bind(other.process); runtime.Paste("Clipboard draft."); runtime.Focus(first);
+  Check(runtime.Snapshot()["source"] == "Clipboard draft.", "clipboard import survives changing external applications");
+  runtime.DiscardBuffer();
+  Check(runtime.StageExternal("Capsule draft."), "Capsule stages external draft");
+  runtime.ObserveForeground(other.process);
+  Check(runtime.Snapshot()["source"] == "Capsule draft.", "Capsule import keeps content until explicit disposal");
+  runtime.DiscardBuffer(); runtime.Focus(first); runtime.Bind(peer);
+  input.commit_text = "Local prefix. "; runtime.Capture(first, &input); runtime.Paste("External suffix.");
+  runtime.ObserveForeground(other.process);
+  Check(runtime.Snapshot()["source"] == "Local prefix. External suffix.", "mixed imported draft is retained as one user workspace");
+  runtime.DiscardBuffer();
+  config.reset_on_app_switch = false;
+  Check(runtime.Configure(config, {}, false, nullptr), "disable application switch reset");
+  runtime.Focus(first); runtime.Bind(peer); input.commit_text = "Kept by preference."; runtime.Capture(first, &input);
+  runtime.Focus(other);
+  Check(runtime.Snapshot()["source"] == "Kept by preference.", "disabled reset keeps native content across applications");
+  Check(runtime.Configure(original, {}, false, nullptr), "restore application switch preferences");
+}
 int main() {
   const auto root = std::filesystem::temp_directory_path() /
       (L"rimes-runtime-test-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64()));
   std::filesystem::create_directories(root);
   Check(SetEnvironmentVariableW(L"LOCALAPPDATA", root.c_str()) != 0, "isolated runtime preferences");
+  TestFreshProfileRequiresChatGPTOptIn();
+  // Provider and lifecycle fixtures below explicitly use ChatGPT. This is a
+  // test grant, never an implicit enable in the production Runtime constructor.
+  workbench::OfficialPluginStore fixture_plugins;
+  Check(fixture_plugins.Install(official::kCodex, nullptr) && fixture_plugins.Enable(official::kCodex, true, nullptr), "explicit ChatGPT fixture opt-in");
   auto fixture = workbench::Settings{}; fixture.close_after_send = false;
   const auto run = [](auto test) {
     Check(workbench::OfficialPluginStore{}.SaveBufferSelection("", nullptr), "isolate remembered selection between fixtures");
@@ -1548,6 +1658,8 @@ int main() {
   run(TestChordFallback);
   run(TestCodexConnectorAndReturn);
   run(TestStreamingInferenceAndRetirement);
+  run(TestReadinessConfigurationCancellationAndWaitingClock);
+  run(TestResetOnApplicationSwitchPreservesExternalDrafts);
   std::filesystem::remove_all(root);
   std::cout << "Runtime plugin authority and chord fallback tests passed\n";
 }

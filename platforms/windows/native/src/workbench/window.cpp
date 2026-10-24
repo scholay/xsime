@@ -30,6 +30,7 @@
 #include "buffer_hotkey.hpp"
 #include "buffer_anchor.hpp"
 #include "settings_ui.hpp"
+#include "user_lexicon.hpp"
 #include "translation_speech.hpp"
 #include "../peripherals/window.hpp"
 
@@ -140,6 +141,7 @@ struct Window {
   HFONT menu_font = nullptr;
   std::map<UINT, std::wstring> menu_labels;
   std::unique_ptr<BufferHotkeyRegistration> buffer_hotkey;
+  std::array<std::unique_ptr<BufferHotkeyRegistration>, 3> global_hotkeys;
   std::unique_ptr<BufferHotkeyRegistration> send_hotkey;
   std::array<std::unique_ptr<BufferHotkeyRegistration>, 2> plugin_hotkeys;
   std::array<bool, 2> plugin_hotkey_warning{};
@@ -179,6 +181,8 @@ struct Window {
     return ui::ThemeIdOrDefault(EffectiveTheme(runtime.Configuration()));
   }
   void EnsureSettings();
+  bool SaveWithGlobalHotkeys(const Settings&, const std::function<bool()>&, std::string*);
+  void MoveBufferToCurrentScreen();
   void OpenSettings();
   void OpenPeripheral(bool mailbox, bool toggle = false) {
     try {
@@ -281,6 +285,7 @@ ui::BufferPaintState Window::MakePaintState(const core::Json& state) const {
                        (!paint.busy || has_result) && status != "Sending...";
   if (paint.mode != ui::BufferMode::kInput && !has_result)
     paint.send_enabled = has_source && !paint.busy &&
+        state.value("generation_ready", true) &&
         state.value("preedit", std::string()).empty() && status != "Sending...";
   paint.paste_enabled = status != "Sending...";
   paint.preedit = Wide(state.value("preedit", std::string()));
@@ -309,7 +314,11 @@ ui::BufferPaintState Window::MakePaintState(const core::Json& state) const {
     for (const auto& block : state["stream_blocks"])
       paint.result_blocks.push_back({Wide(block.value("text", std::string())), true});
   }
-  if (paint.busy && paint.result_blocks.empty()) paint.result_hint = paint.status;
+  if (paint.busy && paint.result_blocks.empty())
+    paint.result_hint = paint.status + L" · " + std::to_wstring(state.value("waiting_seconds", 0ULL)) + L" 秒";
+  else if (!paint.busy && paint.mode != ui::BufferMode::kInput && !has_result &&
+           !state.value("generation_ready", true))
+    paint.result_hint = Wide(state.value("generation_unavailable", std::string()));
   return paint;
 }
 
@@ -338,31 +347,12 @@ void Window::EnsureSettings() {
     } catch (const std::exception& failure) { if (error) *error = failure.what(); return false; }
   };
   cb.save_connections = [this](Settings value, const std::map<std::string, std::wstring>& secrets, std::string* error) {
-    const auto result = buffer_hotkey->Update(value.hotkey_modifiers, value.hotkey_key,
-        [&] { return runtime.Configure(value, L"", false, error, secrets); });
-    if (result == HotkeyUpdate::kInvalid || result == HotkeyUpdate::kUnavailable) {
-      if (error) *error = "快捷键不可用，设置未保存；原快捷键保持有效。"; return false;
-    }
-    if (result == HotkeyUpdate::kSaveFailed) return false;
+    if (!SaveWithGlobalHotkeys(value, [&] { return runtime.Configure(value, L"", false, error, secrets); }, error)) return false;
     RefreshTrayIcon(); InvalidateRect(window, nullptr, FALSE); return true;
   };
   cb.save = [this](Settings value, const std::wstring& key, bool replace,
                    std::string* error) {
-    const auto result = buffer_hotkey->Update(
-        value.hotkey_modifiers, value.hotkey_key,
-        [&] { return runtime.Configure(value, key, replace, error); });
-    if (result == HotkeyUpdate::kInvalid) {
-      if (error) *error = "快捷键无效或是系统编辑快捷键；设置未保存。";
-      return false;
-    }
-    if (result == HotkeyUpdate::kUnavailable) {
-      if (error) *error = Utf8(BufferHotkeyTitle(value) +
-          (buffer_hotkey->Registered()
-              ? L" 不可用，设置未保存；原快捷键仍有效。请选择其他组合或字母。"
-              : L" 不可用，设置未保存。请使用托盘打开 Buffer，或选择其他组合或字母。"));
-      return false;
-    }
-    if (result == HotkeyUpdate::kSaveFailed) return false;
+    if (!SaveWithGlobalHotkeys(value, [&] { return runtime.Configure(value, key, replace, error); }, error)) return false;
     wcscpy_s(tray.szTip, rimes::branding::Text(L"{brand} 输入法与 Buffer").c_str());
     Shell_NotifyIconW(NIM_MODIFY, &tray);
     RefreshTrayIcon();
@@ -402,9 +392,66 @@ void Window::EnsureSettings() {
       PostMessageW(window, kUpdateBufferZOrder, 0, 0);
   };
   cb.about_text = std::wstring(rimes::branding::Text(L"{brand} Windows ").c_str()) + kProductVersionWide + L"\nCommit: " + Wide(RIMES_BUILD_COMMIT) +
-                  L"\n协议 v2\n词库：%APPDATA%\\RIMES\n设置与日志：%LOCALAPPDATA%"
-                  L"\\RIMES";
+                  L"\n协议 v2\n词库：" + runtime.user_data_directory.wstring() +
+                  L"\n日志：" + runtime.log_directory.wstring() + L"\n设置与历史：%LOCALAPPDATA%\\RIMES";
+  cb.move_buffer_to_screen = [this] { MoveBufferToCurrentScreen(); };
+  cb.restart_broker = runtime.restart_broker;
+  if (runtime.user_lexicon) cb.open_lexicon = [service = runtime.user_lexicon](HWND owner, ui::ThemeId selected_theme) {
+    ShowUserLexicon(owner, service, selected_theme);
+  };
+  cb.open_maintenance_location = [this](unsigned action) {
+    auto path = action == 0 ? runtime.log_directory : action == 1 ? runtime.user_data_directory : std::filesystem::path{};
+    if (action == 2) {
+      wchar_t local[32768]{};
+      const auto length = GetEnvironmentVariableW(L"LOCALAPPDATA", local, 32768);
+      if (!length || length >= 32768) return false;
+      path = std::filesystem::path(local) / L"RIMES";
+    }
+    return !path.empty() && reinterpret_cast<INT_PTR>(ShellExecuteW(window, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) > 32;
+  };
   settings = std::make_unique<SettingsUiHost>(std::move(cb));
+}
+
+bool Window::SaveWithGlobalHotkeys(const Settings& value, const std::function<bool()>& save, std::string* error) {
+  if (!ValidBufferShortcuts(value)) {
+    if (error) *error = "快捷键无效或与另一项重复，原设置保持不变。";
+    return false;
+  }
+  const unsigned keys[] = {value.hotkey_key, value.settings_key, value.capsule_key, value.capture_key};
+  const unsigned mods[] = {value.hotkey_modifiers, value.settings_modifiers, value.capsule_modifiers, value.capture_modifiers};
+  const auto previous = runtime.Configuration();
+  const unsigned old_keys[] = {previous.hotkey_key, previous.settings_key, previous.capsule_key, previous.capture_key};
+  const unsigned old_mods[] = {previous.hotkey_modifiers, previous.settings_modifiers, previous.capsule_modifiers, previous.capture_modifiers};
+  BufferHotkeyRegistration* registrations[] = {buffer_hotkey.get(), global_hotkeys[0].get(), global_hotkeys[1].get(), global_hotkeys[2].get()};
+  const wchar_t* names[] = {L"Buffer", L"设置", L"Capsule", L"截图"};
+  std::array<GlobalHotkeyBinding, 4> bindings;
+  for (std::size_t i = 0; i < bindings.size(); ++i)
+    bindings[i] = {registrations[i], mods[i], keys[i], keys[i] != old_keys[i] || mods[i] != old_mods[i]};
+  const bool was_aligned = previous.align_to_input_box;
+  std::size_t failed = 0;
+  const auto result = UpdateGlobalHotkeys(bindings, save, &failed);
+  if (result != HotkeyUpdate::kSaved) {
+    if ((result == HotkeyUpdate::kInvalid || result == HotkeyUpdate::kUnavailable) && error)
+      *error = Utf8(std::wstring(names[failed]) + L"快捷键 " + ShortcutTitle(keys[failed], mods[failed]) + L" 不可用，修改未保存；原快捷键保持有效。");
+    return false;
+  }
+  if (value.align_to_input_box && !was_aligned) placed_opening_revision = UINT64_MAX;
+  return true;
+}
+
+void Window::MoveBufferToCurrentScreen() {
+  const auto display = BufferMonitorInfo(BufferFallbackMonitor());
+  RECT rect{}; GetWindowRect(window, &rect);
+  const auto old_scale = (std::max)(1.0, static_cast<double>(GetDpiForWindow(window)) / 96);
+  const auto frame = BufferCenteredOnScreen(DipFrame(rect, old_scale), DipFrame(display.work, display.scale));
+  positioning = true; positioning_scale = display.scale; positioning_work = display.work;
+  SetWindowPos(window, nullptr, static_cast<int>(std::lround(frame.x * display.scale)), static_cast<int>(std::lround(frame.y * display.scale)),
+      static_cast<int>(std::lround(frame.width * display.scale)), static_cast<int>(std::lround(frame.height * display.scale)), SWP_NOZORDER | SWP_NOACTIVATE);
+  positioning = false; opening_side = BufferOpeningSide::kBottomFallback;
+  const auto state = runtime.Snapshot();
+  placed_opening_revision = state.value("opening_revision", 0ULL);
+  placed_geometry_revision = state.value("placement_revision", 0ULL);
+  InvalidateRect(window, nullptr, FALSE);
 }
 
 void Window::OpenSettings() {
@@ -764,6 +811,11 @@ void Window::ApplyHit(ui::BufferHitKind hit) {
 
 void Window::PositionForOpening(const core::Json& state) {
   const auto revision = state.value("opening_revision", 0ULL);
+  if (!runtime.Configuration().align_to_input_box) {
+    placed_opening_revision = revision;
+    placed_geometry_revision = state.value("placement_revision", 0ULL);
+    return;
+  }
   const auto target = runtime.PlacementTarget();
   auto anchor = ProbeBufferInputAnchor(target.process, runtime.PlacementCaret(target));
   if (target != runtime.PlacementTarget()) anchor = {};
@@ -828,7 +880,9 @@ void Window::UpdateTargetIcon(DWORD process) {
 }
 void Window::PublishLogicalCaret(const ui::BufferPaintState& paint) {
   if (!paint.capturing || !last_layout.show_source || !format || !write) return;
-  const float x = last_layout.source_text.left - scroll[0] + ui::MeasureBufferCaret(write, format, paint);
+  // Candidate placement follows the start of preedit, while the drawn caret
+  // and editing scroll continue to use the actual position within preedit.
+  const float x = last_layout.source_text.left - scroll[0] + ui::MeasureBufferCaret(write, format, paint, true);
   if (x < last_layout.source_text.left || x > last_layout.source_text.right) return;
   const float scale = static_cast<float>(GetDpiForWindow(window)) / 96.0f;
   POINT point{static_cast<LONG>(std::lround(x * scale)),
@@ -1041,19 +1095,21 @@ LRESULT CALLBACK Window::Procedure(HWND hwnd, UINT message, WPARAM wparam,
       case WM_ERASEBKGND:
         return 1;
       case WM_HOTKEY:
-        if (wparam >= 20 && wparam <= 23 && self->settings && self->settings->RecordingShortcut()) {
+        if (wparam == 22 && self->settings && self->settings->RecordingShortcut()) {
           self->settings->RecordShortcut(HIWORD(lparam), LOWORD(lparam) & ~MOD_NOREPEAT);
           return 0;
         }
-        if (wparam == 23) { if (self->peripherals) self->peripherals->CaptureArea(); return 0; }
-        if (wparam == 20) {
-          self->runtime.PauseCapture();
-          self->EnsureSettings();
-          self->settings->Toggle(hwnd);
-          self->UpdateBufferZOrder();
+        for (std::size_t i = 0; i < self->global_hotkeys.size(); ++i) {
+          if (!self->global_hotkeys[i] || !self->global_hotkeys[i]->Matches(wparam, lparam)) continue;
+          if (self->settings && self->settings->RecordingShortcut())
+            self->settings->RecordShortcut(HIWORD(lparam), LOWORD(lparam) & ~MOD_NOREPEAT);
+          else if (i == 0) {
+            self->runtime.PauseCapture(); self->EnsureSettings(); self->settings->Toggle(hwnd); self->UpdateBufferZOrder();
+          } else if (i == 1) self->OpenPeripheral(false, true);
+          else if (self->peripherals) self->peripherals->CaptureArea();
           return 0;
         }
-        if (wparam == 21 || wparam == 22) { self->OpenPeripheral(wparam == 22, true); return 0; }
+        if (wparam == 22) { self->OpenPeripheral(true, true); return 0; }
         for (const auto& hotkey : self->plugin_hotkeys) {
           if (!hotkey || !hotkey->Matches(wparam, lparam)) continue;
           const unsigned key = HIWORD(lparam), modifiers = LOWORD(lparam) & ~MOD_NOREPEAT;
@@ -1398,10 +1454,8 @@ LRESULT CALLBACK Window::Procedure(HWND hwnd, UINT message, WPARAM wparam,
         if (self->buffer_hotkey) self->buffer_hotkey->Reset();
         if (self->send_hotkey) self->send_hotkey->Reset();
         for (const auto& hotkey : self->plugin_hotkeys) if (hotkey) hotkey->Reset();
-        UnregisterHotKey(hwnd, 20);
-        UnregisterHotKey(hwnd, 21);
+        for (const auto& hotkey : self->global_hotkeys) if (hotkey) hotkey->Reset();
         UnregisterHotKey(hwnd, 22);
-        UnregisterHotKey(hwnd, 23);
         RemoveClipboardFormatListener(hwnd);
         WTSUnRegisterSessionNotification(hwnd);
         Shell_NotifyIconW(NIM_DELETE, &self->tray);
@@ -1514,10 +1568,19 @@ void RunWindow(Runtime& runtime, const std::function<void()>& stop,
   for (std::size_t i = 0; i < ui.plugin_hotkeys.size(); ++i)
     ui.plugin_hotkeys[i] = std::make_unique<BufferHotkeyRegistration>(window, 4 + static_cast<int>(i) * 2);
   ui.buffer_hotkey->RegisterInitial(config.hotkey_modifiers, config.hotkey_key);
-  RegisterHotKey(window, 20, MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'S');
-  RegisterHotKey(window, 21, MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'V');
+  const unsigned global_keys[] = {config.settings_key, config.capsule_key, config.capture_key};
+  const unsigned global_modifiers[] = {config.settings_modifiers, config.capsule_modifiers, config.capture_modifiers};
+  const int global_offsets[] = {19, 23, 25};
+  std::wstring global_conflicts;
+  const wchar_t* global_names[] = {L"设置", L"Capsule", L"截图"};
+  for (std::size_t i = 0; i < ui.global_hotkeys.size(); ++i) {
+    ui.global_hotkeys[i] = std::make_unique<BufferHotkeyRegistration>(window, global_offsets[i]);
+    if (!ui.global_hotkeys[i]->RegisterInitial(global_modifiers[i], global_keys[i])) {
+      if (!global_conflicts.empty()) global_conflicts += L"、";
+      global_conflicts += global_names[i];
+    }
+  }
   RegisterHotKey(window, 22, MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'M');
-  const bool capture_hotkey_registered = RegisterHotKey(window, 23, MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, '4') != FALSE;
   try { ui.peripherals = std::make_unique<peripherals::Windows>(runtime); AddClipboardFormatListener(window); } catch (...) {}
   ui.product_icon = ui::CreateTrayIcon(GetSystemMetrics(SM_CXSMICON));
   ui.tray.cbSize = sizeof(ui.tray);
@@ -1531,9 +1594,9 @@ void RunWindow(Runtime& runtime, const std::function<void()>& stop,
   if (!ui.buffer_hotkey->Registered())
     wcscpy_s(ui.tray.szTip, rimes::branding::Text(L"{brand} · Buffer 快捷键不可用，请使用托盘").c_str());
   ui.AddTrayIcon();
-  if (!capture_hotkey_registered) {
-    wcscpy_s(ui.tray.szInfoTitle, L"截图快捷键未启用");
-    wcscpy_s(ui.tray.szInfo, L"Alt+Shift+4 已被占用。可从 Capsule 的截图按钮打开框选截图。");
+  if (!global_conflicts.empty()) {
+    wcscpy_s(ui.tray.szInfoTitle, L"部分快捷键未启用");
+    wcscpy_s(ui.tray.szInfo, (global_conflicts + L"快捷键被占用。可从托盘打开设置，在 Buffer › 窗口与全局快捷键中修改。").c_str());
     ui.tray.dwInfoFlags = NIIF_WARNING; ui.tray.uFlags |= NIF_INFO;
     Shell_NotifyIconW(NIM_MODIFY, &ui.tray); ui.tray.uFlags &= ~NIF_INFO;
   }

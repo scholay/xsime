@@ -85,6 +85,18 @@ function(rimes_use_unicode_console_entrypoint target)
     endif()
 endfunction()
 
+# librime receives UTF-8 paths, including calls into dependencies that use
+# narrow CRT/Win32 filesystem APIs. Opt in per standalone engine process;
+# the in-process TSF DLL must never change its application's code page.
+function(rimes_use_utf8_paths target)
+    if(MSVC)
+        target_sources(${target} PRIVATE src/utf8_paths.manifest)
+    else()
+        configure_file(src/utf8_paths.rc.in generated/utf8_paths.rc @ONLY)
+        target_sources(${target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/utf8_paths.rc")
+    endif()
+endfunction()
+
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../Shared/SchemeImport" "scheme-import")
 
 set(rimes_core_sources
@@ -127,6 +139,7 @@ add_library(RimesWorkbench STATIC
     src/workbench/codex_cli.cpp src/workbench/local_translation.cpp
     src/workbench/runtime.cpp
     src/workbench/settings_ui.cpp src/workbench/application_update.cpp
+    src/workbench/user_lexicon.cpp src/workbench/user_lexicon_ui.cpp
     src/workbench/metrics.cpp
     src/workbench/metrics_articles.cpp
     src/workbench/metrics_ui.cpp
@@ -141,7 +154,7 @@ add_library(RimesWorkbench STATIC
     src/peripherals/capture.cpp
     src/peripherals/messages.cpp
 )
-target_link_libraries(RimesWorkbench PUBLIC RimesCore RimesSchemeImport comdlg32 winhttp ws2_32 bcrypt crypt32 advapi32 user32 d2d1 dwrite shell32 wtsapi32 ole32 oleaut32 uuid comctl32 gdi32 msimg32 dwmapi windowscodecs icu normaliz imm32)
+target_link_libraries(RimesWorkbench PUBLIC RimesCore RimesEngine RimesSchemeImport comdlg32 winhttp ws2_32 bcrypt crypt32 advapi32 user32 d2d1 dwrite shell32 wtsapi32 ole32 oleaut32 uuid comctl32 gdi32 msimg32 dwmapi windowscodecs icu normaliz imm32)
 target_include_directories(RimesWorkbench SYSTEM PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 rimes_harden_target(RimesWorkbench)
 
@@ -169,6 +182,7 @@ target_link_libraries(RimesBroker PRIVATE
 )
 rimes_harden_target(RimesBroker)
 rimes_use_unicode_console_entrypoint(RimesBroker)
+rimes_use_utf8_paths(RimesBroker)
 add_custom_command(TARGET RimesBroker POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/../translation" "$<TARGET_FILE_DIR:RimesBroker>/translation")
@@ -230,6 +244,7 @@ if(RIMES_BUILD_TESTS)
     target_link_libraries(RimesE2EBroker PRIVATE RimesCore RimesEngine RimesWorkbench advapi32)
     rimes_harden_target(RimesE2EBroker)
     rimes_use_unicode_console_entrypoint(RimesE2EBroker)
+    rimes_use_utf8_paths(RimesE2EBroker)
     add_test(NAME RimesE2EBrokerEndpoint COMMAND RimesE2EBroker --print-endpoint)
     set_tests_properties(RimesE2EBrokerEndpoint PROPERTIES
         PASS_REGULAR_EXPRESSION "RIMES[.]E2E[.]Broker[.]v2[.]session-" TIMEOUT 10)
@@ -344,6 +359,7 @@ if(RIMES_BUILD_TESTS)
     target_link_libraries(RimesProductProbe PRIVATE RimesEngine RimesWorkbench)
     rimes_harden_target(RimesProductProbe)
     rimes_use_unicode_console_entrypoint(RimesProductProbe)
+    rimes_use_utf8_paths(RimesProductProbe)
     add_executable(RimesSurfaceTests src/workbench/surface_tests.cpp)
     target_link_libraries(RimesSurfaceTests PRIVATE RimesWorkbench windowscodecs)
     rimes_harden_target(RimesSurfaceTests)
@@ -364,6 +380,8 @@ if(RIMES_BUILD_TESTS)
     rimes_harden_target(RimesPeripheralTests)
     rimes_use_unicode_console_entrypoint(RimesPeripheralTests)
     add_test(NAME RimesPeripherals COMMAND RimesPeripheralTests)
+    add_test(NAME RimesCapture COMMAND RimesPeripheralTests --capture-ui)
+    set_tests_properties(RimesCapture PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     target_link_libraries(RimesRuntimeTests PRIVATE RimesWorkbench)
     rimes_harden_target(RimesRuntimeTests)
     add_test(NAME RimesRuntime COMMAND RimesRuntimeTests)
@@ -406,6 +424,13 @@ if(RIMES_BUILD_TESTS)
     target_link_libraries(RimesWorkbenchTests PRIVATE RimesWorkbench)
     rimes_harden_target(RimesWorkbenchTests)
     add_test(NAME RimesWorkbench COMMAND RimesWorkbenchTests)
+    add_executable(RimesUserLexiconTests src/workbench/user_lexicon_tests.cpp)
+    target_link_libraries(RimesUserLexiconTests PRIVATE RimesWorkbench)
+    rimes_harden_target(RimesUserLexiconTests)
+    rimes_use_unicode_console_entrypoint(RimesUserLexiconTests)
+    rimes_use_utf8_paths(RimesUserLexiconTests)
+    add_test(NAME RimesUserLexicon COMMAND RimesUserLexiconTests)
+    set_tests_properties(RimesUserLexicon PROPERTIES TIMEOUT 30)
     add_executable(RimesBufferLayoutTests src/workbench/buffer_layout_tests.cpp)
     target_include_directories(RimesBufferLayoutTests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -436,6 +461,7 @@ if(RIMES_BUILD_TESTS)
     target_link_libraries(RimesEngineSmoke PRIVATE RimesEngine)
     rimes_harden_target(RimesEngineSmoke)
     rimes_use_unicode_console_entrypoint(RimesEngineSmoke)
+    rimes_use_utf8_paths(RimesEngineSmoke)
 
     add_executable(RimesBrokerKeyTranslationTests
         src/broker/key_translation.cpp
@@ -457,6 +483,7 @@ if(RIMES_BUILD_TESTS)
     rimes_use_unicode_console_entrypoint(RimesBrokerOptionsTests)
     add_executable(RimesUiCommandTests
         src/broker/ui_command_tests.cpp
+        src/broker/win32_security.cpp
         src/broker/broker_connection.cpp
         src/broker/key_translation.cpp
         src/broker/autostart.cpp
@@ -512,7 +539,10 @@ if(RIMES_BUILD_TESTS)
     target_link_libraries(RimesSettingsUiTests PRIVATE RimesWorkbench)
     rimes_harden_target(RimesSettingsUiTests)
     add_test(NAME RimesSettingsUi COMMAND RimesSettingsUiTests)
-    set_tests_properties(RimesSettingsUi PROPERTIES TIMEOUT 45)
+    # The suite creates many native hosts across pages, themes and DPI modes.
+    # Individual interaction waits stay bounded inside the fixture; allow the
+    # complete collection to finish on software-rendered developer desktops.
+    set_tests_properties(RimesSettingsUi PROPERTIES TIMEOUT 120)
 
     add_test(NAME RimesBrokerHelp COMMAND RimesBroker --help)
     set_tests_properties(RimesBrokerHelp PROPERTIES

@@ -66,9 +66,84 @@ struct CandidateStripLayout {
   int row_count = 0;
 };
 
+struct CandidateCompactLayout : CandidateStripLayout {
+  struct Page { std::size_t begin = 0, end = 0; };
+  std::vector<Page> pages;
+  std::size_t page_index = 0;
+  DipRect previous{}, next{};
+};
+
+// Partition against the configured ceiling, never the fitted width of the
+// current page. Reserve the pager before partitioning so a short final page
+// cannot shift earlier boundaries. Every engine item belongs to exactly one
+// subpage; a single oversized phrase is clipped rather than dropped.
+[[nodiscard]] inline CandidateCompactLayout LayoutCandidateCompactMeasured(
+    const std::vector<CandidateStripItem>& items,
+    const CandidateStripMetrics& metrics, float available_width_dip,
+    std::size_t limit, std::size_t highlighted, bool has_engine_neighbours) {
+  CandidateCompactLayout layout;
+  if (items.empty()) return layout;
+  const float ceiling = (std::max)(1.f, (std::min)(
+      static_cast<float>(metrics.max_strip_width_dip), available_width_dip));
+  const float pad = (std::min)(static_cast<float>(metrics.bar_horizontal_padding_dip), ceiling * .1f);
+  const float full_inner = (std::max)(1.f, ceiling - 2 * pad);
+  const float pager_width = (std::min)(42.f, full_inner * .4f);
+  const float pager_gap = (std::min)(3.f, full_inner * .05f);
+  const auto partition = [&](float inner) {
+    std::vector<CandidateCompactLayout::Page> pages;
+    const float gap = (std::min)(static_cast<float>(metrics.inter_pill_spacing_dip * 2 +
+        metrics.separator_width_dip), inner * .2f);
+    std::size_t begin = 0;
+    float used = 0;
+    for (std::size_t i = 0; i < items.size(); ++i) {
+      const float width = (std::min)(inner, static_cast<float>((std::max)(0, items[i].content_width_dip)
+          + 2 * metrics.pill_padding_dip));
+      if (i > begin && (i - begin >= (std::max)(std::size_t{1}, limit) || used + gap + width > inner)) {
+        pages.push_back({begin, i}); begin = i; used = 0;
+      }
+      used += (i == begin ? 0 : gap) + width;
+    }
+    pages.push_back({begin, items.size()});
+    return pages;
+  };
+  layout.pages = partition(full_inner);
+  const bool pager = has_engine_neighbours || layout.pages.size() > 1;
+  const float inner = full_inner - (pager ? pager_width + pager_gap : 0);
+  if (pager) layout.pages = partition(inner);
+  for (std::size_t page = 0; page < layout.pages.size(); ++page)
+    if (highlighted >= layout.pages[page].begin && highlighted < layout.pages[page].end)
+      layout.page_index = page;
+  const auto page = layout.pages[layout.page_index];
+  const float gap = (std::min)(static_cast<float>(metrics.inter_pill_spacing_dip * 2 +
+      metrics.separator_width_dip), inner * .2f);
+  const float height = static_cast<float>(metrics.strip_height_dip);
+  const float top = (height - metrics.pill_height_dip) * .5f;
+  float x = pad;
+  layout.pills.resize(items.size());
+  for (std::size_t i = page.begin; i < page.end; ++i) {
+    const float width = (std::min)(inner, static_cast<float>((std::max)(0, items[i].content_width_dip)
+        + 2 * metrics.pill_padding_dip));
+    if (i != page.begin) x += gap;
+    layout.pills[i] = {x, top, x + width, top + metrics.pill_height_dip};
+    layout.order.push_back(i); x += width;
+  }
+  if (pager) {
+    x += pager_gap;
+    layout.previous = {x, top, x + pager_width / 2, top + metrics.pill_height_dip};
+    layout.next = {x + pager_width / 2, top, x + pager_width, top + metrics.pill_height_dip};
+    x += pager_width;
+  }
+  layout.width_dip = (std::min)(ceiling, x + pad);
+  layout.height_dip = height;
+  layout.row_count = 1;
+  layout.strip = {0, 0, layout.width_dip, height};
+  return layout;
+}
+
 // Reserve each item inside the actual viewport, including a single very long
-// candidate. Horizontal pages use the monitor width, then wrap whole entries
-// instead of shrinking every phrase to a character. Painting and hit testing use these exact rectangles;
+// candidate. This row/column primitive is used by the matrix and vertical UI;
+// ordinary horizontal pagination uses the stable compact partition above.
+// Painting and hit testing use these exact rectangles;
 // semibold width is supplied by the native measurer. Composition stays inline
 // in the host editor, so this layout contains only candidates.
 [[nodiscard]] inline CandidateStripLayout LayoutCandidateStripMeasured(

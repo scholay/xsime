@@ -19,6 +19,7 @@ struct Block {
   std::uint64_t id = 0;
   std::string text;
   std::string language;
+  bool external = false;
 };
 enum class InputKind { kCommit, kDirect, kExternal };
 struct Delivery {

@@ -146,14 +146,16 @@ bool WaitForBroker(rimes::windows::tsf::TextService* service,
   return service->IsBrokerConnected();
 }
 
-std::vector<std::wstring> CandidateTexts() {
+std::vector<std::wstring> CandidateTexts(bool visible_only = false) {
   rimes::windows::tsf::CandidateSnapshot snapshot;
   rimes::windows::tsf::CandidateWindow::GetLastSnapshot(&snapshot);
   std::vector<std::wstring> texts;
   texts.reserve(snapshot.items.size());
-  for (const auto& item : snapshot.items) {
-    texts.push_back(item.text);
-  }
+  if (visible_only) {
+    for (const auto index : snapshot.visible_indices)
+      if (index < snapshot.items.size()) texts.push_back(snapshot.items[index].text);
+  } else
+    for (const auto& item : snapshot.items) texts.push_back(item.text);
   return texts;
 }
 
@@ -756,14 +758,17 @@ int RunTypingScenarios(bool legacy_broker, bool chord = false) {
 
   ResetDocument(&document);
   TypeLatin(service, context, "nihao");
-  const std::vector<std::wstring> page_one = CandidateTexts();
+  const std::vector<std::wstring> page_one = CandidateTexts(true);
   TypeVirtualKey(service, context, VK_NEXT, true);
-  const std::vector<std::wstring> page_two = CandidateTexts();
+  const std::vector<std::wstring> page_two = CandidateTexts(true);
   Expect(!page_one.empty() && !page_two.empty(),
          "paging should keep a candidate page visible");
   Expect(page_one != page_two,
-         "PageDown should replace the current candidate page");
+         "PageDown should replace the visible candidate subpage");
   Expect(document.composing, "paging should keep the composition active");
+  TypeVirtualKey(service, context, VK_PRIOR, true);
+  Expect(CandidateTexts(true) == page_one,
+         "PageUp restores the preceding visible candidate subpage");
   TypeVirtualKey(service, context, VK_ESCAPE, true);
   Expect(document.text.empty(), "Escape after paging should not commit");
   Expect(!document.composing, "Escape should cancel the composition");

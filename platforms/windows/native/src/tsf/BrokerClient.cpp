@@ -1153,6 +1153,9 @@ class NamedPipeBrokerClient final : public BrokerClient {
         state->highlighted_candidate = decoded.highlighted_candidate;
         state->page_start = decoded.page_start;
         state->page_size = decoded.page_size;
+        state->last_page = (decoded.state_flags & static_cast<std::uint32_t>(
+            protocol::InputStateFlags::kLastCandidatePage)) != 0;
+        state->candidate_page_keys = decoded.state_flags & protocol::kCandidatePageKeyFlags;
         state->candidates.clear();
         try {
           state->candidates.reserve(decoded.candidates.size());
@@ -1324,7 +1327,8 @@ class NamedPipeBrokerClient final : public BrokerClient {
       hello.session_id = current_session_id;
       hello.client_name = "RimesTsf";
       hello.capabilities = protocol::kModifierSnapshotsCapability |
-                           protocol::kKeyRoutingCapability | protocol::kPendingChordCapability;
+                           protocol::kKeyRoutingCapability | protocol::kPendingChordCapability |
+                           protocol::kCandidatePagingCapability;
       std::vector<std::byte> payload;
       protocol::Frame response;
       if (!protocol::EncodeClientHello(hello, &payload)) {

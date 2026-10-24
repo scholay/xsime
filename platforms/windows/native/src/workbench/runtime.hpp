@@ -3,7 +3,9 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <filesystem>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -18,20 +20,27 @@
 #include "buffer_auto_send.hpp"
 #include "../../../../../Shared/InputHabits/rime_options.hpp"
 namespace rimes::windows::workbench {
+class UserLexiconService;
 class Runtime {
  public:
   std::function<std::vector<xsime::input::Switch>(const std::string&)> input_option_provider;
+  std::function<bool(std::string*)> restart_broker;
+  // Set before UI startup from the effective Broker engine configuration.
+  std::filesystem::path log_directory, user_data_directory;
+  std::shared_ptr<UserLexiconService> user_lexicon;
   using APIGenerator = std::function<bool(const Settings&, const Generation&,
       const std::function<bool(const std::string&)>&, const std::function<bool()>&, std::string*)>;
   struct TranslationResources {
     std::function<bool()> ready;
     std::function<bool(const std::function<bool()>&, std::string*)> prepare;
   };
+  struct Readiness { bool ready = false; std::string message; };
+  using ReadinessProbe = std::function<Readiness(const Settings&, const std::function<bool()>&)>;
   explicit Runtime(APIGenerator generate = GenerateText, TranslationResources resources = {},
                    std::function<std::uint64_t()> clock = [] { return GetTickCount64(); },
                    std::function<std::uint32_t()> foreground = [] {
                      DWORD process = 0; GetWindowThreadProcessId(GetForegroundWindow(), &process); return process;
-                   });
+                   }, ReadinessProbe readiness = {});
   ~Runtime();
   Target Register(std::uint32_t process, std::uint64_t session,
                   std::uint64_t context);
@@ -153,6 +162,17 @@ class Runtime {
   bool stopping_ = false, settings_valid_ = true;
   std::jthread api_worker_;
   APIGenerator generate_;
+  ReadinessProbe readiness_probe_;
+  std::jthread readiness_worker_;
+  bool readiness_running_ = false;
+  struct CachedReadiness { Readiness value; std::uint64_t expires = 0; };
+  std::map<std::string, CachedReadiness> readiness_cache_;
+  bool EffectiveGenerationSettings(bool translation, Settings* effective);
+  Readiness GenerationReadinessLocked(bool translation);
+  void RefreshReadinessLocked(bool translation);
+  std::uint64_t generation_started_ = 0, generation_elapsed_second_ = 0;
+  std::uint32_t last_external_process_ = 0;
+  void ObserveAppSwitchLocked(std::uint32_t process);
   std::optional<std::pair<Settings, Generation>> api_job_;
   std::uint64_t pressed_at_ = 0, pending_since_ = 0, edited_at_ = 0;
   Target return_target_;

@@ -20,6 +20,7 @@ function Get-Process {[CmdletBinding()]param([string]$Name);return $script:proce
 function Get-CimInstance {[CmdletBinding()]param([string]$ClassName,[string]$Filter);return $script:natives[[int]($Filter.Split('=')[1])]}
 function Invoke-CimMethod {[CmdletBinding()]param($InputObject,[string]$MethodName);return [pscustomobject]@{ReturnValue=$script:ownerStatus;Sid=$InputObject.owner}}
 function Stop-Process {[CmdletBinding()]param($InputObject,[switch]$Force);$script:stopped+=$InputObject.Id;$InputObject.HasExited=$true}
+function Invoke-Registrar([string]$Directory,[string]$Architecture,[string]$Operation){$script:registrationMutations+=$Operation}
 function Fixture([int]$Id,[string]$Path,[string]$Owner){
     $now=[DateTime]::Now
     $process=[pscustomobject]@{Id=$Id;SessionId=$script:session;StartTime=$now;HasExited=$false}
@@ -70,8 +71,25 @@ $graceful=$true
 $stopEvent=[Threading.EventWaitHandle]::new($false,[Threading.EventResetMode]::ManualReset,((Get-BrokerMutexName $sid $session)+'.shutdown-12349'))
 try {
     $lease=Stop-OwnedBroker $directory $sid
-    try{Check 'new Broker uses the graceful engine shutdown before forced stop' ($stopEvent.WaitOne(0) -and $stopped.Count -eq 0 -and $processes[0].HasExited)}finally{$lease.Dispose()}
-}finally{$stopEvent.Dispose()}
+    try{Check 'new Broker uses graceful engine shutdown without a forced stop' ($stopEvent.WaitOne(0) -and $stopped.Count -eq 0 -and $processes[0].HasExited)}finally{$lease.Dispose()}
+}finally{$stopEvent.Dispose();$stopEvent=$null}
+$natives=@{};$processes=@(Fixture 12350 (Join-Path $directory 'x64\RimesBroker.exe') $sid)
+$graceful=$false;$registrationMutations=@();$failed=$false;$failure='';$lease=$null
+$stopEvent=[Threading.EventWaitHandle]::new($false,[Threading.EventResetMode]::ManualReset,((Get-BrokerMutexName $sid $session)+'.shutdown-12350'))
+try {
+    try {
+        $lease=Stop-OwnedBroker $directory $sid
+        # Installer/rollback/uninstall registration work follows this gate.
+        # These are synthetic mutations and must never be reached on failure.
+        Invoke-Registrar $directory 'x64' 'unregister'
+        Invoke-Registrar $directory 'x86' 'unregister'
+    } catch {$failed=$true;$failure=$_.Exception.Message}
+    finally {if($lease){$lease.Dispose()}}
+    Check 'slow graceful shutdown aborts maintenance and preserves the live Broker' ($failed -and $failure -match 'safe shutdown' -and $stopEvent.WaitOne(0) -and -not $processes[0].HasExited -and $stopped.Count -eq 0)
+    Check 'slow graceful shutdown prevents subsequent registration mutations' ($registrationMutations.Count -eq 0)
+    $created=$false;$afterFailure=[Threading.Mutex]::new($false,(Get-BrokerMutexName $sid $session),[ref]$created)
+    try{Check 'failed graceful maintenance releases only its own reservation' $created}finally{$afterFailure.Dispose()}
+}finally{$stopEvent.Dispose();$stopEvent=$null}
 Check 'alternate administrator never opens original-user kernel objects' ($null -eq (New-BrokerMaintenanceReservation 'S-1-5-21-1-2-3-1001'))
 [pscustomobject]@{status='passed';checks=$checks;realProcessesStopped=$false} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'result.json') -Encoding UTF8
 $global:LASTEXITCODE=0

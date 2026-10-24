@@ -50,6 +50,7 @@ bool TestNativeIsaac2026(RimeEngine& engine, const std::filesystem::path& log_di
   RuntimePreferences preferences(log_dir);
   if (!preferences.active()) return false;
   workbench::Settings initial; initial.schema = "my_combo";
+  initial.chord_enabled = true;  // This fixture explicitly exercises opt-in chord input.
   initial.close_after_send = false;
   if (!workbench::SaveSettings(initial, nullptr)) return false;
   workbench::Runtime runtime;
@@ -255,6 +256,10 @@ bool TestPausedBufferShift(RimeEngine& engine,
 
 int wmain(int argc, wchar_t** argv) {
   if (argc != 5) return 2;
+  if (GetACP() != CP_UTF8) {
+    std::cerr << "Engine process must declare UTF-8 paths in its manifest\n";
+    return 1;
+  }
   RimeEngineOptions options;
   options.dll_path = argv[1];
   options.shared_data_dir = argv[2];

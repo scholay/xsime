@@ -69,6 +69,51 @@ using NotificationHandler = void (*)(void*, SessionId, const char*,
                                      const char*);
 
 struct Config { void* ptr; };
+struct Module {
+  int data_size;
+  const char* module_name;
+  void (*initialize)();
+  void (*finalize)();
+  void* (*get_api)();
+};
+struct UserDictIterator { void* ptr; std::size_t i; };
+// Separate custom API, calibrated to librime 1.17.0 rime_levers_api.h.
+// Unused slots retain their exact order; only the checked user-dictionary
+// suffix is called. This never extends or reorders the main RimeApi table.
+struct LeversApi {
+  int data_size;
+  void (*custom_settings_init)();
+  void (*custom_settings_destroy)();
+  void (*load_settings)();
+  void (*save_settings)();
+  void (*customize_bool)();
+  void (*customize_int)();
+  void (*customize_double)();
+  void (*customize_string)();
+  void (*is_first_run)();
+  void (*settings_is_modified)();
+  void (*settings_get_config)();
+  void (*switcher_settings_init)();
+  void (*get_available_schema_list)();
+  void (*get_selected_schema_list)();
+  void (*schema_list_destroy)();
+  void (*get_schema_id)();
+  void (*get_schema_name)();
+  void (*get_schema_version)();
+  void (*get_schema_author)();
+  void (*get_schema_description)();
+  void (*get_schema_file_path)();
+  void (*select_schemas)();
+  void (*get_hotkeys)();
+  void (*set_hotkeys)();
+  Bool (*user_dict_iterator_init)(UserDictIterator*);
+  void (*user_dict_iterator_destroy)(UserDictIterator*);
+  const char* (*next_user_dict)(UserDictIterator*);
+  Bool (*backup_user_dict)(const char*);
+  Bool (*restore_user_dict)(const char*);
+  int (*export_user_dict)(const char*, const char*);
+  int (*import_user_dict)(const char*, const char*);
+};
 
 struct ApiPrefix {
   int data_size;
@@ -123,7 +168,7 @@ struct ApiPrefix {
   void (*unused_config_end)();
   void (*unused_simulate_key_sequence)();
   void (*unused_register_module)();
-  void (*unused_find_module)();
+  Module* (*find_module)(const char*);
   void (*unused_run_task)();
   void (*unused_get_shared_data_dir)();
   void (*unused_get_user_data_dir)();
@@ -131,9 +176,13 @@ struct ApiPrefix {
   void (*unused_get_user_id)();
   void (*unused_get_user_data_sync_dir)();
   void (*unused_config_init)();
-  void (*unused_config_load_string)();
+  Bool (*config_load_string)(Config*, const char*);
   void (*unused_config_set_bool)();
   Bool (*config_set_int)(Config*, const char*, int);
+  void (*unused_config_set_double)();
+  void (*unused_config_set_string)();
+  Bool (*config_get_item)(Config*, const char*, Config*);
+  Bool (*config_set_item)(Config*, const char*, Config*);
 };
 
 using GetApiFunction = ApiPrefix* (*)();
@@ -148,6 +197,7 @@ static_assert(std::is_standard_layout_v<Traits>);
 static_assert(std::is_standard_layout_v<Commit>);
 static_assert(std::is_standard_layout_v<Context>);
 static_assert(std::is_standard_layout_v<ApiPrefix>);
+static_assert(std::is_standard_layout_v<LeversApi>);
 static_assert(offsetof(Traits, data_size) == 0);
 static_assert(offsetof(Commit, data_size) == 0);
 static_assert(offsetof(Context, data_size) == 0);

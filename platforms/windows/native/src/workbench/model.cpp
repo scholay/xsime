@@ -136,7 +136,7 @@ bool Model::Append(std::string text, InputKind kind) {
   auto insert = [&](std::string value) {
     const auto id = next_id_++;
     source.insert(source.begin() + static_cast<std::ptrdiff_t>(insertion),
-                  {id, std::move(value)});
+                  {id, std::move(value), {}, kind == InputKind::kExternal});
     ++insertion;
     return id;
   };

@@ -239,6 +239,8 @@ bool BuildEngineSnapshot(const RawSnapshotView& raw,
                       (!built.composition.empty() || !raw.candidates.empty());
     built.page_number = raw.page_number;
     built.page_size = static_cast<std::uint16_t>(raw.page_size);
+    built.last_page = raw.last_page;
+    built.candidate_page_keys = raw.candidate_page_keys;
     if (raw.highlighted_candidate >= 0) {
       built.highlighted_candidate =
           static_cast<std::uint16_t>(raw.highlighted_candidate);
@@ -329,6 +331,9 @@ bool MapSnapshotToInputState(std::uint64_t broker_session_id,
     if (!snapshot.candidates.empty()) {
       mapped.page_start = 0;
       mapped.page_size = static_cast<std::uint16_t>(snapshot.candidates.size());
+      if (snapshot.last_page)
+        mapped.state_flags |= static_cast<std::uint32_t>(core::InputStateFlags::kLastCandidatePage);
+      mapped.state_flags |= snapshot.candidate_page_keys & core::kCandidatePageKeyFlags;
     }
     mapped.candidates.reserve(snapshot.candidates.size());
     for (const EngineCandidate& candidate : snapshot.candidates) {

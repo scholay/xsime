@@ -258,6 +258,57 @@ void TestVerticalCandidatesKeepEveryPageItem() {
   }
 }
 
+void TestCompactSubpages() {
+  std::vector<CandidateStripItem> items(12);
+  for (auto& item : items) item.content_width_dip = 90;
+  items[5].content_width_dip = 1200;
+  CandidateStripMetrics metrics;
+  metrics.max_strip_width_dip = 320;
+  const auto first = ui::LayoutCandidateCompactMeasured(items, metrics, 1920, 3, 0, true);
+  Check(first.pages.size() > 4 && first.row_count == 1 && first.width_dip <= 320,
+        "ordinary horizontal pages obey the configured ceiling and count, not monitor width");
+  Check(first.previous.width() > 0 && first.next.width() > 0,
+        "pagination reserves both controls before measuring visible items");
+  std::size_t seen = 0;
+  for (std::size_t page = 0; page < first.pages.size(); ++page) {
+    const auto range = first.pages[page];
+    Check(range.begin == seen && range.end > range.begin && range.end - range.begin <= 3,
+          "subpages partition every engine candidate exactly once");
+    seen = range.end;
+    for (auto selected = range.begin; selected < range.end; ++selected) {
+      const auto layout = ui::LayoutCandidateCompactMeasured(items, metrics, 1920, 3, selected, true);
+      Check(layout.page_index == page && layout.pages.size() == first.pages.size() &&
+                layout.height_dip == metrics.strip_height_dip && layout.width_dip <= 320,
+            "highlight changes reveal a stable single-row subpage without shifting boundaries");
+      for (std::size_t i = 0; i < items.size(); ++i) {
+        const auto& box = layout.pills[i];
+        Check((box.width() > 0) == (i >= range.begin && i < range.end),
+              "only this subpage has visible and clickable candidates");
+        if (box.width() > 0)
+          Check(HitTestCandidateStrip(layout, (box.left + box.right) / 2,
+                    (box.top + box.bottom) / 2) == static_cast<int>(i),
+                "subpage clicks retain the engine index, including a clipped long phrase");
+      }
+    }
+  }
+  Check(seen == items.size(), "last short subpage keeps the complete suffix");
+  items.assign(9, {});
+  for (auto& item : items) item.content_width_dip = 10;
+  const auto limited = ui::LayoutCandidateCompactMeasured(items, {}, 1920, 4, 0, false);
+  Check(limited.pages.size() == 3 && limited.pages[0].end == 4 && limited.pages[1].end == 8,
+        "candidate-count bound applies even when every candidate fits the width");
+  items.resize(1);
+  const auto terminal = ui::LayoutCandidateCompactMeasured(items, {}, 1920, 9, 0, false);
+  Check(terminal.pages.size() == 1 && terminal.next.width() == 0,
+        "one terminal subpage needs no paging controls");
+  for (const float width : {16.f, 100.f, 240.f}) {
+    const auto narrow = ui::LayoutCandidateCompactMeasured(items, {}, width, 9, 0, true);
+    Check(narrow.width_dip <= width && narrow.pills[0].width() > 0 &&
+        narrow.next.right <= width && narrow.pills[0].right <= narrow.previous.left,
+        "tiny work areas retain separate bounded candidate and pager hit targets");
+  }
+}
+
 void TestBufferLayoutBounds() {
   BufferPaintState state;
   state.source_blocks = {{L"a", false}};
@@ -377,6 +428,7 @@ int RunCandidateLayoutTests() {
   TestNarrowViewportAndLargeFont();
   TestVerticalCandidatesKeepEveryPageItem();
   TestCandidateMatrixNavigation();
+  TestCompactSubpages();
   TestBufferLayoutBounds();
   return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -1,9 +1,20 @@
 #include "broker_connection.hpp"
+#include "restart.hpp"
 #include "../core/control.hpp"
 #include "../workbench/window.hpp"
 
 #include <cstdlib>
 #include <iostream>
+#include <filesystem>
+
+namespace rimes::windows::broker {
+struct CandidatePagingRegressionProbe {
+  static ClientAction Respond(BrokerConnection& connection, const core::Frame& request,
+                               core::InputState state, core::Frame* response) {
+    return connection.RespondWithInputState(request, std::move(state), response);
+  }
+};
+}
 
 namespace {
 using namespace rimes::windows;
@@ -19,10 +30,11 @@ core::Frame Frame(core::MessageType type, std::vector<std::byte> payload,
   result.payload = std::move(payload);
   return result;
 }
-core::Frame Hello(DWORD process, DWORD session = 42) {
+core::Frame Hello(DWORD process, DWORD session = 42, std::uint64_t capabilities = 0) {
   core::ClientHello hello;
   hello.process_id = process;
   hello.session_id = session;
+  hello.capabilities = capabilities;
   hello.client_name = "settings command test";
   std::vector<std::byte> payload;
   Check(core::EncodeClientHello(hello, &payload), "hello encodes");
@@ -50,6 +62,35 @@ void TestAuthenticatedCommandWithoutInputSession() {
         "accepted settings request posts once");
   connection.Handle(Command(), 100, &response);
   Check(requests == 2, "a second explicit request can foreground settings");
+}
+void TestCandidatePagingCapability() {
+  for (const auto capabilities : {0ULL, core::kCandidatePagingCapability}) {
+    broker::BrokerConnection connection(42, nullptr);
+    core::Frame response;
+    Check(connection.Handle(Hello(100, 42, capabilities), 100, &response) ==
+        broker::ClientAction::kContinue, "candidate paging hello succeeds");
+    core::InputState state;
+    state.session_id = 7; state.sequence_id = 1; state.revision = 1;
+    state.state_flags = static_cast<std::uint32_t>(core::InputStateFlags::kHandled) |
+        static_cast<std::uint32_t>(core::InputStateFlags::kComposing) |
+        static_cast<std::uint32_t>(core::InputStateFlags::kCandidatesVisible) |
+        static_cast<std::uint32_t>(core::InputStateFlags::kLastCandidatePage) |
+        static_cast<std::uint32_t>(core::InputStateFlags::kMinusPageUp) |
+        static_cast<std::uint32_t>(core::InputStateFlags::kMinusPagingOnly) |
+        static_cast<std::uint32_t>(core::InputStateFlags::kEqualPageDown);
+    state.composition = "a"; state.caret_utf16 = 1; state.page_size = 1;
+    state.candidates = {{0, "word", "", "1"}};
+    Check(broker::CandidatePagingRegressionProbe::Respond(connection,
+        Frame(core::MessageType::kKeyEvent, {}, 2), state, &response) ==
+        broker::ClientAction::kContinue, "candidate paging response encodes");
+    core::InputState decoded;
+    Check(core::DecodeInputState(response.payload, &decoded), "candidate paging response decodes");
+    Check(((decoded.state_flags & static_cast<std::uint32_t>(core::InputStateFlags::kLastCandidatePage)) != 0)
+        == (capabilities != 0), "only negotiated clients receive last-page metadata; loaded legacy DLLs stay compatible");
+    Check((decoded.state_flags & core::kCandidatePageKeyFlags) ==
+        (capabilities ? state.state_flags & core::kCandidatePageKeyFlags : 0U),
+        "only negotiated clients receive explicit symbol paging metadata");
+  }
 }
 void TestCommandRequiresVerifiedHelloAndInteractiveHandler() {
   int requests = 0;
@@ -197,8 +238,76 @@ void TestUiDispatcherRetiresItsWindow() {
   DestroyWindow(window);
   UnregisterClassW(fixture.lpszClassName, fixture.hInstance);
 }
+void TestRestartParentIdentityAndExitRace() {
+  Check(broker::WaitForRestartParent(0), "normal startup needs no predecessor");
+  Check(!broker::WaitForRestartParent(GetCurrentProcessId()), "restart cannot wait for itself");
+  wchar_t own[32768]{};
+  Check(GetModuleFileNameW(nullptr, own, 32768) != 0, "restart fixture resolves its own executable");
+  const auto launch = [&](const std::filesystem::path& executable, const wchar_t* delay) {
+    auto command = L"\"" + executable.wstring() + L"\" --restart-fixture " + delay;
+    STARTUPINFOW startup{sizeof(startup)}; PROCESS_INFORMATION process{};
+    startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
+    Check(CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE,
+        CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process) != 0, "owned restart fixture launches hidden");
+    if (process.hThread) CloseHandle(process.hThread);
+    return process;
+  };
+  auto live = launch(own, L"700");
+  if (live.hProcess) {
+    Check(broker::WaitForRestartParent(live.dwProcessId), "same executable user and session predecessor is allowed to exit");
+    Check(WaitForSingleObject(live.hProcess, 0) == WAIT_OBJECT_0, "successful restart wait observes actual predecessor exit");
+    Check(WaitForSingleObject(live.hProcess, 3000) == WAIT_OBJECT_0, "owned predecessor exits without termination");
+    // Keep the process object alive while reproducing a child that gets
+    // scheduled only after the parent exited. Token queries may now fail.
+    Check(broker::WaitForRestartParent(live.dwProcessId), "already-exited predecessor does not fail a token-query startup race");
+    CloseHandle(live.hProcess);
+  }
+  // A hard link must be on the executable's volume. The unique directory is
+  // confined to the disposable build tree and never alters the original file.
+  const auto directory = std::filesystem::path(own).parent_path() /
+      (L"rimes-restart-test-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64()));
+  std::error_code error;
+  std::filesystem::create_directories(directory, error);
+  const auto alias_path = directory / L"same-broker-alias.exe";
+  const bool linked = CreateHardLinkW(alias_path.c_str(), own, nullptr) != 0;
+  Check(linked, "restart fixture creates a different path for the same executable file");
+  if (linked) {
+    auto alias = launch(alias_path, L"700");
+    if (alias.hProcess) {
+      Check(broker::WaitForRestartParent(alias.dwProcessId),
+          "same file reached through a hard-link or junction alias is an allowed predecessor");
+      Check(WaitForSingleObject(alias.hProcess, 0) == WAIT_OBJECT_0,
+          "alias predecessor is actually awaited before restart");
+      WaitForSingleObject(alias.hProcess, 3000);
+      CloseHandle(alias.hProcess);
+    }
+  }
+  const auto foreign_path = directory / L"different-broker.exe";
+  const bool copied = std::filesystem::copy_file(own, foreign_path, std::filesystem::copy_options::none, error);
+  Check(copied, "restart fixture creates its own differently located executable");
+  if (copied) {
+    auto foreign = launch(foreign_path, L"1500");
+    if (foreign.hProcess) {
+      Check(WaitForSingleObject(foreign.hProcess, 0) == WAIT_TIMEOUT, "foreign identity fixture is live");
+      Check(!broker::WaitForRestartParent(foreign.dwProcessId),
+          "live PID belonging to another executable is refused, including a reused predecessor PID");
+      Check(WaitForSingleObject(foreign.hProcess, 0) == WAIT_TIMEOUT, "identity rejection does not terminate another process");
+      Check(WaitForSingleObject(foreign.hProcess, 3000) == WAIT_OBJECT_0, "owned foreign fixture exits on its own");
+      CloseHandle(foreign.hProcess);
+    }
+  }
+  std::filesystem::remove(alias_path, error);
+  std::filesystem::remove(foreign_path, error);
+  std::filesystem::remove(directory, error);
 }
-int main() {
+}
+int main(int argc, char** argv) {
+  if (argc == 3 && std::string(argv[1]) == "--restart-fixture") {
+    Sleep(static_cast<DWORD>(std::strtoul(argv[2], nullptr, 10)));
+    return EXIT_SUCCESS;
+  }
+  TestRestartParentIdentityAndExitRace();
+  TestCandidatePagingCapability();
   TestAuthenticatedCommandWithoutInputSession();
   TestCommandRequiresVerifiedHelloAndInteractiveHandler();
   TestLatePeerAndMalformedCommandsCannotOpenSettings();

@@ -47,7 +47,7 @@ class KeyLatencyTrace {
  private:
 #ifdef RIMES_E2E_TEST_IDENTITY
   ULONGLONG started_ = GetTickCount64();
-  std::array<std::pair<const char*, ULONGLONG>, 7> phases_{};
+  std::array<std::pair<const char*, ULONGLONG>, 9> phases_{};
   std::size_t count_ = 0;
 #endif
 };
@@ -65,11 +65,13 @@ constexpr bool HasFlag(std::uint32_t value, std::uint32_t flag) noexcept {
 }
 
 void ObserveCommit(workbench::Runtime* runtime, DWORD process,
-                   const std::string& text) noexcept {
+                   const std::string& text, KeyLatencyTrace* latency = nullptr) noexcept {
   if (!runtime || text.empty()) return;
   try {
-    runtime->Metrics()->ObserveCommit(process,
-        static_cast<unsigned>(metrics::Characters(text).size()));
+    const auto count = static_cast<unsigned>(metrics::Characters(text).size());
+    if (latency) latency->Mark("unicode");
+    runtime->Metrics()->ObserveCommit(process, count);
+    if (latency) latency->Mark("aggregate");
   } catch (...) {
     // A best-effort aggregate must never affect actual text delivery.
   }
@@ -255,11 +257,13 @@ ClientAction BrokerConnection::HandleHello(const core::Frame& request,
   broker_hello.process_id = GetCurrentProcessId();
   broker_hello.session_id = broker_session_id_;
   broker_hello.capabilities = (runtime_ ? 1ULL : 0ULL) |
-      core::kModifierSnapshotsCapability | core::kKeyRoutingCapability | core::kPendingChordCapability;
+      core::kModifierSnapshotsCapability | core::kKeyRoutingCapability | core::kPendingChordCapability |
+      core::kCandidatePagingCapability;
   modifier_snapshots_ =
       (hello.capabilities & core::kModifierSnapshotsCapability) != 0;
   key_routing_ = (hello.capabilities & core::kKeyRoutingCapability) != 0;
   pending_chord_ = (hello.capabilities & core::kPendingChordCapability) != 0;
+  candidate_paging_ = (hello.capabilities & core::kCandidatePagingCapability) != 0;
   peer_process_ = verified_client_process_id;
   broker_hello.broker_version = std::string(kBrokerVersion);
   std::vector<std::byte> payload;
@@ -641,10 +645,10 @@ ClientAction BrokerConnection::HandleKeyEvent(const core::Frame& request,
       snapshot.handled = true;
       snapshot.commit_text.assign(1, static_cast<char>(translated->keycode));
     }
-    ObserveCommit(settings_, peer_process_, snapshot.commit_text);
+    ObserveCommit(settings_, peer_process_, snapshot.commit_text, &latency);
     runtime_->Capture(session.target, &snapshot, direct_input);
   } else if (settings_ && !snapshot.commit_text.empty()) {
-    ObserveCommit(settings_, peer_process_, snapshot.commit_text);
+    ObserveCommit(settings_, peer_process_, snapshot.commit_text, &latency);
   }
   latency.Mark("commit");
   std::uint64_t next_revision = session.revision;
@@ -681,6 +685,8 @@ ClientAction BrokerConnection::HandleKeyEvent(const core::Frame& request,
 ClientAction BrokerConnection::RespondWithInputState(const core::Frame& request,
                                                      core::InputState state,
                                                      core::Frame* response) {
+  if (!candidate_paging_)
+    state.state_flags &= ~core::kCandidatePagingStateFlags;
   if (pending_chord_) {
     const auto session = sessions_.find(state.session_id);
     if (session != sessions_.end() && session->second.chord.Pending())

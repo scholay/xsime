@@ -112,4 +112,13 @@ inline BufferRect BufferResizedOutward(BufferRect frame, double height,
   return frame;
 }
 
+inline BufferRect BufferCenteredOnScreen(BufferRect frame, BufferRect work) {
+  const auto safe = BufferSafeWorkArea(work);
+  frame.width = (std::min)(frame.width, safe.width);
+  frame.height = (std::min)(frame.height, safe.height);
+  frame.x = safe.x + (safe.width - frame.width) / 2;
+  frame.y = safe.y + (safe.height - frame.height) / 2;
+  return frame;
+}
+
 }  // namespace rimes::windows::workbench

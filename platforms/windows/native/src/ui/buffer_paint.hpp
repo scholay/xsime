@@ -56,12 +56,13 @@ inline float MeasureBufferContent(IDWriteFactory* write,
   return width;
 }
 inline float MeasureBufferCaret(IDWriteFactory* write, IDWriteTextFormat* body,
-                                const BufferPaintState& state) {
+                                const BufferPaintState& state,
+                                bool composition_start = false) {
   const auto index = (std::min)(state.insertion, state.source_blocks.size());
   std::vector<BufferBlockView> prefix(state.source_blocks.begin(),
       state.source_blocks.begin() + static_cast<std::ptrdiff_t>(index));
   auto width = MeasureBufferContent(write, body, prefix, L"");
-  if (!state.preedit.empty()) {
+  if (!composition_start && !state.preedit.empty()) {
     const auto part = state.preedit.substr(0, state.preedit_caret);
     width += MeasureBufferContent(write, body, {}, part) - (part.empty() ? 0.0f : 5.0f);
   }

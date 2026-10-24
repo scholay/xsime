@@ -55,18 +55,18 @@ inline constexpr int kSettingsSchemeCount = sizeof(kSettingsSchemeTitles) / size
 inline const wchar_t* const kSettingsSubpageLabels[][6] = {
     {L"输入方案", L"选项"},
     {L"主题", L"尺寸"},
-    {L"快捷键", L"行为"},
+    {L"快捷键", L"行为", L"窗口与全局快捷键"},
     {L"AI 模型", L"本地网关"},
     {L"全部", L"缓冲插件", L"Capsule 插件", L"Mailbox 插件", L"内置扩展"},
     {L"版本", L"诊断"},
     {L"isaac2026", L"键位与预览"},
-    {L"内容库", L"说明"},
+    {L"Capsule"},
     {L"工作区", L"说明"},
     {L"文章跟打", L"成绩"},
     {L"每日", L"历史", L"测速成绩"},
     {rimes::branding::Name(), L"官网", L"邮箱", L"开源项目", L"README", L"License"},
 };
-inline int SettingsTabCount(SettingsPage page) { return page == SettingsPage::kHome ? 6 : page == SettingsPage::kPlugins ? 5 : page == SettingsPage::kStatistics ? 3 : 2; }
+inline int SettingsTabCount(SettingsPage page) { return page == SettingsPage::kCapsule ? 1 : page == SettingsPage::kHome ? 6 : page == SettingsPage::kPlugins ? 5 : page == SettingsPage::kStatistics || page == SettingsPage::kBuffer ? 3 : 2; }
 
 struct SettingsHomeLink {
   const wchar_t* title;
@@ -133,12 +133,14 @@ struct SettingsDraft {
   unsigned candidate_count = 9;
   bool vertical_candidates = false;
   bool close_after_send = false;
+  bool align_to_input_box = true, reset_on_app_switch = false;
   unsigned auto_send_seconds = 0;
   int translation_provider_index = 0;
   unsigned hotkey_modifiers = MOD_ALT | MOD_SHIFT;
   wchar_t hotkey = L'B';
   unsigned send_modifiers = MOD_ALT | MOD_SHIFT, send_key = VK_RETURN;
   std::array<unsigned, 2> plugin_keys{VK_UP, VK_DOWN}, plugin_modifiers{MOD_ALT | MOD_SHIFT, MOD_ALT | MOD_SHIFT};
+  std::array<unsigned, 3> global_keys{'S', 'V', '4'}, global_modifiers{MOD_ALT | MOD_SHIFT, MOD_ALT | MOD_SHIFT, MOD_ALT | MOD_SHIFT};
   std::wstring base_url;
   std::wstring model;
   int ai_connector_index = 0;
@@ -180,6 +182,7 @@ struct SettingsLayout {
   DipRect hotkey_edit{};
   DipRect send_modifiers{}, send_edit{}, hotkey_record{}, send_record{}, shortcut_reset{}, shortcut_feedback{};
   std::array<DipRect, 2> plugin_modifiers{}, plugin_edit{}, plugin_record{};
+  std::array<DipRect, 3> global_modifiers{}, global_edit{}, global_record{};
   DipRect base_edit{};
   DipRect connector_combo{}, codex_path_edit{}, codex_model_edit{};
   DipRect model_edit{};
@@ -310,7 +313,7 @@ struct SettingsLayout {
     layout.translation_combo = {x, y + 172, layout.body.right - 18, y + 202};
     layout.buffer_source_language = {x, y + 216, layout.body.right - 18, y + 246};
     layout.buffer_language = {x, y + 260, layout.body.right - 18, y + 290};
-  } else if (draft.page == SettingsPage::kBuffer) {
+  } else if (draft.page == SettingsPage::kBuffer && draft.subpage == 0) {
     layout.hotkey_modifiers = {layout.body.left, layout.body.top + 28.0f,
                               layout.body.left + 130.0f, layout.body.top + 54.0f};
     layout.hotkey_edit = {layout.body.left + 172.0f, layout.body.top + 28.0f,
@@ -334,6 +337,16 @@ struct SettingsLayout {
                              layout.body.left + 170, layout.body.top + 340};
     layout.shortcut_feedback = {layout.body.left, layout.body.top + 350,
                                 layout.body.right, layout.body.top + 422};
+  }
+  if (draft.page == SettingsPage::kBuffer && draft.subpage == 2) {
+    for (int i = 0; i < 3; ++i) {
+      const float y = layout.body.top + 26 + i * 64.f;
+      layout.global_modifiers[i] = {layout.body.left, y, layout.body.left + 190, y + 26};
+      layout.global_edit[i] = {layout.body.left + 200, y, layout.body.left + 280, y + 26};
+      layout.global_record[i] = {layout.body.left + 296, y, layout.body.left + 414, y + 26};
+    }
+    layout.shortcut_reset = {layout.body.left, layout.body.top + 326, layout.body.left + 190, layout.body.top + 354};
+    layout.shortcut_feedback = {layout.body.left, layout.body.top + 364, layout.body.right, layout.body.top + 432};
   }
   if (draft.page == SettingsPage::kAppearance && draft.subpage == 0 &&
       draft.theme_detail >= 0 && draft.theme_detail < 4) {

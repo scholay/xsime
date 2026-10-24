@@ -18,9 +18,10 @@ struct Settings {
   std::string active_connection;
   unsigned buffer_width = 760, send_hold_ms = 600;
   bool follow_system_theme = false;
+  bool align_to_input_box = true, reset_on_app_switch = false;
   bool gateway_enabled = true;
   unsigned candidate_width = 460, candidate_height = 34, candidate_label_size = 10;
-  bool chord_enabled = true;
+  bool chord_enabled = false;
   unsigned chord_interval_ms = 50;
   core::Json chord_profile; // Applied portable keymap snapshot, never a draft.
   bool imported_scheme = false;  // Runtime-only; never persisted to settings.json.
@@ -52,6 +53,9 @@ struct Settings {
   unsigned send_modifiers = MOD_ALT | MOD_SHIFT, send_key = VK_RETURN;
   unsigned previous_plugin_modifiers = MOD_ALT | MOD_SHIFT, previous_plugin_key = VK_UP;
   unsigned next_plugin_modifiers = MOD_ALT | MOD_SHIFT, next_plugin_key = VK_DOWN;
+  unsigned settings_modifiers = MOD_ALT | MOD_SHIFT, settings_key = 'S';
+  unsigned capsule_modifiers = MOD_ALT | MOD_SHIFT, capsule_key = 'V';
+  unsigned capture_modifiers = MOD_ALT | MOD_SHIFT, capture_key = '4';
 };
 void MigrateConnections(Settings* settings);
 bool SelectConnection(Settings* settings, const std::string& id);

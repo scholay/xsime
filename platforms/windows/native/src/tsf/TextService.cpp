@@ -107,8 +107,11 @@ bool AllowedContext(ITfContext* context,
 
 class ScopeRead final : public ITfEditSession {
  public:
-  explicit ScopeRead(ITfContext* context) : context_(context) {
+  explicit ScopeRead(ITfContext* context, ITfComposition* composition = nullptr,
+                     bool composition_start = false)
+      : context_(context), composition_(composition), composition_start_(composition_start) {
     context_->AddRef();
+    if (composition_) composition_->AddRef();
     module::AddObject();
   }
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** out) override {
@@ -127,22 +130,43 @@ class ScopeRead final : public ITfEditSession {
   }
   HRESULT STDMETHODCALLTYPE DoEditSession(TfEditCookie cookie) override {
     allowed = AllowedContext(context_, cookie);
-    TF_SELECTION selection{};
-    ULONG count = 0;
+    ITfRange* range = nullptr;
     ITfContextView* view = nullptr;
-    if (SUCCEEDED(context_->GetSelection(cookie, TF_DEFAULT_SELECTION, 1,
-                                         &selection, &count)) &&
-        selection.range) {
+    if (composition_start_ && composition_) {
+      if (FAILED(composition_->GetRange(&range))) {
+        if (range) range->Release();
+        range = nullptr;
+      }
+    } else {
+      TF_SELECTION selection{};
+      ULONG count = 0;
+      if (SUCCEEDED(context_->GetSelection(cookie, TF_DEFAULT_SELECTION, 1,
+                                           &selection, &count)) && count == 1)
+        range = selection.range;
+      else if (selection.range) selection.range->Release();
+    }
+    if (range && composition_start_) {
+      // Never collapse the live composition range. Its cloned start remains
+      // stable while typing/backspacing, but still follows document layout.
+      ITfRange* start = nullptr;
+      const auto cloned = range->Clone(&start);
+      range->Release();
+      range = nullptr;
+      if (SUCCEEDED(cloned) && start && SUCCEEDED(start->Collapse(cookie, TF_ANCHOR_START)))
+        range = start;
+      else if (start) start->Release();
+    }
+    if (range) {
       if (SUCCEEDED(context_->GetActiveView(&view)) && view) {
         BOOL clipped = FALSE;
         RECT text_caret{};
-        if (SUCCEEDED(view->GetTextExt(cookie, selection.range, &text_caret,
+        if (SUCCEEDED(view->GetTextExt(cookie, range, &text_caret,
                                        &clipped))) {
           caret = text_caret;
         }
         view->Release();
       }
-      selection.range->Release();
+      range->Release();
     }
     return S_OK;
   }
@@ -151,11 +175,14 @@ class ScopeRead final : public ITfEditSession {
 
  private:
   ~ScopeRead() {
+    if (composition_) composition_->Release();
     context_->Release();
     module::ReleaseObject();
   }
   std::atomic_ulong refs_{1};
   ITfContext* context_;
+  ITfComposition* composition_;
+  bool composition_start_;
 };
 
 class CommitEditSession final : public ITfEditSession {
@@ -652,6 +679,7 @@ TextService::TextService(std::unique_ptr<BrokerClient> broker_client) noexcept
     : broker_client_(std::move(broker_client)) {
   module::AddObject();
   candidate_window_.SetSelect([this](std::size_t index) { SelectCandidate(index); });
+  candidate_window_.SetPage([this](int delta) { PageCandidate(delta); });
 }
 
 void TextService::UpdateInputMode() noexcept {
@@ -712,6 +740,62 @@ void TextService::SelectCandidate(std::size_t index) noexcept {
     RequestEdit(context, client_id_, edit);
     edit->Release();
   } catch (...) {}
+}
+
+void TextService::PageCandidate(int delta) noexcept {
+  if (!active_context_ || !broker_client_ || !candidate_window_.IsCompact()) return;
+  auto* context = active_context_;
+  const auto valid = edit_valid_;
+  const auto revision = last_state_.revision;
+  const auto epoch = candidate_epoch_;
+  try {
+    auto* edit = new (std::nothrow) CandidateSelectionEdit(
+        context, static_cast<ITfTextInputProcessorEx*>(this),
+        [this, context, valid, revision, epoch, delta](TfEditCookie cookie) {
+          RefreshBrokerConnection();
+          if (!valid || !valid->load() || context != active_context_ ||
+              last_state_.revision != revision || candidate_epoch_ != epoch ||
+              !candidate_window_.IsCompact() || !IsFocusedContext() ||
+              !AllowedContext(context, cookie)) return TF_E_DISCONNECTED;
+          ++candidate_epoch_;
+          MoveCandidatePage(context, delta, cookie);
+          return S_OK;
+        });
+    if (!edit) return;
+    RequestEdit(context, client_id_, edit);
+    edit->Release();
+  } catch (...) {}
+}
+
+void TextService::MoveCandidatePage(ITfContext* context, int delta, TfEditCookie cookie) {
+  if (!candidate_window_.IsCompact() || candidate_navigation_.expanded()) return;
+  const auto select = [this](std::size_t index) {
+    return candidate_navigation_.SelectVisibleIndex(index,
+        [](int) -> std::optional<BrokerInputState> { return std::nullopt; });
+  };
+  if (const auto index = candidate_window_.CompactPageIndex(delta)) {
+    candidate_compact_paged_ = true;
+    select(*index);
+    UpdateCandidateWindow(context, last_state_, cookie);
+    return;
+  }
+  if (!candidate_window_.CanPage(delta)) return;
+  const auto before = CandidateNavigation::PageId(last_state_);
+  const auto column = candidate_navigation_.column();
+  const auto state = StepCandidatePage(delta);
+  if (!state) return; // A custom schema may have committed or changed composition.
+  candidate_navigation_.Reset(*state);
+  if (CandidateNavigation::PageId(*state) == before) select(column);
+  UpdateCandidateWindow(context, last_state_, cookie);
+  if (CandidateNavigation::PageId(*state) != before) {
+    candidate_compact_paged_ = true;
+    // Backward navigation enters the previous engine page at its last visible
+    // subpage, so repeated previous/next visits every candidate exactly once.
+    if (const auto index = candidate_window_.CompactEdgeIndex(delta)) {
+      select(*index);
+      UpdateCandidateWindow(context, last_state_, cookie);
+    }
+  }
 }
 
 std::optional<BrokerInputState> TextService::StepCandidatePage(int delta) noexcept {
@@ -780,9 +864,26 @@ bool TextService::HandleCandidateKey(BrokerKeyPhase phase, ITfContext* context,
   for (int modifier : {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN})
     if (GetKeyState(modifier) & 0x8000) return false;
   const bool arrow = key == VK_LEFT || key == VK_RIGHT || key == VK_UP || key == VK_DOWN;
-  const bool digit = candidate_navigation_.expanded() && key >= '1' && key <= '9';
+  const bool compact = candidate_window_.IsCompact() && !candidate_navigation_.expanded();
+  const auto symbol_page = [&] {
+    if ((!compact && !candidate_navigation_.expanded()) ||
+        (key != VK_OEM_MINUS && key != VK_OEM_PLUS)) return 0;
+    using Flag = core::InputStateFlags;
+    const auto flags = last_state_.candidate_page_keys;
+    const bool minus = key == VK_OEM_MINUS;
+    const auto paging = static_cast<std::uint32_t>(minus ? Flag::kMinusPagingOnly : Flag::kEqualPagingOnly);
+    if ((flags & paging) && !candidate_compact_paged_ && CandidateNavigation::PageId(last_state_) == 0 &&
+        !candidate_window_.CompactPageIndex(-1)) return 0;
+    if (flags & static_cast<std::uint32_t>(minus ? Flag::kMinusPageUp : Flag::kEqualPageUp)) return -1;
+    if (flags & static_cast<std::uint32_t>(minus ? Flag::kMinusPageDown : Flag::kEqualPageDown)) return 1;
+    return 0;
+  }();
+  const bool digit = (candidate_navigation_.expanded() ||
+      (compact && candidate_window_.UsesNumericSelectionKeys())) && key >= '1' && key <= '9';
   const bool collapse = candidate_navigation_.expanded() && key == VK_ESCAPE;
-  const bool page = candidate_navigation_.expanded() && (key == VK_PRIOR || key == VK_NEXT || key == VK_OEM_MINUS || key == VK_OEM_PLUS);
+  // Printable symbols are owned only when the effective schema explicitly
+  // binds them to paging. Unknown/custom actions stay in the engine.
+  const bool page = ((compact || candidate_navigation_.expanded()) && (key == VK_PRIOR || key == VK_NEXT)) || symbol_page != 0;
   if (!arrow && !digit && !collapse && !page && key != VK_SPACE) return false;
   if (phase == BrokerKeyPhase::kTestKeyDown) return true;
   candidate_owned_keys_.set(static_cast<std::size_t>(key));
@@ -790,10 +891,15 @@ bool TextService::HandleCandidateKey(BrokerKeyPhase phase, ITfContext* context,
   try {
     if (key == VK_LEFT || key == VK_RIGHT) {
       candidate_navigation_.MoveColumn(key == VK_LEFT ? -1 : 1);
+    } else if (compact && (page || key == VK_UP)) {
+      MoveCandidatePage(context, symbol_page ? symbol_page : key == VK_UP || key == VK_PRIOR ? -1 : 1);
     } else if (key == VK_UP || key == VK_DOWN || page) {
-      if (!candidate_navigation_.MoveRow(key == VK_UP || key == VK_PRIOR || key == VK_OEM_MINUS ? -1 : 1,
+      if (!candidate_navigation_.MoveRow(symbol_page ? symbol_page : key == VK_UP || key == VK_PRIOR ? -1 : 1,
           [this](int delta) { return StepCandidatePage(delta); }))
         candidate_navigation_.Reset(last_state_);
+      if (candidate_navigation_.expanded()) candidate_compact_paged_ = true;
+      if (compact && key == VK_DOWN && !candidate_navigation_.expanded())
+        MoveCandidatePage(context, 1);
     } else if (collapse) {
       if (!candidate_navigation_.CollapseToAnchor([this](int delta) { return StepCandidatePage(delta); }))
         candidate_navigation_.Reset(last_state_);
@@ -801,7 +907,8 @@ bool TextService::HandleCandidateKey(BrokerKeyPhase phase, ITfContext* context,
       auto selection = candidate_navigation_.Selected(
           digit ? std::optional<std::size_t>(key - '1') : std::nullopt);
       if (digit && candidate_window_.IsVisible()) {
-        const auto index = candidate_window_.MatrixDigitIndex(key - '1');
+        const auto index = compact ? candidate_window_.CompactDigitIndex(key - '1')
+                                   : candidate_window_.MatrixDigitIndex(key - '1');
         selection = index ? candidate_navigation_.AtVisibleIndex(*index) : std::nullopt;
       }
       if (selection && FAILED(CommitCandidate(context, *selection)))
@@ -1187,7 +1294,15 @@ HRESULT TextService::ApplyDocumentState(
     return E_INVALIDARG;
   }
   SetCapture(state.buffer_capture);
+  if ((!state.composing && !state.pending_chord) || !state.commit_text.empty())
+    candidate_anchor_ = {};
+  // Capture the insertion point before the first preedit write. It also
+  // covers hosts that defer the edit or temporarily refuse range geometry.
+  if (!capture_active_ && !composition_ && (state.composing || state.pending_chord) &&
+      state.commit_text.empty() && candidate_anchor_.bottom <= candidate_anchor_.top)
+    candidate_anchor_ = QueryCaretRect(context, cookie, true);
   candidate_navigation_.Reset(state);
+  candidate_compact_paged_ = false;
   ++candidate_epoch_;
   if (state.buffer_capture) {
     last_state_ = state;
@@ -1413,14 +1528,17 @@ void TextService::UpdateCandidateWindow(
     snapshot.highlighted = state.highlighted_candidate;
     snapshot.page_start = state.page_start;
     snapshot.page_size = state.page_size;
+    snapshot.has_previous_page = CandidateNavigation::PageId(state) > 0;
+    snapshot.has_next_page = !state.last_page;
     snapshot.composition = state.composition;
-    const RECT queried = capture_active_ ? buffer_caret_ : QueryCaretRect(context, cookie);
+    const RECT queried = capture_active_ ? buffer_caret_
+        : composition_ || candidate_anchor_.bottom <= candidate_anchor_.top
+            ? QueryCaretRect(context, cookie, true) : candidate_anchor_;
     // A host mid-composition can refuse every caret source, which yields an
     // all-zero rectangle. That is unknown geometry, not a caret at the screen
     // origin: reusing the previous placement keeps the popup next to the input
     // field, and suppressing it beats showing it at the work-area corner.
-    const RECT previous = capture_active_ ? RECT{} : candidate_ui_
-        ? candidate_ui_->Snapshot().caret_rect : candidate_window_.snapshot().caret_rect;
+    const RECT previous = capture_active_ ? RECT{} : candidate_anchor_;
     ScreenRect resolved{};
     const bool has_caret = ResolveCandidateCaret({queried.left, queried.top, queried.right,
                                 queried.bottom},
@@ -1429,6 +1547,7 @@ void TextService::UpdateCandidateWindow(
                                &resolved);
     if (has_caret) snapshot.caret_rect = {resolved.left, resolved.top, resolved.right,
                                          resolved.bottom};
+    if (!capture_active_ && has_caret) candidate_anchor_ = snapshot.caret_rect;
     auto append = [&](const BrokerInputState& page) {
       for (std::size_t index = 0; index < page.candidates.size(); ++index) {
         const auto& candidate = page.candidates[index];
@@ -1467,12 +1586,14 @@ void TextService::UpdateCandidateWindow(
   }
 }
 
-RECT TextService::QueryCaretRect(ITfContext* context, TfEditCookie cookie) noexcept {
+RECT TextService::QueryCaretRect(ITfContext* context, TfEditCookie cookie,
+                                bool composition_start) noexcept {
   RECT caret{};
   if (context == nullptr) {
     return caret;
   }
-  auto* read = new (std::nothrow) ScopeRead(context);
+  auto* read = new (std::nothrow) ScopeRead(context,
+      composition_start ? composition_ : nullptr, composition_start);
   if (read) {
     HRESULT edit = E_FAIL;
     const auto hr = cookie == TF_INVALID_EDIT_COOKIE
@@ -1587,6 +1708,7 @@ bool TextService::BindContext(ITfContext* context) noexcept {
 }
 
 void TextService::RevokeContext() noexcept {
+  candidate_anchor_ = {};
   CancelBufferFocusRequest();
   if (edit_valid_) edit_valid_->store(false);
   capture_active_ = false;
@@ -1743,6 +1865,7 @@ LRESULT CALLBACK TextService::NotificationProcedure(HWND window, UINT message,
 }
 void TextService::SetCapture(bool enabled) {
   if (enabled == capture_active_) return;
+  candidate_anchor_ = {};
   capture_active_ = enabled;
   buffer_caret_ = {};
   if (edit_valid_) edit_valid_->store(false);

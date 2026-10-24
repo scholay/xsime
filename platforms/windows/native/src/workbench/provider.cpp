@@ -136,12 +136,14 @@ bool ValidTheme(const std::string& theme) {
          theme == "rasta";
 }
 bool ValidBufferShortcuts(const Settings& value) {
-  const unsigned keys[] = {value.hotkey_key, value.send_key, value.previous_plugin_key, value.next_plugin_key};
+  const unsigned keys[] = {value.hotkey_key, value.send_key, value.previous_plugin_key, value.next_plugin_key,
+      value.settings_key, value.capsule_key, value.capture_key};
   const unsigned modifiers[] = {value.hotkey_modifiers, value.send_modifiers,
-      value.previous_plugin_modifiers, value.next_plugin_modifiers};
-  for (int i = 0; i < 4; ++i) {
+      value.previous_plugin_modifiers, value.next_plugin_modifiers,
+      value.settings_modifiers, value.capsule_modifiers, value.capture_modifiers};
+  for (int i = 0; i < 7; ++i) {
     if (!core::ValidShortcut(keys[i], modifiers[i], i == 1)) return false;
-    if (i >= 2 && modifiers[i] == (MOD_ALT | MOD_SHIFT) && (keys[i] == 'S' || keys[i] == 'V' || keys[i] == 'M' || keys[i] == '4')) return false;
+    if (modifiers[i] == (MOD_ALT | MOD_SHIFT) && keys[i] == 'M') return false;
     for (int j = 0; j < i; ++j)
       if (keys[i] == keys[j] && modifiers[i] == modifiers[j]) return false;
   }
@@ -212,9 +214,13 @@ bool LoadSettings(Settings* value, std::string* error) {
     candidate.buffer_width = j.value("buffer_width", 760U);
     candidate.send_hold_ms = j.value("send_hold_ms", 600U);
     candidate.follow_system_theme = j.value("follow_system_theme", false);
+    candidate.align_to_input_box = j.value("align_to_input_box", true);
+    candidate.reset_on_app_switch = j.value("reset_on_app_switch", false);
     candidate.candidate_width = j.value("candidate_width", 460U);
     candidate.candidate_height = j.value("candidate_height", 34U);
     candidate.candidate_label_size = j.value("candidate_label_size", 10U);
+    // Missing fields in an existing profile retain the old effective default.
+    // Only a new profile starts with the extension disabled.
     candidate.chord_enabled = j.value("chord_enabled", true);
     candidate.chord_interval_ms = j.value("chord_interval_ms", 50U);
     candidate.chord_profile = j.value("chord_profile", Json());
@@ -254,6 +260,12 @@ bool LoadSettings(Settings* value, std::string* error) {
     candidate.previous_plugin_modifiers = j.value("previous_plugin_modifiers", unsigned(MOD_ALT | MOD_SHIFT));
     candidate.next_plugin_key = j.value("next_plugin_key", unsigned(VK_DOWN));
     candidate.next_plugin_modifiers = j.value("next_plugin_modifiers", unsigned(MOD_ALT | MOD_SHIFT));
+    candidate.settings_key = j.value("settings_key", unsigned('S'));
+    candidate.settings_modifiers = j.value("settings_modifiers", unsigned(MOD_ALT | MOD_SHIFT));
+    candidate.capsule_key = j.value("capsule_key", unsigned('V'));
+    candidate.capsule_modifiers = j.value("capsule_modifiers", unsigned(MOD_ALT | MOD_SHIFT));
+    candidate.capture_key = j.value("capture_key", unsigned('4'));
+    candidate.capture_modifiers = j.value("capture_modifiers", unsigned(MOD_ALT | MOD_SHIFT));
     // Existing explicit bindings win when adding a missing plugin shortcut.
     for (int i = 0; i < 2; ++i) {
       auto& key = i ? candidate.next_plugin_key : candidate.previous_plugin_key;
@@ -268,6 +280,46 @@ bool LoadSettings(Settings* value, std::string* error) {
       };
       if (occupied(mods)) for (const auto& choice : kBufferHotkeyChoices)
         if (!occupied(choice.modifiers)) { mods = choice.modifiers; break; }
+    }
+    // Newly editable defaults must never displace an existing custom binding.
+    unsigned* global_keys[] = {&candidate.settings_key, &candidate.capsule_key, &candidate.capture_key};
+    unsigned* global_modifiers[] = {&candidate.settings_modifiers, &candidate.capsule_modifiers, &candidate.capture_modifiers};
+    const char* global_names[] = {"settings", "capsule", "capture"};
+    for (int i = 0; i < 3; ++i) {
+      if (j.contains(std::string(global_names[i]) + "_key") || j.contains(std::string(global_names[i]) + "_modifiers")) continue;
+      const auto occupied = [&](unsigned mods) {
+        const unsigned keys[] = {candidate.hotkey_key, candidate.send_key, candidate.previous_plugin_key, candidate.next_plugin_key};
+        const unsigned modifiers[] = {candidate.hotkey_modifiers, candidate.send_modifiers, candidate.previous_plugin_modifiers, candidate.next_plugin_modifiers};
+        for (int k = 0; k < 4; ++k) if (*global_keys[i] == keys[k] && mods == modifiers[k]) return true;
+        for (int k = 0; k < 3; ++k) if (k != i && *global_keys[i] == *global_keys[k] && mods == *global_modifiers[k]) return true;
+        return false;
+      };
+      if (occupied(*global_modifiers[i])) for (const auto& choice : kBufferHotkeyChoices)
+        if (!occupied(choice.modifiers)) { *global_modifiers[i] = choice.modifiers; break; }
+    }
+    // Old versions incorrectly accepted Mailbox's fixed chord for Buffer or
+    // send. Repair that invalid persisted overlap using the action's defined
+    // default key, without displacing any other explicit binding. This is a
+    // legacy-file migration, never a fallback for a runtime OS conflict.
+    unsigned* keys[] = {&candidate.hotkey_key, &candidate.send_key, &candidate.previous_plugin_key,
+        &candidate.next_plugin_key, &candidate.settings_key, &candidate.capsule_key, &candidate.capture_key};
+    unsigned* modifiers[] = {&candidate.hotkey_modifiers, &candidate.send_modifiers, &candidate.previous_plugin_modifiers,
+        &candidate.next_plugin_modifiers, &candidate.settings_modifiers, &candidate.capsule_modifiers, &candidate.capture_modifiers};
+    for (int i = 0; i < 2; ++i) {
+      if (*keys[i] != 'M' || *modifiers[i] != (MOD_ALT | MOD_SHIFT)) continue;
+      *keys[i] = i == 0 ? unsigned('B') : unsigned(VK_RETURN);
+      bool restored = false;
+      for (const unsigned choice : {MOD_ALT | MOD_SHIFT, MOD_CONTROL | MOD_SHIFT, MOD_CONTROL | MOD_ALT}) {
+        bool occupied = false;
+        for (int other = 0; other < 7; ++other)
+          if (other != i && *keys[other] == *keys[i] && *modifiers[other] == choice) occupied = true;
+        if (!occupied) { *modifiers[i] = choice; restored = true; break; }
+      }
+      if (!restored) {
+        Fail(error, i == 0 ? "旧 Buffer 快捷键与 Mailbox 冲突，B 键默认组合均已占用；原设置文件已保留。"
+                            : "旧发送快捷键与 Mailbox 冲突，Enter 默认组合均已占用；原设置文件已保留。");
+        return false;
+      }
     }
     if (!ValidSettings(candidate))
       throw std::runtime_error("Invalid settings values");
@@ -315,6 +367,11 @@ bool SaveSettings(const Settings& value, std::string* error) {
     j["gateway_enabled"] = value.gateway_enabled;
     j["buffer_width"] = value.buffer_width; j["send_hold_ms"] = value.send_hold_ms;
     j["follow_system_theme"] = value.follow_system_theme;
+    j["align_to_input_box"] = value.align_to_input_box;
+    j["reset_on_app_switch"] = value.reset_on_app_switch;
+    j["settings_key"] = value.settings_key; j["settings_modifiers"] = value.settings_modifiers;
+    j["capsule_key"] = value.capsule_key; j["capsule_modifiers"] = value.capsule_modifiers;
+    j["capture_key"] = value.capture_key; j["capture_modifiers"] = value.capture_modifiers;
     j["candidate_width"] = value.candidate_width; j["candidate_height"] = value.candidate_height;
     j["candidate_label_size"] = value.candidate_label_size;
     j["chord_enabled"] = value.chord_enabled; j["chord_interval_ms"] = value.chord_interval_ms;

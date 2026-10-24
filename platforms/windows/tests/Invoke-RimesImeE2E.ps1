@@ -99,6 +99,7 @@ $artifactRoot = Resolve-RimesExistingPath -Path $ArtifactDirectory -PathType Con
 $brokerPath = Resolve-RimesExistingPath -Path (Join-Path $artifactRoot 'RimesE2EBroker.exe') -PathType Leaf
 $productionBrokerPath = Resolve-RimesExistingPath -Path (Join-Path $artifactRoot 'RimesBroker.exe') -PathType Leaf
 $e2ePath = Resolve-RimesExistingPath -Path (Join-Path $artifactRoot 'RimesTsfE2E.exe') -PathType Leaf
+$lexiconPath = Resolve-RimesExistingPath -Path (Join-Path $artifactRoot 'RimesUserLexiconTests.exe') -PathType Leaf
 $schemaRoot = Resolve-RimesExistingPath -Path $schemaRoot -PathType Container
 
 # Check both identities before starting either process. No test may attach to
@@ -120,6 +121,53 @@ New-Item -ItemType Directory -Path $workRoot -Force | Out-Null
 
 $runtime = & $fetchScript -Architecture $Architecture -OutputDirectory (Join-Path $workRoot 'librime')
 $rimeDll = Resolve-RimesExistingPath -Path $runtime.DllPath -PathType Leaf
+
+# The learning fixture creates its own schema, dictionary and user directory;
+# it neither starts a Broker nor opens the installed input method's data.
+# Use the same checksum-verified architecture-specific engine as typing below.
+$lexiconRoot = Join-Path $workRoot "user-lexicon-$Architecture"
+New-Item -ItemType Directory -Path $lexiconRoot -Force | Out-Null
+$lexiconStdout = Join-Path $lexiconRoot 'stdout.log'
+$lexiconStderr = Join-Path $lexiconRoot 'stderr.log'
+$lexiconExit = -1
+$lexiconTimedOut = $false
+$lexiconProcess = $null
+try {
+    $lexiconArgs = @('--engine', ('"{0}"' -f $rimeDll), ('"{0}"' -f $lexiconRoot))
+    $lexiconProcess = Start-Process -FilePath $lexiconPath -ArgumentList $lexiconArgs -PassThru -WindowStyle Hidden `
+        -RedirectStandardOutput $lexiconStdout -RedirectStandardError $lexiconStderr
+    if ($null -eq $lexiconProcess) { throw 'Failed to start the isolated learning-dictionary fixture.' }
+    $lexiconProcess.Handle | Out-Null
+    if (-not $lexiconProcess.WaitForExit(180000)) {
+        $lexiconTimedOut = $true
+        # Only this newly launched fixture is terminated; its writes are all
+        # confined to the private test tree retained with the diagnostics.
+        $lexiconProcess.Kill()
+        $lexiconProcess.WaitForExit(5000) | Out-Null
+        throw 'Isolated real-engine learning-dictionary fixture timed out.'
+    }
+    $lexiconExit = [int]$lexiconProcess.ExitCode
+    if ($lexiconExit -ne 0) { throw "Real-engine learning-dictionary fixture failed: exit=$lexiconExit" }
+    Write-Host 'PASS: real Rime learning import/export, snapshot restore, live-session preservation and restart'
+} finally {
+    Write-RimesJson -Path (Join-Path $lexiconRoot 'result.json') -Object ([ordered]@{
+        Passed = ($lexiconExit -eq 0)
+        Architecture = $Architecture
+        ExitCode = $lexiconExit
+        TimedOut = $lexiconTimedOut
+        Executable = $lexiconPath
+        ExecutableSha256 = (Get-FileHash -LiteralPath $lexiconPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        RimeDll = $rimeDll
+        RimeDllSha256 = (Get-FileHash -LiteralPath $rimeDll -Algorithm SHA256).Hash.ToLowerInvariant()
+        LibrimeTag = [string]$runtime.Tag
+        LibrimeArchiveSha256 = [string]$runtime.Sha256
+        PrivateOutputParent = $lexiconRoot
+    })
+    foreach ($log in @($lexiconStdout, $lexiconStderr)) {
+        if (Test-Path -LiteralPath $log -PathType Leaf) { Get-Content -LiteralPath $log -Tail 40 | ForEach-Object { Write-Host $_ } }
+    }
+    if ($null -ne $lexiconProcess) { $lexiconProcess.Dispose() }
+}
 
 # Exercise the actual archive/store/compiler path with real pinned Rime. This
 # maintenance mode has no IPC, registration or installed-profile side effects.
@@ -179,6 +227,7 @@ New-Item -ItemType Directory -Path (Join-Path $testLocalAppData 'RIMES') -Force 
 Write-RimesJson -Path (Join-Path $testLocalAppData 'RIMES/settings.json') -Object ([ordered]@{
     schema = $(if ($Chord) { 'my_combo' } else { 'rime_ice' })
     ascii = $false
+    chord_enabled = [bool]$Chord
     chord_interval_ms = 300
 })
 
@@ -259,6 +308,8 @@ Write-RimesJson -Path (Join-Path $workRoot 'e2e-result.json') -Object ([ordered]
     LibrimeSource = [string]$runtime.Source
     LibrimeTag = [string]$runtime.Tag
     LibrimeSha256 = [string]$runtime.Sha256
+    UserLexiconPassed = ($lexiconExit -eq 0)
+    UserLexiconResult = (Join-Path $lexiconRoot 'result.json')
     Endpoint = $testEndpoint
     IsolatedFromDailyBroker = $true
     GracefulMaintenanceShutdown = $gracefulShutdown

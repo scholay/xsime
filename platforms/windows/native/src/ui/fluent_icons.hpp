@@ -55,6 +55,8 @@ enum class FluentIcon : wchar_t {
   kSwap = 0xF18D,
   kSpinner = 0xF709,
   kTimerOff = 0xED8E,
+  kArrowDown = 61776, // ic_fluent_arrow_download_20_regular (bundled font map)
+  kPin = 62977, // ic_fluent_pin_20_regular
 };
 inline bool EnsureFluentIcons() {
   struct Resource {

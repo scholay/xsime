@@ -16,6 +16,7 @@ struct BrokerOptions {
   bool install_autostart = false;
   bool remove_autostart = false;
   bool used_default_paths = false;
+  unsigned long restart_parent = 0;
   engine::RimeEngineOptions engine;
 };
 

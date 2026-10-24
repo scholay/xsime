@@ -1,0 +1,41 @@
+﻿{
+    "verified":  true,
+    "version":  "1.1.8-win-composition-anchor.20261023",
+    "commit":  "b5fcaff1914bbd5e61d828cbfb162463270917a7",
+    "directory":  "C:\\Program Files\\RIMES\\versions\\1.1.8-win-composition-anchor.20261023-b5fcaff1914b-e9e6522ad3cf",
+    "installedBinariesMatched":  7,
+    "sourceSnapshot":  "da7cd8b4f31b79507f67a64e1be72619cbb42522c638a660166d1214002a5452",
+    "sourceFilesMatched":  13,
+    "brokerPid":  209192,
+    "settingsUnchanged":  true,
+    "retainedFiles":  {
+                          "peripherals-v1":  99,
+                          "official-plugins-v1":  2
+                      },
+    "backupDirectory":  "C:\\Users\\young\\AppData\\Local\\RIMES\\backups\\before-composition-anchor-20261023-174638",
+    "requiresSignOut":  true,
+    "tests":  {
+                  "ctestX64":  38,
+                  "ctestX86":  38,
+                  "utf8ProcessManifests":  8,
+                  "unicodeProductSchemesPerArchitecture":  7,
+                  "tsfE2EArchitectures":  [
+                                              "x64",
+                                              "x86"
+                                          ],
+                  "setupPayloadVerified":  true
+              },
+    "verifiedBehaviors":  [
+                              "Candidate origin is the cloned composition start, not the selection caret.",
+                              "Typing/backspace, internal caret movement, candidate page changes retain the origin.",
+                              "Document layout moves the origin; missing geometry retains only this composition anchor.",
+                              "Partial/full commit, cancellation, focus and Buffer capture changes cannot reuse stale context anchors.",
+                              "Buffer preedit origin and editing caret are measured independently.",
+                              "Both real engine architectures pass in Chinese user/data/log paths, with UTF-8 enabled only in standalone engine processes."
+                          ],
+    "observations":  [
+                         "The two prior intermittent CTest failures did not recur in this full run; no time thresholds were relaxed.",
+                         "Native TSF/Broker/librime tests use isolated fixtures; this is not a manual acceptance pass in every desktop application."
+                     ],
+    "verifiedAt":  "2026-10-23T17:47:25.4109224+08:00"
+}

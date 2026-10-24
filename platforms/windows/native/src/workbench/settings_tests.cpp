@@ -1,4 +1,5 @@
 #include "provider.hpp"
+#include "buffer_hotkey.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -26,6 +27,11 @@ bool SameSettings(const Settings& a, const Settings& b) {
          a.send_key == b.send_key && a.send_modifiers == b.send_modifiers &&
          a.previous_plugin_key == b.previous_plugin_key && a.previous_plugin_modifiers == b.previous_plugin_modifiers &&
          a.next_plugin_key == b.next_plugin_key && a.next_plugin_modifiers == b.next_plugin_modifiers &&
+         a.settings_key == b.settings_key && a.settings_modifiers == b.settings_modifiers &&
+         a.capsule_key == b.capsule_key && a.capsule_modifiers == b.capsule_modifiers &&
+         a.capture_key == b.capture_key && a.capture_modifiers == b.capture_modifiers &&
+         a.align_to_input_box == b.align_to_input_box && a.reset_on_app_switch == b.reset_on_app_switch &&
+         a.chord_enabled == b.chord_enabled &&
          a.auto_send_seconds == b.auto_send_seconds && a.close_after_send == b.close_after_send &&
          a.translation_provider == b.translation_provider;
 }
@@ -64,6 +70,20 @@ struct IsolatedSettings {
 
 int main() {
   try {
+    // No native registrations: a conflicting startup chord is represented by
+    // an unregistered owner, and an unrelated save must not try to claim it.
+    BufferHotkeyRegistration unavailable(nullptr);
+    std::array<GlobalHotkeyBinding, 1> unchanged{{{&unavailable, MOD_ALT | MOD_SHIFT, 'V', false}}};
+    int unrelated_saves = 0;
+    Check(UpdateGlobalHotkeys(unchanged, [&] { ++unrelated_saves; return true; }) == HotkeyUpdate::kSaved &&
+        unrelated_saves == 1 && !unavailable.Registered(), "unavailable unchanged shortcut does not block unrelated settings save");
+    Check(UpdateGlobalHotkeys(unchanged, [] { return false; }) == HotkeyUpdate::kSaveFailed && !unavailable.Registered(),
+        "unrelated settings save still reports its own persistence failure");
+    std::array<GlobalHotkeyBinding, 2> changed{{unchanged[0], {&unavailable, 0, 'B', true}}};
+    std::size_t failed_index = 0;
+    Check(UpdateGlobalHotkeys(changed, [&] { ++unrelated_saves; return true; }, &failed_index) == HotkeyUpdate::kInvalid &&
+        failed_index == 1 && unrelated_saves == 1 && !unavailable.Registered(),
+        "explicit changed shortcut is still validated and prevents saving on failure");
     IsolatedSettings test;
     Settings settings;
     Check(LoadSettings(&settings, nullptr) && settings.theme == "night" && settings.ai_connector == "codex-cli" &&
@@ -71,6 +91,9 @@ int main() {
               settings.hotkey_key == 'B' && settings.send_key == VK_RETURN &&
               settings.send_modifiers == (MOD_ALT | MOD_SHIFT),
           "absent file uses Alt+Shift+B and Alt+Shift+Enter");
+    Check(!settings.chord_enabled && settings.align_to_input_box && !settings.reset_on_app_switch,
+          "fresh profile disables chord and preserves Buffer across apps with alignment enabled");
+    Check(settings.settings_key == 'S' && settings.capsule_key == 'V' && settings.capture_key == '4', "fresh global shortcut defaults");
     for (const auto* theme : {"night", "day", "quiet", "rasta"}) {
       settings.theme = theme;
       settings.connections.front().model = "fixture-model";
@@ -120,11 +143,71 @@ int main() {
       std::ofstream(test.path(), std::ios::trunc) << json;
       Settings legacy;
       Check(LoadSettings(&legacy, nullptr) && legacy.theme == "night" && legacy.candidate_count == 9 && !legacy.vertical_candidates &&
+                legacy.chord_enabled &&
                 legacy.hotkey_modifiers == (MOD_ALT | MOD_SHIFT) &&
                 legacy.hotkey_key == 'B' && legacy.send_hold_ms == 600,
             "legacy and unknown themes fall back safely");
     }
     Check(Settings{}.send_hold_ms == 600, "new Buffer hold default matches macOS 0.6 seconds");
+    for (const bool enabled : {false, true}) {
+      std::ofstream(test.path(), std::ios::trunc) << "{\"chord_enabled\":" << (enabled ? "true" : "false") << "}";
+      Settings saved;
+      Check(LoadSettings(&saved, nullptr) && saved.chord_enabled == enabled && SaveSettings(saved, nullptr), "explicit chord choice is retained");
+    }
+    std::ofstream(test.path(), std::ios::trunc) << "{\"hotkey_key\":83,\"hotkey_modifiers\":5}";
+    Settings legacy_settings_key;
+    Check(LoadSettings(&legacy_settings_key, nullptr) && legacy_settings_key.hotkey_key == 'S' && legacy_settings_key.hotkey_modifiers == 5 &&
+        legacy_settings_key.settings_key == 'S' && legacy_settings_key.settings_modifiers != 5,
+        "new editable settings default yields to a legacy Buffer binding");
+    auto global_roundtrip = legacy_settings_key;
+    global_roundtrip.settings_key = VK_F9; global_roundtrip.settings_modifiers = MOD_CONTROL | MOD_SHIFT;
+    global_roundtrip.capsule_key = VK_F10; global_roundtrip.capture_key = VK_F11;
+    global_roundtrip.align_to_input_box = false; global_roundtrip.reset_on_app_switch = true;
+    Check(SaveSettings(global_roundtrip, nullptr), "save global shortcuts and window preferences");
+    Settings global_loaded;
+    Check(LoadSettings(&global_loaded, nullptr) && SameSettings(global_roundtrip, global_loaded), "global shortcuts and window preferences survive restart");
+    global_roundtrip.capture_key = global_roundtrip.capsule_key;
+    Check(!SaveSettings(global_roundtrip, nullptr), "global shortcuts cannot collide");
+    global_roundtrip = global_loaded; global_roundtrip.settings_key = 'M'; global_roundtrip.settings_modifiers = 5;
+    Check(!SaveSettings(global_roundtrip, nullptr), "Mailbox chord stays reserved");
+    for (int action = 0; action < 7; ++action) {
+      auto reserved = global_loaded;
+      unsigned* keys[] = {&reserved.hotkey_key, &reserved.send_key, &reserved.previous_plugin_key, &reserved.next_plugin_key,
+          &reserved.settings_key, &reserved.capsule_key, &reserved.capture_key};
+      unsigned* modifiers[] = {&reserved.hotkey_modifiers, &reserved.send_modifiers, &reserved.previous_plugin_modifiers,
+          &reserved.next_plugin_modifiers, &reserved.settings_modifiers, &reserved.capsule_modifiers, &reserved.capture_modifiers};
+      *keys[action] = 'M'; *modifiers[action] = MOD_ALT | MOD_SHIFT;
+      Check(!SaveSettings(reserved, nullptr), "every configurable action rejects the reserved Mailbox chord");
+    }
+    for (const bool send : {false, true}) {
+      const auto json = std::string("{\"theme\":\"quiet\",\"font_size\":21,\"") +
+          (send ? "send" : "hotkey") + "_key\":77,\"" + (send ? "send" : "hotkey") + "_modifiers\":5}";
+      std::ofstream(test.path(), std::ios::trunc) << json;
+      Settings repaired;
+      Check(LoadSettings(&repaired, nullptr) && repaired.theme == "quiet" && repaired.font_size == 21 &&
+          repaired.hotkey_key == 'B' && repaired.hotkey_modifiers == 5 && repaired.send_key == VK_RETURN && repaired.send_modifiers == 5,
+          "legacy Mailbox overlap restores only the invalid action to its defined default");
+      std::ifstream original(test.path());
+      Check(std::string(std::istreambuf_iterator<char>(original), std::istreambuf_iterator<char>()) == json, "legacy overlap load never rewrites the source file");
+      original.close();
+      Check(SaveSettings(repaired, nullptr), "explicit next save persists the repaired legacy default");
+    }
+    std::ofstream(test.path(), std::ios::trunc) << "{\"hotkey_key\":77,\"hotkey_modifiers\":5,\"settings_key\":66,\"settings_modifiers\":5}";
+    Settings overlapping_default;
+    Check(LoadSettings(&overlapping_default, nullptr) && overlapping_default.hotkey_key == 'B' && overlapping_default.hotkey_modifiers == 6 &&
+        overlapping_default.settings_key == 'B' && overlapping_default.settings_modifiers == 5,
+        "legacy repair yields to an explicit custom binding occupying its default");
+    const std::string exhausted = "{\"hotkey_key\":77,\"hotkey_modifiers\":5,\"settings_key\":66,\"settings_modifiers\":5,\"capsule_key\":66,\"capsule_modifiers\":6,\"capture_key\":66,\"capture_modifiers\":3}";
+    std::ofstream(test.path(), std::ios::trunc) << exhausted;
+    auto retained_overlap = global_loaded;
+    std::string overlap_error;
+    Check(!LoadSettings(&retained_overlap, &overlap_error) && SameSettings(retained_overlap, global_loaded) &&
+        overlap_error.find("Buffer") != std::string::npos && overlap_error.find("Mailbox") != std::string::npos,
+        "exhausted legacy defaults report the affected action and preserve the trusted configuration");
+    {
+      std::ifstream original(test.path());
+      Check(std::string(std::istreambuf_iterator<char>(original), std::istreambuf_iterator<char>()) == exhausted, "exhausted legacy defaults preserve the original file verbatim");
+    }
     for (unsigned hold : {600U, 1200U, 2300U}) {
       std::ofstream(test.path(), std::ios::trunc) << "{\"send_hold_ms\":" << hold << "}";
       Settings saved;

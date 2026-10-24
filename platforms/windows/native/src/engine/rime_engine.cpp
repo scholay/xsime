@@ -10,14 +10,17 @@
 #include <atomic>
 #include <cstring>
 #include <cwctype>
+#include <functional>
 #include <limits>
 #include <mutex>
+#include <set>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "rime_abi.hpp"
+#include "candidate_paging.hpp"
 
 namespace rimes::windows::engine {
 namespace {
@@ -236,7 +239,8 @@ bool HasRequiredApi(const abi::ApiPrefix* api) noexcept {
   }
   const std::size_t available =
       sizeof(api->data_size) + static_cast<std::size_t>(api->data_size);
-  if (available < sizeof(abi::ApiPrefix) || available > kMaximumApiBytes) {
+  constexpr auto required = offsetof(abi::ApiPrefix, config_set_int) + sizeof(abi::ApiPrefix::config_set_int);
+  if (available < required || available > kMaximumApiBytes) {
     return false;
   }
   return api->setup != nullptr && api->initialize != nullptr &&
@@ -422,6 +426,7 @@ class RimeEngine::Impl final {
         return false;
       }
       input_habits_.erase(session);
+      candidate_page_keys_.erase(session);
       if (api_->destroy_session(session) == 0) {
         SetError(error, "librime rejected session destruction");
         return false;
@@ -614,6 +619,7 @@ class RimeEngine::Impl final {
       // Keep the config alive until ApplySchema acquires its shared data.
       // The deployed schema component does not auto-save: custom YAML remains untouched.
       api_->config_close(&config);
+      candidate_page_keys_.erase(session);
       api_->set_option(session, "ascii_mode", ascii ? 1 : 0);
       api_->set_option(session, "traditionalization", traditional ? 1 : 0);
       api_->set_option(session, "ascii_punct", punctuation ? 1 : 0);
@@ -632,7 +638,211 @@ class RimeEngine::Impl final {
     } catch (...) { return {}; }
   }
 
+  bool UserDictionaries(std::vector<std::string>* names, std::string* error) noexcept {
+    try {
+      std::lock_guard lock(mutex_);
+      if (!names) return false;
+      names->clear();
+      auto* levers = LeversLocked(error);
+      if (!levers) return false;
+      abi::UserDictIterator iterator{};
+      if (!levers->user_dict_iterator_init(&iterator)) {
+        SetError(error, "Rime 无法枚举学习词库。"); return false;
+      }
+      struct End {
+        abi::LeversApi* api; abi::UserDictIterator* iterator;
+        ~End() { api->user_dict_iterator_destroy(iterator); }
+      } end{levers, &iterator};
+      for (unsigned i = 0; i < 4096; ++i) {
+        const auto* name = levers->next_user_dict(&iterator);
+        if (!name) return true;
+        std::string copy;
+        if (!CopyBoundedCString(name, 1024, &copy, error, "user dictionary")) return false;
+        names->push_back(std::move(copy));
+      }
+      SetError(error, "Rime 学习词库枚举超过安全上限。"); return false;
+    } catch (...) { SetError(error, "Rime 学习词库枚举失败。"); return false; }
+  }
+  int TransferUserDictionary(const std::string& name, const std::filesystem::path& path,
+                             bool importing, std::string* error) noexcept {
+    try {
+      std::lock_guard lock(mutex_);
+      if (error) error->clear();
+      auto* levers = LeversLocked(error);
+      if (!levers) return -1;
+      if (name != "rime_ice" && name != "wubi86" && name != "english") {
+        SetError(error, "未知学习词库。"); return -1;
+      }
+      std::string filename;
+      if (!LexiconPath(path, &filename, error)) return -1;
+      const auto result = WithUserDictionariesClosed([&] {
+        return importing ? levers->import_user_dict(name.c_str(), filename.c_str())
+                         : levers->export_user_dict(name.c_str(), filename.c_str());
+      }, error);
+      if (result < 0 && (!error || error->empty()))
+        SetError(error, importing ? "Rime 未能导入学习词库。" : "Rime 未能导出学习词库。");
+      return result;
+    } catch (...) { SetError(error, "Rime 学习词库传输失败。"); return -1; }
+  }
+  bool RestoreUserDictionary(const std::filesystem::path& path, std::string* error) noexcept {
+    try {
+      std::lock_guard lock(mutex_);
+      if (error) error->clear();
+      auto* levers = LeversLocked(error);
+      if (!levers) return false;
+      std::string filename;
+      if (!LexiconPath(path, &filename, error)) return false;
+      const bool ok = WithUserDictionariesClosed([&] {
+        return levers->restore_user_dict(filename.c_str()) ? 1 : -1;
+      }, error) >= 0;
+      if (!ok && (!error || error->empty())) SetError(error, "Rime 未能恢复学习词库快照。");
+      return ok;
+    } catch (...) { SetError(error, "Rime 学习词库快照恢复失败。"); return false; }
+  }
+
  private:
+  int WithUserDictionariesClosed(const std::function<int()>& operation, std::string* error) {
+    if (sessions_.empty()) return operation();
+    constexpr auto required = offsetof(abi::ApiPrefix, config_set_item) + sizeof(abi::ApiPrefix::config_set_item) - sizeof(int);
+    if (api_->data_size < static_cast<int>(required) ||
+        !api_->get_current_schema || !api_->select_schema || !api_->config_get_item || !api_->config_set_item ||
+        !api_->config_load_string || !api_->schema_open || !api_->config_close ||
+        !api_->get_option || !api_->set_option) {
+      SetError(error, "Rime 暂不支持安全切换学习词库。"); return -1;
+    }
+    struct SessionState {
+      SessionId id; std::string schema; std::map<std::string, bool> options;
+      abi::Config config{}, components{};
+      bool config_changed = false, switched = false;
+    };
+    struct Lease {
+      abi::ApiPrefix* api;
+      bool& healthy;
+      std::vector<SessionState> sessions;
+      abi::Config guard{};
+      bool Restore() noexcept {
+        bool ok = true;
+        // Restore every shared schema tree before recreating any translator.
+        // Multiple live sessions may share the same underlying ConfigData.
+        for (auto& session : sessions) if (session.config_changed) {
+          try {
+            if (api->config_set_item(&session.config, "engine", &session.components)) session.config_changed = false;
+            else ok = false;
+          } catch (...) { ok = false; }
+        }
+        if (!ok) return false;
+        for (auto& session : sessions) if (session.switched) {
+          try {
+            if (!api->select_schema(session.id, session.schema.c_str())) { ok = false; continue; }
+            for (const auto& [name, value] : session.options) api->set_option(session.id, name.c_str(), value ? 1 : 0);
+            session.switched = false;
+          } catch (...) { ok = false; }
+        }
+        return ok;
+      }
+      ~Lease() {
+        // Keep failed sessions pending for another recovery attempt. If the
+        // native API is irrecoverable, reject further keys rather than run a
+        // session with no translators and silently consume user input.
+        if (!Restore() && !Restore()) healthy = false;
+        for (auto& session : sessions) {
+          if (session.components.ptr) api->config_close(&session.components);
+          if (session.config.ptr) api->config_close(&session.config);
+        }
+        if (guard.ptr) api->config_close(&guard);
+      }
+    } lease{api_, healthy_};
+    lease.sessions.reserve(sessions_.size());
+    // Check every session before changing any schema. Never commit, cancel or
+    // replay composition as a side effect of a settings-file operation.
+    for (const auto id : sessions_) {
+      abi::Context context; abi::InitializeVersionedStruct(&context);
+      if (!api_->get_context(id, &context)) { SetError(error, "无法核验输入会话状态。"); return -1; }
+      const bool composing = context.composition.length > 0 || context.menu.num_candidates > 0;
+      api_->free_context(&context);
+      if (composing) { SetError(error, "请先完成当前组字，再导入或导出学习词库。"); return -1; }
+      char schema[1025]{};
+      if (!api_->get_current_schema(id, schema, sizeof(schema)) || !std::memchr(schema, 0, sizeof(schema))) {
+        SetError(error, "无法保存当前输入方案。"); return -1;
+      }
+      lease.sessions.push_back({id, schema});
+      auto& saved = lease.sessions.back();
+      if (!api_->schema_open(saved.schema.c_str(), &saved.config) ||
+          !api_->config_get_item(&saved.config, "engine", &saved.components)) {
+        SetError(error, "无法保留当前方案配置。"); return -1;
+      }
+      std::set<std::string> names{"ascii_mode", "ascii_punct", "full_shape", "simplification", "traditional",
+          "traditionalization", "_horizontal", "_soft_cursor", "_inline_preedit", "_hide_comment", "_hide_candidate"};
+      // Preserve every declared binary/multi-option/hidden switch, not only
+      // the subset exposed by the Windows input-habits settings.
+      if (api_->config_get_string) for (unsigned i = 0; i < 128; ++i) {
+        const auto base = "switches/@" + std::to_string(i);
+        char name[256]{};
+        if (api_->config_get_string(&saved.config, (base + "/name").c_str(), name, sizeof(name)) &&
+            std::memchr(name, 0, sizeof(name))) names.insert(name);
+        for (unsigned j = 0; j < 128; ++j) {
+          memset(name, 0, sizeof(name));
+          if (!api_->config_get_string(&saved.config, (base + "/options/@" + std::to_string(j)).c_str(), name, sizeof(name))) break;
+          if (std::memchr(name, 0, sizeof(name))) names.insert(name);
+        }
+      }
+      for (const auto& name : names) if (!name.empty()) saved.options[name] = api_->get_option(id, name.c_str()) != 0;
+    }
+    // Keep the original schema ID: select_schema persists schema IDs/history.
+    // Temporarily replace only its shared in-memory component subtree, then
+    // put back the exact original ConfigItem before restoring the sessions.
+    if (!api_->config_load_string(&lease.guard,
+        "processors: []\nsegmentors: []\ntranslators: []\nfilters: []\n")) {
+      SetError(error, "无法准备安全的学习词库操作。"); return -1;
+    }
+    for (auto& session : lease.sessions) {
+      session.config_changed = true;
+      if (!api_->config_set_item(&session.config, "engine", &lease.guard)) {
+        SetError(error, "无法暂时释放学习词库配置；输入方案将恢复。"); return -1;
+      }
+    }
+    for (auto& session : lease.sessions) {
+      // Include the attempted session in recovery even if an API implementation
+      // reports failure after applying part of the switch.
+      session.switched = true;
+      if (!api_->select_schema(session.id, session.schema.c_str())) {
+        SetError(error, "无法暂时释放学习词库；输入方案将恢复。"); return -1;
+      }
+    }
+    const int result = operation();
+    if (!lease.Restore() && !lease.Restore()) {
+      healthy_ = false;
+      SetError(error, "学习词库操作后输入引擎恢复失败，已停止处理按键，请重新启动输入法。"); return -1;
+    }
+    return result;
+  }
+  static bool LexiconPath(const std::filesystem::path& path, std::string* text, std::string* error) {
+    if (!path.is_absolute() || path.native().size() > kMaximumWindowsPath ||
+        path.native().find(L'\0') != std::wstring::npos) {
+      SetError(error, "学习词库路径无效。"); return false;
+    }
+    return WideToUtf8(path.native(), text, error);
+  }
+  abi::LeversApi* LeversLocked(std::string* error) {
+    if (!healthy_ || !api_ || !api_->find_module) {
+      SetError(error, "Rime 引擎尚未就绪。"); return nullptr;
+    }
+    const auto* module = api_->find_module("levers");
+    constexpr auto module_size = offsetof(abi::Module, get_api) + sizeof(abi::Module::get_api) - sizeof(int);
+    if (!module || module->data_size < static_cast<int>(module_size) ||
+        module->data_size > static_cast<int>(kMaximumApiBytes) || !module->get_api) {
+      SetError(error, "此 Rime 引擎未提供学习词库接口。"); return nullptr;
+    }
+    auto* levers = static_cast<abi::LeversApi*>(module->get_api());
+    constexpr auto required = offsetof(abi::LeversApi, import_user_dict) + sizeof(abi::LeversApi::import_user_dict) - sizeof(int);
+    if (!levers || levers->data_size < static_cast<int>(required) ||
+        levers->data_size > static_cast<int>(kMaximumApiBytes) ||
+        !levers->user_dict_iterator_init || !levers->user_dict_iterator_destroy || !levers->next_user_dict ||
+        !levers->export_user_dict || !levers->import_user_dict || !levers->restore_user_dict) {
+      SetError(error, "此 Rime 引擎的学习词库接口不完整。"); return nullptr;
+    }
+    return levers;
+  }
   struct OwnedCandidate {
     std::string text;
     std::string comment;
@@ -685,6 +895,32 @@ class RimeEngine::Impl final {
     return true;
   }
 
+  std::uint32_t CandidatePageKeysLocked(SessionId session) {
+    constexpr auto required = offsetof(abi::ApiPrefix, config_get_string) +
+        sizeof(abi::ApiPrefix::config_get_string) - sizeof(int);
+    if (!api_ || api_->data_size < static_cast<int>(required) ||
+        !api_->get_current_schema || !api_->schema_open || !api_->config_close ||
+        !api_->config_get_string) return 0;
+    char schema[256]{};
+    if (!api_->get_current_schema(session, schema, sizeof(schema)) || !schema[0] ||
+        !memchr(schema, '\0', sizeof(schema))) return 0;
+    const auto found = candidate_page_keys_.find(session);
+    if (found != candidate_page_keys_.end() && found->second.first == schema) return found->second.second;
+    abi::Config config{};
+    if (!api_->schema_open(schema, &config)) return 0;
+    struct CloseConfig {
+      abi::ApiPrefix* api; abi::Config* config;
+      ~CloseConfig() { api->config_close(config); }
+    } close{api_, &config};
+    const auto flags = ReadCandidatePageKeys([&](const std::string& key) {
+      char value[256]{};
+      return api_->config_get_string(&config, key.c_str(), value, sizeof(value)) &&
+          memchr(value, '\0', sizeof(value)) ? std::string(value) : std::string();
+    });
+    candidate_page_keys_[session] = {schema, flags};
+    return flags;
+  }
+
   bool CollectSnapshotLocked(SessionId session, EngineSnapshot* output,
                              std::string* error) noexcept {
     std::string commit_text;
@@ -711,6 +947,7 @@ class RimeEngine::Impl final {
     std::size_t selection_end_utf8 = 0;
     std::uint32_t page_number = 0;
     std::uint32_t page_size = 0;
+    bool last_page = false;
     int highlighted_candidate = -1;
     bool copied = true;
 
@@ -761,6 +998,7 @@ class RimeEngine::Impl final {
         } else {
           page_number = static_cast<std::uint32_t>(context.menu.page_no);
           page_size = static_cast<std::uint32_t>(context.menu.page_size);
+          last_page = context.menu.is_last_page != 0;
           highlighted_candidate = context.menu.highlighted_candidate_index;
           candidates.resize(static_cast<std::size_t>(count));
         }
@@ -821,6 +1059,8 @@ class RimeEngine::Impl final {
     raw.selection_end_utf8 = selection_end_utf8;
     raw.page_number = page_number;
     raw.page_size = page_size;
+    raw.last_page = last_page;
+    if (!candidate_views.empty()) raw.candidate_page_keys = CandidatePageKeysLocked(session);
     raw.highlighted_candidate = highlighted_candidate;
     raw.candidates = candidate_views;
     return BuildEngineSnapshot(raw, output, error);
@@ -832,7 +1072,7 @@ class RimeEngine::Impl final {
       for (const SessionId session : sessions_) {
         api_->destroy_session(session);
       }
-      sessions_.clear(); input_habits_.clear();
+      sessions_.clear(); input_habits_.clear(); candidate_page_keys_.clear();
       if (initialized_) {
         api_->finalize();
       }
@@ -864,6 +1104,7 @@ class RimeEngine::Impl final {
   std::string log_dir_;
   std::unordered_set<SessionId> sessions_;
   std::map<SessionId, xsime::input::SessionOverrides> input_habits_;
+  std::map<SessionId, std::pair<std::string, std::uint32_t>> candidate_page_keys_;
 };
 
 RimeEngine::RimeEngine() : impl_(std::make_unique<Impl>()) {}
@@ -886,6 +1127,20 @@ bool RimeEngine::Start(const RimeEngineOptions& options,
 void RimeEngine::Stop() noexcept { impl_->Stop(); }
 
 bool RimeEngine::IsHealthy() const noexcept { return impl_->IsHealthy(); }
+bool RimeEngine::UserDictionaries(std::vector<std::string>* names, std::string* error) noexcept {
+  return impl_->UserDictionaries(names, error);
+}
+int RimeEngine::ExportUserDictionary(const std::string& name, const std::filesystem::path& path,
+                                     std::string* error) noexcept {
+  return impl_->TransferUserDictionary(name, path, false, error);
+}
+int RimeEngine::ImportUserDictionary(const std::string& name, const std::filesystem::path& path,
+                                     std::string* error) noexcept {
+  return impl_->TransferUserDictionary(name, path, true, error);
+}
+bool RimeEngine::RestoreUserDictionary(const std::filesystem::path& path, std::string* error) noexcept {
+  return impl_->RestoreUserDictionary(path, error);
+}
 
 bool RimeEngine::RunMaintenance(bool full_check, std::string* error) noexcept {
   return impl_->RunMaintenance(full_check, error);

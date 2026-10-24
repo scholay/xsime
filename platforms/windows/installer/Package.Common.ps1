@@ -155,8 +155,15 @@ function Stop-OwnedBroker([string]$Directory,[string]$UserSid=([Security.Princip
             $stopEvent=$null
             try {
                 $name=(Get-BrokerMutexName $UserSid $process.SessionId)+'.shutdown-'+$process.Id
-                try {$stopEvent=[Threading.EventWaitHandle]::OpenExisting($name,[Security.AccessControl.EventWaitHandleRights]::Modify)}catch [Threading.WaitHandleCannotBeOpenedException]{}catch [UnauthorizedAccessException]{}
-                if($stopEvent){$stopEvent.Set() | Out-Null;if($process.WaitForExit(5000)){continue}}
+                try {$stopEvent=[Threading.EventWaitHandle]::OpenExisting($name,[Security.AccessControl.EventWaitHandleRights]::Modify)}catch [Threading.WaitHandleCannotBeOpenedException]{}catch [UnauthorizedAccessException]{throw 'Cannot request the owned Broker graceful shutdown. No process was terminated; retry maintenance with the required access.'}
+                if($stopEvent){
+                    $stopEvent.Set() | Out-Null
+                    if($process.WaitForExit(5000)){continue}
+                    # A current Broker may be finishing an uncancellable Rime
+                    # dictionary write. Abort maintenance without forcing it
+                    # down; the lifetime gate remains owned until it exits.
+                    throw 'The Broker is still completing a safe shutdown. Maintenance was cancelled without terminating it. Wait for it to exit, then retry.'
+                }
                 # Legacy Brokers have no graceful maintenance event. Terminate
                 # only the verified owned executable, never its TSF host app.
                 Stop-Process -InputObject $process -Force -ErrorAction Stop

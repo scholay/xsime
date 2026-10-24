@@ -31,6 +31,8 @@ struct EngineSnapshot {
   std::uint16_t highlighted_candidate = core::kNoCandidateSelected;
   std::uint32_t page_number = 0;
   std::uint16_t page_size = 0;
+  bool last_page = false;
+  std::uint32_t candidate_page_keys = 0;
   std::string composition;
   std::string commit_text;
   std::vector<EngineCandidate> candidates;
@@ -55,6 +57,8 @@ struct RawSnapshotView {
   std::size_t selection_end_utf8 = 0;
   std::uint32_t page_number = 0;
   std::uint32_t page_size = 0;
+  bool last_page = false;
+  std::uint32_t candidate_page_keys = 0;
   int highlighted_candidate = -1;
   std::span<const RawCandidateView> candidates;
 };

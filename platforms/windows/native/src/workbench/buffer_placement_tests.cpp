@@ -87,6 +87,10 @@ void TestStableSideAndGrowth() {
 }
 void TestMonitorsAndScale() {
   const BufferRect second{-1920, -200, 1920, 1080};
+  Check(BufferCenteredOnScreen({0, 0, 680, 100}, second) == BufferRect{-1300, 290, 680, 100},
+        "move to current screen centers in the chosen negative-coordinate monitor");
+  Check(BufferCenteredOnScreen({0, 0, 680, 100}, {0, 0, 360, 80}) == BufferRect{8, 8, 344, 64},
+        "move to current screen clamps both dimensions to a small work area");
   const auto placed = BufferOpeningPlacement(current,
       BufferRect{-1750, 200, 0, 20}, BufferRect{-1800, 180, 900, 80}, second);
   Check(placed.frame.x == -1800 && placed.frame.y == 270 && placed.frame.width == 900,

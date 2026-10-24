@@ -1,4 +1,5 @@
 #include "store.hpp"
+#include "media.hpp"
 
 #include <Windows.h>
 #include <bcrypt.h>
@@ -97,6 +98,11 @@ bool ValidId(const std::string& id) {
   return id.size() == 36 &&
          id.find_first_not_of("0123456789abcdef-") == std::string::npos;
 }
+bool FileName(const std::string& name) {
+  return !name.empty() && name.size() <= 1024 && name != "." && name != ".." &&
+      name.find_first_of("/\\:\"<>|?*") == std::string::npos && name.find('\0') == std::string::npos &&
+      name.back() != '.' && name.back() != ' ';
+}
 }  // namespace
 std::string NewId() {
   GUID id{};
@@ -113,12 +119,16 @@ std::filesystem::path DefaultRoot() {
 }
 std::string ReadFile(const std::filesystem::path& path, std::size_t limit) {
   CheckPath(path);
-  if (!std::filesystem::is_regular_file(path) ||
-      std::filesystem::file_size(path) > limit)
+  if (!std::filesystem::is_regular_file(path))
     throw std::runtime_error("文件不可用或超过大小限制。");
+  const auto size = std::filesystem::file_size(path);
+  if (size > limit) throw std::runtime_error("文件不可用或超过大小限制。");
   std::ifstream in(path, std::ios::binary);
-  std::string bytes((std::istreambuf_iterator<char>(in)), {});
-  if (in.bad() || bytes.size() > limit)
+  std::string bytes(static_cast<std::size_t>(size), '\0');
+  in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  // Never follow a concurrently growing source beyond the admission bound.
+  if (!in || in.gcount() != static_cast<std::streamsize>(size) ||
+      in.peek() != std::char_traits<char>::eof() || in.bad())
     throw std::runtime_error("读取文件失败。");
   return bytes;
 }
@@ -246,11 +256,146 @@ Json Store::RecordClipboardText(const std::string& text) {
   if (text.empty() || text.size() > kTextLimit)
     throw std::runtime_error("剪贴板文字为空或过大。");
   for (const auto& item : List(Module::Temporary))
-    if (item.value("kind", "") == "text" && !item.contains("asset") &&
+    if (item.value("kind", "") == "text" && !item.contains("asset") && !item.contains("clipboard") &&
         item.value("body", "") == text)
       return PromoteTemporary(item);
   return PromoteTemporary(Save({{"module", "temporary"}, {"kind", "text"},
                                  {"title", "剪贴板文字"}, {"body", text}}));
+}
+Json Store::RecordClipboard(const ClipboardContent& content, Module module) {
+  if (module == Module::Passwords || module == Module::Chat || module == Module::Terminal ||
+      module == Module::Resources) throw std::runtime_error("此模块不接受剪贴板归档。");
+  // Keep legacy callers/records compatible. New OS snapshots always carry the
+  // representations even when the primary preview happens to be plain text.
+  if (content.formats.empty() && content.files.empty()) {
+    if (!content.bytes.empty()) return ImportData(module, "剪贴板图片", content.extension, content.bytes);
+    if (content.text.empty()) throw std::runtime_error("剪贴板中没有可导入的内容。");
+    return module == Module::Temporary ? RecordClipboardText(content.text)
+        : Save({{"module", kModuleIds[static_cast<unsigned>(module)]}, {"kind", "text"},
+                {"title", "剪贴板文字"}, {"body", content.text}});
+  }
+  auto formats = content.formats;
+  if (!formats.empty()) ValidateClipboardFormats(formats);
+  std::sort(formats.begin(), formats.end(), [](const auto& a, const auto& b) { return a.name < b.name; });
+  std::size_t total = 0;
+  Json identity = Json::array();
+  for (const auto& format : formats) {
+    if (format.name == "CF_HDROP") throw std::runtime_error("文件归档必须使用托管文件列表。");
+    total += format.bytes.size();
+    identity.push_back({format.name, Digest(format.bytes)});
+  }
+  if (content.files.size() > kClipboardFileLimit) throw std::runtime_error("一次最多收录 16 个文件。");
+  struct File { std::string name, bytes; };
+  std::vector<File> files;
+  for (const auto& path : content.files) {
+    auto name = Utf8(path.filename().wstring());
+    if (!FileName(name)) throw std::runtime_error("剪贴板文件名无效。");
+    auto bytes = ReadFile(path, kClipboardArchiveLimit - total);
+    total += bytes.size();
+    identity.push_back({"file", name, Digest(bytes)});
+    files.push_back({std::move(name), std::move(bytes)});
+  }
+  const auto fingerprint = Digest(identity.dump());
+  if (module == Module::Temporary)
+    for (const auto& item : List(module))
+      if (item.contains("clipboard") && item.value("fingerprint", "") == fingerprint)
+        return PromoteTemporary(item);
+
+  Json archive{{"version", 1}, {"formats", Json::array()}, {"files", Json::array()}};
+  Json value{{"module", kModuleIds[static_cast<unsigned>(module)]}, {"kind", "text"},
+             {"title", content.text.empty() ? "剪贴板内容" : "剪贴板文字"}, {"fingerprint", fingerprint}};
+  if (!content.text.empty()) {
+    if (content.text.size() > kTextLimit) throw std::runtime_error("剪贴板文字超过 256 KiB。");
+    value["body"] = content.text;
+  }
+  std::vector<std::filesystem::path> written, directories;
+  const auto write = [&](const std::string& name, const std::string& bytes) {
+    const auto path = Asset({{"asset", name}});
+    AtomicWrite(path, bytes); written.push_back(path);
+  };
+  bool committed = false;
+  try {
+    for (const auto& format : formats) {
+      const auto name = NewId() + (format.name == "PNG" ? ".png" : ".clipdata");
+      write(name, format.bytes);
+      archive["formats"].push_back({{"name", format.name}, {"asset", name},
+                                     {"bytes", format.bytes.size()}, {"digest", Digest(format.bytes)}});
+      if (format.name == "PNG" && content.extension == ".png") value["asset"] = name;
+    }
+    if (!content.bytes.empty()) {
+      if (!value.contains("asset")) {
+        if (content.bytes.size() > kClipboardArchiveLimit - total)
+          throw std::runtime_error("剪贴板归档及预览超过 64 MiB。");
+        if (content.extension != ".bmp" && content.extension != ".png")
+          throw std::runtime_error("剪贴板图片预览无效。");
+        const auto preview = NewId() + content.extension;
+        write(preview, content.bytes); value["asset"] = preview;
+      }
+      value["kind"] = "image"; value["title"] = "剪贴板图片";
+    }
+    for (const auto& file : files) {
+      // A private UUID directory retains each original leaf name, including
+      // duplicates from different source directories, without source links.
+      const auto directory = NewId();
+      const auto parent = root_ / L"assets" / Wide(directory);
+      PrivateDirectory(parent); directories.push_back(parent);
+      const auto name = directory + "/" + file.name;
+      write(name, file.bytes);
+      archive["files"].push_back({{"name", file.name}, {"asset", name},
+                                   {"bytes", file.bytes.size()}, {"digest", Digest(file.bytes)}});
+      if (!value.contains("asset")) value["asset"] = name;
+    }
+    if (!files.empty()) {
+      value["kind"] = "document";
+      value["title"] = files.size() == 1 ? files.front().name
+          : "剪贴板文件（" + std::to_string(files.size()) + " 项）";
+      std::string summary;
+      for (const auto& file : files) { if (!summary.empty()) summary += " · "; summary += file.name; }
+      value["summary"] = summary;
+    }
+    value["clipboard"] = std::move(archive);
+    value["unread"] = module == Module::Inbox; value["review"] = "pending";
+    auto saved = Save(value);
+    committed = true;
+    return module == Module::Temporary ? PromoteTemporary(saved) : saved;
+  } catch (...) {
+    std::error_code ignored;
+    if (!committed) {
+      for (const auto& path : written) std::filesystem::remove(path, ignored);
+      for (const auto& path : directories) std::filesystem::remove(path, ignored);
+    }
+    throw;
+  }
+}
+std::vector<ClipboardFormat> Store::ClipboardFormats(const Json& value) const {
+  const auto& archive = value.at("clipboard");
+  if (archive.at("version") != 1 || !archive.at("formats").is_array() ||
+      archive.at("formats").size() > 6 || !archive.at("files").is_array() ||
+      archive.at("files").size() > kClipboardFileLimit)
+    throw std::runtime_error("剪贴板归档版本或项目数量无效。");
+  std::size_t total = 0;
+  const auto read = [&](const Json& entry) {
+    const auto bytes = ReadFile(Asset(entry), kClipboardArchiveLimit - total);
+    if (entry.at("bytes") != bytes.size() || entry.at("digest") != Digest(bytes))
+      throw std::runtime_error("剪贴板归档已损坏，原剪贴板已保留。");
+    total += bytes.size(); return bytes;
+  };
+  std::vector<ClipboardFormat> formats;
+  for (const auto& entry : archive.at("formats")) {
+    const auto name = entry.at("name").get<std::string>();
+    if (name == "CF_HDROP") throw std::runtime_error("剪贴板文件归档无效。");
+    formats.push_back({name, read(entry)});
+  }
+  std::vector<std::filesystem::path> paths;
+  for (const auto& entry : archive.at("files")) {
+    const auto path = Asset(entry);
+    if (Utf8(path.filename().wstring()) != entry.at("name").get<std::string>())
+      throw std::runtime_error("剪贴板文件名与归档不匹配。");
+    (void)read(entry); paths.push_back(path);
+  }
+  if (!paths.empty()) formats.push_back({"CF_HDROP", ClipboardFileDrop(paths)});
+  ValidateClipboardFormats(formats);
+  return formats;
 }
 Json Store::Save(Json value, std::uint64_t expected) {
   const auto module = value.at("module").get<std::string>();
@@ -268,9 +413,25 @@ Json Store::Save(Json value, std::uint64_t expected) {
     const auto previous = Get(id);
     if (!expected || previous.at("revision") != expected)
       throw std::runtime_error("内容已在其他位置修改，请重新载入后再保存。");
-    if (previous.value("asset", "") != value.value("asset", "") ||
-        previous.value("body", "") != value.value("body", ""))
+    if (ClipboardHasFiles(previous)) {
+      // Editing a card's metadata is not replacing its attachment group.
+      // All files, including those beyond the primary preview, remain owned.
+      value["asset"] = previous.at("asset");
+      value["kind"] = "document";
+      value["clipboard"] = previous.at("clipboard");
+      if (previous.value("body", "") != value.value("body", "")) {
+        value.erase("fingerprint");
+        auto& formats = value["clipboard"]["formats"];
+        formats.erase(std::remove_if(formats.begin(), formats.end(), [](const Json& format) {
+          const auto name = format.value("name", "");
+          return name == "CF_UNICODETEXT" || name == "HTML Format" || name == "Rich Text Format";
+        }), formats.end());
+      }
+    } else if (previous.value("asset", "") != value.value("asset", "") ||
+        previous.value("body", "") != value.value("body", "")) {
       value.erase("fingerprint");
+      value.erase("clipboard");  // Editing a preview must never replay stale rich content.
+    }
   } else if (expected)
     throw std::runtime_error("内容已被删除。");
   if (module == "passwords" && value.contains("body")) {
@@ -388,11 +549,12 @@ CleanupResult Store::Cleanup(const std::set<std::string>& protected_ids,
   struct AssetInfo { std::filesystem::path path; std::uint64_t bytes, modified; };
   std::map<std::string, AssetInfo> assets;
   std::map<std::string, std::string> asset_paths;
-  for (const auto& file : std::filesystem::directory_iterator(root_ / L"assets")) {
+  std::vector<std::filesystem::path> asset_directories;
+  // Only one level of UUID-named private file containers is managed. Do not
+  // follow directory links, descend into arbitrary trees or touch source paths.
+  const auto inspect = [&](const std::filesystem::directory_entry& file, const std::string& name) {
     CheckPath(file.path());
-    if (!file.is_regular_file()) continue;
-    const auto name = Utf8(file.path().filename().wstring());
-    if (name.size() < 36 || !ValidId(name.substr(0, 36))) continue;
+    if (!file.is_regular_file()) throw std::runtime_error("历史附件结构无效，暂缓自动清理。");
     WIN32_FILE_ATTRIBUTE_DATA data{};
     if (!GetFileAttributesExW(file.path().c_str(), GetFileExInfoStandard, &data))
       throw std::runtime_error("无法核验历史附件，暂缓自动清理。");
@@ -401,6 +563,20 @@ CleanupResult Store::Cleanup(const std::set<std::string>& protected_ids,
     assets.emplace(name, AssetInfo{file.path(), file.file_size(), modified});
     asset_paths.emplace(Lower(Utf8(file.path().wstring())), name);
     asset_paths.emplace(Lower(Utf8(file.path().generic_wstring())), name);
+  };
+  for (const auto& file : std::filesystem::directory_iterator(root_ / L"assets")) {
+    CheckPath(file.path());
+    const auto name = Utf8(file.path().filename().wstring());
+    if (name.size() < 36 || !ValidId(name.substr(0, 36))) continue;
+    if (file.is_directory()) {
+      if (!ValidId(name)) throw std::runtime_error("历史附件目录无效，暂缓自动清理。");
+      asset_directories.push_back(file.path());
+      for (const auto& child : std::filesystem::directory_iterator(file.path())) {
+        const auto leaf = Utf8(child.path().filename().wstring());
+        if (!FileName(leaf)) throw std::runtime_error("历史附件文件名无效，暂缓自动清理。");
+        inspect(child, name + "/" + leaf);
+      }
+    } else inspect(file, name);
   }
   struct Record { Json value; std::set<std::string> assets; std::uint64_t bytes; bool removed = false; };
   std::vector<Record> records;
@@ -471,17 +647,24 @@ CleanupResult Store::Cleanup(const std::set<std::string>& protected_ids,
     if (references[name] != 0) continue;
     if (!retired_assets.contains(name) &&
         (now <= asset.modified || now - asset.modified < policy.orphan_grace)) continue;
-    // Flat, managed assets only. Never walk a resource path or a source file.
+    // Validated private assets only; never a resource path or source file.
     CheckPath(asset.path);
     std::error_code error;
     if (std::filesystem::remove(asset.path, error)) { ++result.assets; result.bytes += asset.bytes; }
+  }
+  for (const auto& directory : asset_directories) {
+    CheckPath(directory);
+    std::error_code ignored;
+    if (std::filesystem::is_empty(directory)) std::filesystem::remove(directory, ignored);
   }
   return result;
 }
 std::filesystem::path Store::Asset(const Json& value) const {
   const auto name = value.value("asset", "");
-  if (name.empty() || name.find_first_of("/\\:") != std::string::npos ||
-      name.find("..") != std::string::npos)
+  const auto slash = name.find('/');
+  const bool valid = slash == std::string::npos ? FileName(name)
+      : ValidId(name.substr(0, slash)) && FileName(name.substr(slash + 1));
+  if (!valid)
     throw std::runtime_error("附件不可用。");
   auto path = root_ / L"assets" / Wide(name);
   CheckPath(path);

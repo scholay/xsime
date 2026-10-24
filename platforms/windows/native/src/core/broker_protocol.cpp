@@ -439,11 +439,23 @@ bool ValidateInputState(const InputState& dto, std::string* error) {
   }
   if (!candidates_visible &&
       (dto.highlighted_candidate != kNoCandidateSelected ||
-       dto.page_start != 0 || dto.page_size != 0)) {
+       dto.page_start != 0 || dto.page_size != 0 ||
+       (dto.state_flags & kCandidatePagingStateFlags))) {
     SetError(error, "hidden candidates contain selection or paging data");
     return false;
   }
   if (candidates_visible) {
+    const auto valid_page_key = [&](InputStateFlags up, InputStateFlags down, InputStateFlags paging) {
+      const bool previous = (dto.state_flags & static_cast<std::uint32_t>(up)) != 0;
+      const bool next = (dto.state_flags & static_cast<std::uint32_t>(down)) != 0;
+      return !(previous && next) && ((previous || next) ||
+          !(dto.state_flags & static_cast<std::uint32_t>(paging)));
+    };
+    if (!valid_page_key(InputStateFlags::kMinusPageUp, InputStateFlags::kMinusPageDown, InputStateFlags::kMinusPagingOnly) ||
+        !valid_page_key(InputStateFlags::kEqualPageUp, InputStateFlags::kEqualPageDown, InputStateFlags::kEqualPagingOnly)) {
+      SetError(error, "candidate paging key metadata is inconsistent");
+      return false;
+    }
     if (dto.highlighted_candidate != kNoCandidateSelected &&
         dto.highlighted_candidate >= dto.candidates.size()) {
       SetError(error, "highlighted candidate is outside the candidate list");

@@ -38,6 +38,7 @@ class BrokerConnection final {
                       DWORD verified_client_process_id, core::Frame* response);
 
  private:
+  friend struct CandidatePagingRegressionProbe;
   struct SessionState {
     std::uint64_t context_id = 0;
     std::uint64_t last_sequence_id = 0;
@@ -88,6 +89,7 @@ class BrokerConnection final {
   bool modifier_snapshots_ = false;
   bool key_routing_ = false;
   bool pending_chord_ = false;
+  bool candidate_paging_ = false;
   workbench::Runtime* runtime_;
   workbench::Runtime* settings_;
   std::function<bool()> open_settings_;

@@ -44,6 +44,22 @@ int main() {
     }
   }
   const auto data = workbench::OfficialPluginStore::BundledData(official::kAI);
+  {
+    const auto fresh = root / L"fresh-restart" / L"plugins";
+    workbench::OfficialPluginStore first(fresh);
+    Check(first.Grant(official::kCodex).empty() && !first.Enable(official::kCodex, true, &error),
+          "fresh ChatGPT requires installation before an enable can grant execution");
+    std::ofstream(fresh.parent_path() / L"settings.json") << "new profile settings";
+    workbench::OfficialPluginStore reopened(fresh);
+    Check(reopened.Grant(official::kCodex).empty(), "saving first preferences cannot retroactively migrate a new user to legacy defaults");
+    Check(reopened.Install(official::kCodex, &error) && reopened.Enable(official::kCodex, true, &error), "new user explicitly opts into ChatGPT");
+    Check(reopened.Enable(official::kCodex, false, &error), "explicit ChatGPT disable persists");
+    workbench::OfficialPluginStore disabled(fresh);
+    Check(disabled.Grant(official::kCodex).empty(), "restart preserves explicit disabled state");
+    Check(disabled.Uninstall(official::kCodex, &error), "new-user ChatGPT uninstall writes tombstone");
+    workbench::OfficialPluginStore uninstalled(fresh);
+    Check(uninstalled.Grant(official::kCodex).empty() && !uninstalled.Enable(official::kCodex, true, &error), "restart cannot undo explicit ChatGPT removal");
+  }
   const auto location = root / L"fresh" / L"plugins";
   {
     workbench::OfficialPluginStore store(location);
@@ -51,7 +67,9 @@ int main() {
     Check(!store.Grant("builtin.statistics").empty() && !store.Grant("builtin.typing-speed").empty(), "native metric extensions available offline");
     Check(store.Enable("builtin.statistics", false, &error) && store.Grant("builtin.statistics").empty(), "statistics lifecycle revokes collection grant");
     Check(store.Enable("builtin.statistics", true, &error), "statistics can resume");
-    Check(!store.Grant(official::kCodex).empty(), "bundled Codex connector available offline");
+    Check(store.Grant(official::kCodex).empty(), "new users opt into ChatGPT");
+    Check(store.Install(official::kCodex, &error) && store.Grant(official::kCodex).empty(), "ChatGPT installs offline without enabling itself");
+    Check(store.Enable(official::kCodex, true, &error), "explicit ChatGPT enable");
     Check(official::Instruction(store.Package(official::kCodex), "English").find("Respond") != std::string::npos, "Codex package supplies text instruction");
     Check(!store.Grant(official::kTranslation).empty() && !store.Grant(official::kChord).empty(), "bundled features available offline");
     Check(store.Grant(official::kAI).empty(), "fresh optional AI not enabled");
@@ -103,8 +121,16 @@ int main() {
     }
   }
   {
+    const auto previous = root / L"old-defaults";
+    std::filesystem::create_directories(previous);
+    std::ofstream(previous / L"migration.json") << R"({"legacy":false})";
+    workbench::OfficialPluginStore store(previous);
+    Check(!store.Grant(official::kCodex).empty(), "existing implicit ChatGPT default is preserved");
+  }
+  {
     workbench::OfficialPluginStore legacy(root / L"plugins");
     Check(!legacy.Grant(official::kAI).empty(), "old installation stays available without a download");
+    Check(!legacy.Grant(official::kCodex).empty(), "existing settings retain the old implicit ChatGPT grant");
     Check(legacy.Uninstall(official::kAI, &error), "legacy removal");
     workbench::OfficialPluginStore again(root / L"plugins");
     Check(again.Grant(official::kAI).empty(), "migration never overrides explicit removal");
@@ -115,6 +141,8 @@ int main() {
   std::filesystem::remove(location / L"builtin.fly-chord-learning.state.json");
   workbench::OfficialPluginStore corrupt(location);
   Check(corrupt.Grant(official::kChord).empty(), "corrupt migration fails closed");
+  std::filesystem::remove(location / L"builtin.codex-cli.state.json");
+  Check(corrupt.Grant(official::kCodex).empty(), "corrupt migration cannot restore the old implicit ChatGPT default");
   std::filesystem::remove_all(root);
   std::cout << "Official plugin install, integrity, migration, grants and tombstone tests passed\n";
 }

@@ -63,6 +63,15 @@ class RimeEngine final {
                  std::string* error = nullptr, unsigned candidate_count = 9,
                  const std::map<std::string, bool>& input_options = {}) noexcept;
   std::vector<xsime::input::Switch> InputOptions(const std::string& schema) noexcept;
+  // Official levers calls share the same serial engine lock as keystrokes.
+  // They merge learning records; they never finalize/restart the runtime or
+  // close live input sessions to manipulate LevelDB files.
+  bool UserDictionaries(std::vector<std::string>* names, std::string* error = nullptr) noexcept;
+  int ExportUserDictionary(const std::string& name, const std::filesystem::path&,
+                           std::string* error = nullptr) noexcept;
+  int ImportUserDictionary(const std::string& name, const std::filesystem::path&,
+                           std::string* error = nullptr) noexcept;
+  bool RestoreUserDictionary(const std::filesystem::path&, std::string* error = nullptr) noexcept;
 
   // Applies one key and atomically drains its commit/context into output. An
   // ordinary unhandled key yields an empty snapshot; explicit Shift snapshots

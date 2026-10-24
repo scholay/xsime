@@ -31,7 +31,11 @@ struct SettingsUiCallbacks {
   std::function<bool(const std::string&, const std::string&, std::string*)> manage_plugin;
   std::function<std::string()> plugin_status;
   std::function<bool()> open_schemes;
+  std::function<void(HWND, ui::ThemeId)> open_lexicon;
   std::function<void()> open_capsule, open_mailbox;
+  std::function<void()> move_buffer_to_screen;
+  std::function<bool(std::string*)> restart_broker;
+  std::function<bool(unsigned)> open_maintenance_location;
   std::function<bool()> load_clipboard_recording;
   std::function<bool(bool, std::string*)> save_clipboard_recording;
   std::shared_ptr<metrics::Service> metrics;
@@ -96,6 +100,9 @@ class SettingsUiHost {
   HWND edit_send_ = nullptr, combo_send_modifiers_ = nullptr;
   HWND record_hotkey_ = nullptr, record_send_ = nullptr, reset_shortcuts_ = nullptr, shortcut_feedback_ = nullptr;
   std::array<HWND, 2> edit_plugin_{}, combo_plugin_modifiers_{}, record_plugin_{};
+  std::array<HWND, 3> edit_global_{}, combo_global_modifiers_{}, record_global_{};
+  HWND check_align_ = nullptr, check_reset_app_ = nullptr, move_buffer_ = nullptr;
+  std::array<HWND, 5> maintenance_actions_{};
   int recording_shortcut_ = -1;
   unsigned recorded_key_ = 0;
   void StopRecording();
@@ -109,6 +116,7 @@ class SettingsUiHost {
   HWND edit_source_lang_ = nullptr;
   HWND combo_auto_send_ = nullptr, check_close_after_ = nullptr, combo_translation_ = nullptr;
   HWND schemes_button_ = nullptr, imported_label_ = nullptr;
+  HWND lexicon_button_ = nullptr;
   HWND check_ascii_ = nullptr;
   HWND check_trad_ = nullptr;
   HWND check_punct_ = nullptr;

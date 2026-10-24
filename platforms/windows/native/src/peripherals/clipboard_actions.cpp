@@ -4,6 +4,51 @@
 #include "../ui/layered_frame.hpp"
 
 namespace rimes::windows::peripherals {
+ClipboardWriteResult PublishClipboardFormats(HWND owner, const std::vector<ClipboardFormat>& formats, DWORD expected_sequence) {
+  ValidateClipboardFormats(formats);
+  struct Memory {
+    UINT format;
+    HGLOBAL handle;
+  };
+  std::vector<Memory> values;
+  struct Free {
+    std::vector<Memory>& values;
+    ~Free() { for (auto& value : values) if (value.handle) GlobalFree(value.handle); }
+  } free{values};
+  for (const auto& value : formats) {
+    auto memory = GlobalAlloc(GMEM_MOVEABLE, value.bytes.size());
+    if (!memory) return {};
+    values.push_back({ClipboardFormatId(value.name), memory});
+    auto* data = GlobalLock(memory);
+    if (!data) return {};
+    memcpy(data, value.bytes.data(), value.bytes.size());
+    GlobalUnlock(memory);
+  }
+  if (!OpenClipboard(owner)) return {};
+  struct Close { ~Close() { CloseClipboard(); } } close;
+  // Loading a large archive can race a new copy. Check while owning the
+  // clipboard so the new content cannot be overwritten between check and write.
+  if (GetClipboardSequenceNumber() != expected_sequence) return {};
+  if (!EmptyClipboard()) return {};
+  for (auto& value : values) {
+    if (!SetClipboardData(value.format, value.handle)) return {};
+    value.handle = nullptr;  // Ownership transfers only after successful publication.
+  }
+  return {true, GetClipboardSequenceNumber()};
+}
+ClipboardWriteResult CopyClipboardArchive(HWND owner, Store& store, const Json& item, ClipboardPublisher publish,
+                          std::function<DWORD()> sequence) {
+  // Read, verify and allocate the whole snapshot before modifying the clipboard.
+  const auto expected = sequence();
+  return publish(owner, store.ClipboardFormats(item), expected);
+}
+bool ClipboardRequiresNativePaste(const Json& item) {
+  if (!item.contains("clipboard")) return false;
+  const auto& archive = item.at("clipboard");
+  if (!archive.value("files", Json::array()).empty()) return false;
+  const auto formats = archive.value("formats", Json::array());
+  return formats.size() != 1 || formats.at(0).value("name", "") != "CF_UNICODETEXT";
+}
 PasteTarget CurrentPasteTarget() {
   PasteTarget result;
   result.foreground = GetForegroundWindow();

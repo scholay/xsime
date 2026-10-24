@@ -11,6 +11,7 @@
 #include "../workbench/window.hpp"
 #include "../workbench/local_translation.hpp"
 #include "../workbench/local_gateway.hpp"
+#include "../workbench/user_lexicon.hpp"
 #include "autostart.hpp"
 #include "../schemes/scheme_library.hpp"
 #include "broker_connection.hpp"
@@ -20,6 +21,8 @@
 #include "single_instance.hpp"
 #include "ui_command.hpp"
 #include "win32_security.hpp"
+#include "restart.hpp"
+#include "../workbench/codex_cli.hpp"
 
 namespace rimes::windows::broker {
 namespace {
@@ -91,6 +94,10 @@ int wmain(const int argc, wchar_t** argv) {
   if (options.show_help) {
     PrintUsage();
     return 0;
+  }
+  if (!WaitForRestartParent(options.restart_parent)) {
+    std::wcerr << L"The previous Broker could not be verified or did not exit.\n";
+    return 2;
   }
   // Ordinary desktop serving is a background application. A console opened
   // by double-click/logon must not remain as a black window. Keep the console
@@ -220,8 +227,30 @@ int wmain(const int argc, wchar_t** argv) {
   workbench::Runtime runtime(workbench::GenerateText,
       {workbench::LocalTranslationReady, workbench::PrepareLocalTranslation});
   runtime.input_option_provider = [&engine](const std::string& schema) { return engine.InputOptions(schema); };
+  runtime.log_directory = options.engine.log_dir;
+  runtime.user_data_directory = options.engine.user_data_dir;
+  runtime.user_lexicon = std::make_shared<workbench::UserLexiconService>(
+      engine, options.engine.user_data_dir / L".lexicon-transfer");
   if (imported) runtime.SetImportedSchema(imported->schema, imported->package.id);
   workbench::UiCommands commands;
+  runtime.restart_broker = [&options, &commands](std::string* failure) {
+    wchar_t exe[32768]{};
+    if (!GetModuleFileNameW(nullptr, exe, 32768)) return false;
+    auto command = workbench::QuoteWindowsArgument(exe) + L" --settings --restart-parent " + std::to_wstring(GetCurrentProcessId());
+    for (const auto& item : std::initializer_list<std::pair<const wchar_t*, std::filesystem::path>>{
+        {L"--rime-dll", options.engine.dll_path}, {L"--shared-data-dir", options.engine.shared_data_dir},
+        {L"--user-data-dir", options.engine.user_data_dir}, {L"--log-dir", options.engine.log_dir}})
+      command += L" " + std::wstring(item.first) + L" " + workbench::QuoteWindowsArgument(item.second.wstring());
+    STARTUPINFOW startup{sizeof(startup)}; PROCESS_INFORMATION process{};
+    startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
+    if (!CreateProcessW(exe, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                        nullptr, nullptr, &startup, &process)) {
+      if (failure) *failure = "无法启动新的后台进程，当前进程继续运行。";
+      return false;
+    }
+    CloseHandle(process.hThread); CloseHandle(process.hProcess);
+    return commands.RequestExit();
+  };
   const bool interactive = security.session_id() != 0;
 #ifndef RIMES_E2E_TEST_IDENTITY
   std::unique_ptr<workbench::LocalGateway> gateway;

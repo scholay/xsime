@@ -186,6 +186,29 @@ void TestSettingsLaunchAndConflictingCommands() {
 #endif
 }
 
+void TestRestartParentArguments() {
+  BrokerOptions options; std::wstring error;
+  const auto launch = [](const wchar_t* pid) {
+    return Arguments{L"RimesBroker.exe", L"--settings", L"--restart-parent", pid,
+        L"--rime-dll", kDllPath, L"--shared-data-dir", kSharedPath,
+        L"--user-data-dir", kUserPath, L"--log-dir", kLogPath};
+  };
+  auto valid = launch(L"1234");
+  EXPECT(Parse(&valid, &options, &error) && options.restart_parent == 1234 && options.open_settings);
+  for (const auto* pid : {L"0", L"-1", L"+1", L" 1", L"1x", L"4294967296", L"99999999999", L""}) {
+    auto invalid = launch(pid);
+    EXPECT(!Parse(&invalid, &options, &error));
+  }
+  Arguments duplicate{L"RimesBroker.exe", L"--settings", L"--restart-parent", L"1234", L"--restart-parent", L"4321"};
+  EXPECT(!Parse(&duplicate, &options, &error));
+  Arguments missing{L"RimesBroker.exe", L"--settings", L"--restart-parent"};
+  EXPECT(!Parse(&missing, &options, &error));
+  for (const auto* command : {L"--print-endpoint", L"--print-paths", L"--once", L"--deploy-only", L"--help"}) {
+    Arguments invalid{L"RimesBroker.exe", command, L"--restart-parent", L"1234"};
+    EXPECT(!Parse(&invalid, &options, &error));
+  }
+}
+
 }  // namespace
 
 int RunBrokerOptionsTests() {
@@ -194,6 +217,7 @@ int RunBrokerOptionsTests() {
   TestExplicitEngineConfiguration();
   TestAmbiguousOrRelativeConfigurationFails();
   TestSettingsLaunchAndConflictingCommands();
+  TestRestartParentArguments();
   return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

@@ -1,0 +1,53 @@
+﻿{
+    "verified":  true,
+    "version":  "1.1.8-win-capsule-navigation.20261023",
+    "commit":  "b5fcaff1914bbd5e61d828cbfb162463270917a7",
+    "directory":  "C:\\Program Files\\RIMES\\versions\\1.1.8-win-capsule-navigation.20261023-b5fcaff1914b-1bc9dbe59c5e",
+    "installedBinariesMatched":  7,
+    "sourceSnapshot":  "2d384803ec14997ee02a62e18313bedf29e5b3d57c7d50a723848ef5b5718d4c",
+    "sourceFilesMatched":  18,
+    "brokerPid":  230076,
+    "settingsUnchanged":  true,
+    "userDataRetained":  true,
+    "retainedFiles":  {
+                          "peripherals-v1":  110,
+                          "official-plugins-v1":  2
+                      },
+    "backupDirectory":  "C:\\Users\\young\\AppData\\Local\\RIMES\\backups\\before-capsule-navigation-20261023-202946",
+    "requiresSignOut":  true,
+    "tests":  {
+                  "ctestX64":  38,
+                  "ctestX86":  38,
+                  "nativeNavigationArchitectures":  [
+                                                        "x64",
+                                                        "x86"
+                                                    ],
+                  "nativeNavigationRunsPerArchitecture":  3,
+                  "nativeNavigationDpi":  144,
+                  "nativeNavigationModes":  [
+                                                "detached",
+                                                "borrowed"
+                                            ],
+                  "peripheralUiArchitectures":  [
+                                                    "x64",
+                                                    "x86"
+                                                ],
+                  "setupPayloadVerified":  true
+              },
+    "verifiedBehaviors":  [
+                              "Capsule internal module/category navigation and last-to-first transitions keep the window visible and project the selected cards.",
+                              "Native mouse navigation passes at 144 DPI in detached and borrowed input modes.",
+                              "Outside clicks close Capsule while reaching the external fixture window.",
+                              "Internal navigation preserves the exact borrowed input lease and does not activate Capsule.",
+                              "Physical hit testing restores the caller DPI awareness context after temporarily switching context."
+                          ],
+    "limitations":  [
+                        "The external TSF target is synthetic; these fixtures are not acceptance tests in every desktop application.",
+                        "Native navigation was tested at 144 DPI; mixed-DPI monitor transitions are not covered by this run."
+                    ],
+    "observations":  [
+                         "Early native fixtures used fixed delays and per-window message filtering. Diagnostic traces showed cancellation completing while the fixture failed to observe the click. The final fixture uses a thread-wide message queue, tagged complete down/up cycles, atomic positioned clicks and a temporary pointer constraint restored after each click. Each architecture subsequently passed three native runs.",
+                         "These are local validation results, not remote CI or a published release."
+                     ],
+    "verifiedAt":  "2026-10-23T20:30:31.1727065+08:00"
+}

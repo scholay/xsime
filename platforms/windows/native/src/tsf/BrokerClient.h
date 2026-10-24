@@ -64,6 +64,9 @@ struct BrokerInputState {
   std::uint16_t highlighted_candidate = 0xffff;
   std::uint16_t page_start = 0;
   std::uint16_t page_size = 0;
+  // False is also the conservative fallback for pre-capability brokers.
+  bool last_page = false;
+  std::uint32_t candidate_page_keys = 0;
   std::wstring composition;
   std::wstring commit_text;
   std::vector<BrokerCandidate> candidates;

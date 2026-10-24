@@ -369,6 +369,14 @@ inline void PaintSettingsShell(HDC dc, const SettingsLayout& layout,
       help = px({layout.body.left, layout.plugin_edit[i].top - 28, layout.body.right, layout.plugin_edit[i].top - 6});
       DrawTextW(dc, titles[i], -1, &help, DT_LEFT | DT_WORDBREAK);
     }
+  } else if (draft.page == SettingsPage::kBuffer && draft.subpage == 2) {
+    SelectObject(dc, fonts.body);
+    SetTextColor(dc, ToColorRef(p.text_secondary));
+    const wchar_t* titles[] = {L"唤出 / 关闭设置（全局）", L"唤出 / 关闭 Capsule（全局）", L"直接框选截图（全局）"};
+    for (int i = 0; i < 3; ++i) {
+      RECT label = px({layout.body.left, layout.global_edit[i].top - 26, layout.body.right, layout.global_edit[i].top - 3});
+      DrawTextW(dc, titles[i], -1, &label, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    }
   } else if (draft.page == SettingsPage::kBuffer) {
     SelectObject(dc, fonts.body);
     SetTextColor(dc, ToColorRef(p.text_secondary));
@@ -399,7 +407,7 @@ inline void PaintSettingsShell(HDC dc, const SettingsLayout& layout,
     SelectObject(dc, fonts.body); SetTextColor(dc, ToColorRef(p.text_secondary));
     RECT note = px({layout.body.left,layout.body.top,layout.body.right,layout.body.top+145});
     DrawTextW(dc, draft.page == SettingsPage::kCapsule
-      ? L"Alt+Shift+V 唤出后即可搜索和选择卡片，点击快捷栏外取消并关闭。\n双击使用卡片，复制按钮只复制并关闭。\n\n自动记录默认开启，支持文字、图片和文件；暂停期间不收录，恢复后只记录新的复制。\n\nAlt+Shift+4 框选截图；录屏、OCR、多图拼接、云同步和 TOTP 尚未实现。"
+      ? L"唤出后即可搜索和选择卡片，点击快捷栏外取消并关闭。\n双击使用卡片，复制按钮只复制并关闭。\n\n自动记录默认开启，支持文字、图片和文件；暂停期间不收录，恢复后只记录新的复制。\n\n唤出与框选截图快捷键可在 Buffer › 窗口与全局快捷键修改；录屏、OCR、多图拼接、云同步和 TOTP 尚未实现。"
       : L"终端、对话和收件在独立工作区中管理。\n\nAlt+Shift+M 打开 Mailbox；窗口内“模块”可启停工作区。关闭窗口保留终端；只有“结束”或退出输入法才停止进程。", -1, &note, DT_LEFT | DT_WORDBREAK);
     if (draft.page == SettingsPage::kCapsule) {
       RECT cleanup = px({layout.body.left,layout.body.top+256,layout.body.right,layout.body.top+374});
@@ -418,6 +426,10 @@ inline void PaintSettingsShell(HDC dc, const SettingsLayout& layout,
       text = draft.subpage == 0 ? text.substr(0, version_end)
                                : text.substr(version_end + 1);
     DrawTextW(dc, text.c_str(), -1, &about, DT_LEFT | DT_WORDBREAK);
+    if (draft.page == SettingsPage::kAbout && draft.subpage == 0) {
+      RECT note = px({layout.body.left, layout.body.top + 212, layout.body.right, layout.body.top + 302});
+      DrawTextW(dc, L"重启会结束临时任务并清空临时 Buffer；学习词库、设置与收藏保留。\n已打开应用中的输入法 DLL 需由该应用重新加载。\n重新安装请运行可信的 XSIME 安装包；此处暂不提供自动重装。", -1, &note, DT_LEFT | DT_WORDBREAK);
+    }
   }
 
   const DipRect* fields[] = {&layout.font_edit, &layout.candidate_count_edit, &layout.hotkey_edit, &layout.send_edit, &layout.plugin_edit[0], &layout.plugin_edit[1],
@@ -430,6 +442,11 @@ inline void PaintSettingsShell(HDC dc, const SettingsLayout& layout,
                   ToColorRef(p.surface));
     StrokeRoundRect(dc, box, MulDiv(8, static_cast<int>(dpi), 96),
                     ToColorRef(p.border), 1);
+  }
+  for (const auto& field : layout.global_edit) {
+    if (field.width() <= 0) continue;
+    FillRoundRect(dc, px(field), MulDiv(8, static_cast<int>(dpi), 96), ToColorRef(p.surface));
+    StrokeRoundRect(dc, px(field), MulDiv(8, static_cast<int>(dpi), 96), ToColorRef(p.border), 1);
   }
 
   SelectObject(dc, fonts.hint);

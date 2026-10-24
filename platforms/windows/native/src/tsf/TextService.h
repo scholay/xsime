@@ -95,6 +95,9 @@ class TextService final : public ITfTextInputProcessorEx,
                              const BrokerInputState& state,
                              TfEditCookie cookie = TF_INVALID_EDIT_COOKIE) noexcept;
   void SelectCandidate(std::size_t index) noexcept;
+  void PageCandidate(int delta) noexcept;
+  void MoveCandidatePage(ITfContext* context, int delta,
+                         TfEditCookie cookie = TF_INVALID_EDIT_COOKIE);
   bool IsFocusedContext() const noexcept;
   HRESULT CommitCandidate(ITfContext* context, CandidateNavigation::Selection selection,
                           TfEditCookie cookie = TF_INVALID_EDIT_COOKIE) noexcept;
@@ -112,7 +115,9 @@ class TextService final : public ITfTextInputProcessorEx,
   void PublishCandidateUI(ITfContext*, const CandidateSnapshot&);
   HRESULT CandidateUIAction(CandidateUIElement::Action, UINT);
   RECT QueryCaretRect(ITfContext* context,
-                      TfEditCookie cookie = TF_INVALID_EDIT_COOKIE) noexcept;
+                      TfEditCookie cookie = TF_INVALID_EDIT_COOKIE,
+                      bool composition_start = false) noexcept;
+  RECT candidate_anchor_{};
   void ClearCompositionPointer() noexcept;
   bool BindContext(ITfContext*) noexcept;
   void SetCapture(bool enabled);
@@ -147,6 +152,7 @@ class TextService final : public ITfTextInputProcessorEx,
   CandidateNavigation candidate_navigation_;
   std::bitset<256> candidate_owned_keys_;
   std::uint64_t candidate_epoch_ = 0;
+  bool candidate_compact_paged_ = false;
 
   std::atomic_ulong reference_count_{1};
   ITfThreadMgr* thread_manager_ = nullptr;

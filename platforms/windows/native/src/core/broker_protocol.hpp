@@ -113,6 +113,8 @@ inline constexpr std::uint64_t kKeyRoutingCapability = 1ULL << 2;
 // Pending physical chords need command routing before librime has preedit.
 // Old DLLs retain librime's legacy chord composer until they are restarted.
 inline constexpr std::uint64_t kPendingChordCapability = 1ULL << 3;
+// Last-page metadata is opt-in so an old, still-loaded DLL can decode updates.
+inline constexpr std::uint64_t kCandidatePagingCapability = 1ULL << 4;
 
 struct ClientHello {
   std::uint32_t process_id = 0;
@@ -238,7 +240,24 @@ enum class InputStateFlags : std::uint32_t {
   kModifierSnapshot = 1U << 4,
   kAsciiMode = 1U << 5,
   kPendingChord = 1U << 6,
+  kLastCandidatePage = 1U << 7,
+  kMinusPageUp = 1U << 8,
+  kMinusPageDown = 1U << 9,
+  kMinusPagingOnly = 1U << 10,
+  kEqualPageUp = 1U << 11,
+  kEqualPageDown = 1U << 12,
+  kEqualPagingOnly = 1U << 13,
 };
+
+inline constexpr std::uint32_t kCandidatePageKeyFlags =
+    static_cast<std::uint32_t>(InputStateFlags::kMinusPageUp) |
+    static_cast<std::uint32_t>(InputStateFlags::kMinusPageDown) |
+    static_cast<std::uint32_t>(InputStateFlags::kMinusPagingOnly) |
+    static_cast<std::uint32_t>(InputStateFlags::kEqualPageUp) |
+    static_cast<std::uint32_t>(InputStateFlags::kEqualPageDown) |
+    static_cast<std::uint32_t>(InputStateFlags::kEqualPagingOnly);
+inline constexpr std::uint32_t kCandidatePagingStateFlags =
+    static_cast<std::uint32_t>(InputStateFlags::kLastCandidatePage) | kCandidatePageKeyFlags;
 
 inline constexpr std::uint32_t kKnownInputStateFlags =
     static_cast<std::uint32_t>(InputStateFlags::kHandled) |
@@ -247,7 +266,8 @@ inline constexpr std::uint32_t kKnownInputStateFlags =
     static_cast<std::uint32_t>(InputStateFlags::kBufferCapture) |
     static_cast<std::uint32_t>(InputStateFlags::kModifierSnapshot) |
     static_cast<std::uint32_t>(InputStateFlags::kAsciiMode) |
-    static_cast<std::uint32_t>(InputStateFlags::kPendingChord);
+    static_cast<std::uint32_t>(InputStateFlags::kPendingChord) |
+    kCandidatePagingStateFlags;
 inline constexpr std::uint16_t kNoCandidateSelected = 0xffffU;
 
 // One atomic response contains every text mutation for a key event. Wire text

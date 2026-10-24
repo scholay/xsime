@@ -21,6 +21,10 @@ struct FakeDocument {
   ITfComposition* active_composition = nullptr;
   ITfCompositionSink* composition_sink = nullptr;
   RECT caret_rect{120, 180, 122, 204};
+  // Opt-in text geometry: each ACP advances by this many pixels. This makes
+  // the selection caret and a collapsed composition start distinguishable.
+  LONG range_advance = 0;
+  LONG selection_acp = -1;
   // Chromium-family hosts can refuse every caret source while composing.
   // When set, GetTextExt reports failure so cached candidate placement is used.
   bool refuse_caret = false;
