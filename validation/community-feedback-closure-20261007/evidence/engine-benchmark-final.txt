@@ -1,8 +1,0 @@
-BENCHMARK real JNI / serial worker; private schemas; milliseconds
-STARTUP resourcePrepare=61.047344 ms libraryLoad=7.110052 ms nativeInitialize=0.095000 ms existingResources=true
-pinyin {"unit":"ms","count":1000,"mean":0.039024574,"p50":0.041407,"p95":0.053802,"max":0.164531} keySerial={"unit":"ms","count":1000,"mean":0.064138183,"p50":0.065416,"p95":0.084584,"max":0.225052} candidateCommit={"unit":"ms","count":200,"mean":0.012808305,"p50":0.012916,"p95":0.015052,"max":0.03302}
-natural_code {"unit":"ms","count":800,"mean":0.1544893825,"p50":0.137291,"p95":0.285104,"max":0.533854} keySerial={"unit":"ms","count":800,"mean":0.1937966775,"p50":0.165365,"p95":0.329844,"max":0.665156} candidateCommit={"unit":"ms","count":200,"mean":0.01655206,"p50":0.017031,"p95":0.022187,"max":0.036875}
-wubi {"unit":"ms","count":400,"mean":0.028680217499999997,"p50":0.029219,"p95":0.039271,"max":0.088698} keySerial={"unit":"ms","count":400,"mean":0.0511432275,"p50":0.051771,"p95":0.066511,"max":0.327083} candidateCommit={"unit":"ms","count":200,"mean":0.009774264999999999,"p50":0.009532,"p95":0.012084,"max":0.072969}
-nine_key_pinyin {"unit":"ms","count":1000,"mean":0.15723736600000002,"p50":0.142448,"p95":0.235261,"max":1.470521} keySerial={"unit":"ms","count":1000,"mean":0.235772504,"p50":0.218437,"p95":0.329792,"max":1.582396} candidateCommit={"unit":"ms","count":200,"mean":0.04461898,"p50":0.04151,"p95":0.052084,"max":0.278593}
-REPORT files/engine-benchmark-1791334433017.json
-PASS BENCHMARK 4 schemas, 200 measured phrases per schema, 20 warmup phrases per schema

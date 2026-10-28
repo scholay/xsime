@@ -1,8 +1,0 @@
-Internal ctest changing into directory: /tmp/xsime-ime-build
-Test project /tmp/xsime-ime-build
-    Start 43: mailbox-session-protection
-1/1 Test #43: mailbox-session-protection .......   Passed    2.72 sec
-
-100% tests passed, 0 tests failed out of 1
-
-Total Test time (real) =   2.72 sec

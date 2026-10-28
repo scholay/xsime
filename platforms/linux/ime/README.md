@@ -6,8 +6,7 @@ XSIME `rime-data` set. It lives next to the existing
 [Linux data preview](../README.md), which still installs into stock
 `fcitx5-rime` / `ibus-rime` and is unchanged.
 
-This is step 3 of the Linux port (IME + Default Buffer + Capsule rail).
-The [30-task Linux parity plan](../PARITY.md) now tracks the full desktop port.
+Desktop behavior is checked using the [acceptance checklist](../../../docs/platforms/linux/acceptance.md).
 The host has a compiled plugin registry with capability checks and revocable
 task grants. Fcitx5 configuration can disable the existing Capsule notes module:
 disabling closes/disarms its rail without deleting notes or affecting typing.
@@ -20,17 +19,17 @@ uninstalls revoke running jobs and preserve user content. See the
 `rimes-settings` adds a native settings entry for plugin/package management,
 private provider credentials, themes and live Buffer preferences. The settings
 surface is undergoing macOS pixel comparison; unported module pages are marked
-as pending. See [the visual acceptance contract](../VISUAL-PARITY.md).
+as pending. See [the visual acceptance contract](../../../docs/platforms/linux/visual-parity.md).
 The translation card also provides pinned offline Chinese/English resource
 installation, status, cancellation and repair; see the
 [resource instructions](../runtime/README.md#local-translation-resources).
-Its Python 3.12 runtime is included in deb dependencies. Downloaded resources
+Its Python runtime is supplied through the package dependencies. Downloaded resources
 remain in the user directory when either source or deb installation is removed.
 The [ChatGPT/Codex connector](../runtime/README.md#chatgpt--codex-cli) adds explicit text generation, browser login and persistent Mailbox image tasks.
 The optional [Claude Code connector](../runtime/README.md#claude-code-cli) provides explicit streaming text requests with native login, model and effort controls.
 The [Mailbox host](../mailbox/README.md) now provides independent navigation, persistent threads, local notes, reviewed Buffer/Capsule transfers and a loopback HTTP/MCP gateway. It also supports persistent AI conversations, real PTY Shell/Codex/Claude sessions and explicit UUID-associated file collection. Buffer and Capsule behavior are specified in
-[`../buffer/SPEC.md`](../buffer/SPEC.md) and
-[`../capsule/SPEC.md`](../capsule/SPEC.md). Hooks live in
+[`docs/platforms/linux/buffer-spec.md`](../../../docs/platforms/linux/buffer-spec.md) and
+[`docs/platforms/linux/capsule-spec.md`](../../../docs/platforms/linux/capsule-spec.md). Hooks live in
 `src/engine/rime_hooks.hpp`.
 The [ordinary chord extension](../chord/README.md) provides FlyYao timed batches,
 exact-context cross-batch pairing, custom keymaps, local practice and the two
@@ -76,15 +75,15 @@ statistics files, alongside user dictionaries and learning records.
 macOS-only behaviour that is **not** reproduced here: custom candidate chrome,
 Capsule iCloud, advanced capture editing and audio,
 Buffer stream/music plugins,
-IMK `Delivery.insert`. See [`../buffer/SPEC.md`](../buffer/SPEC.md) and
-[`../capsule/SPEC.md`](../capsule/SPEC.md) for the explicit gap lists.
+IMK `Delivery.insert`. See [`docs/platforms/linux/buffer-spec.md`](../../../docs/platforms/linux/buffer-spec.md) and
+[`docs/platforms/linux/capsule-spec.md`](../../../docs/platforms/linux/capsule-spec.md) for the explicit gap lists.
 Local Chinese/English translation, incremental units and OpenAI-compatible
 streaming requests are implemented; their desktop and visual acceptance is
 tracked separately in the parity plan.
 
 ### Article practice
 
-The bundled typing-speed extension provides **打字测速 → 文章练习 / 成绩历史** and a **统计 → 跟打成绩** entry. Eight native Chinese/English articles use committed text for scoring; preedit, physical keys, correction, composition backspaces and accepted chord batches are handled separately. Practice stays separate from daily statistics. Aggregate scores in `stats/typing_tests.json` survive both deb and source removal. See [practice usage](../typing-practice/README.md) and [validation boundaries](../typing-practice/VALIDATION.md).
+The bundled typing-speed extension provides **打字测速 → 文章练习 / 成绩历史** and a **统计 → 跟打成绩** entry. Eight native Chinese/English articles use committed text for scoring; preedit, physical keys, correction, composition backspaces and accepted chord batches are handled separately. Practice stays separate from daily statistics. Aggregate scores in `stats/typing_tests.json` survive both deb and source removal. See [practice usage](../typing-practice/README.md) and [desktop acceptance](../../../docs/platforms/linux/acceptance.md#extensions).
 
 
 ## Desktop launch and global shortcuts
@@ -124,7 +123,7 @@ and removal of the application.
 `rimes-launch --retry` retries registration. The launcher accepts fixed action
 names only. Source uninstall and deb removal include the new launcher and menu
 entries while preserving user preferences, dictionaries and learning data.
-See [shortcut validation and desktop limits](../runtime/SHORTCUTS-VALIDATION.md).
+See [desktop acceptance](../../../docs/platforms/linux/acceptance.md#desktop).
 
 ## Importing source schemes
 
@@ -152,7 +151,7 @@ release by polling every 50 ms; a click before the IME receives that message
 can still consume the pending drag. The 0–10 ms physical-release case in
 [#44](https://github.com/scholay/xsime/issues/44) was accepted by the maintainer
 on 2026-10-16. The Fcitx regression covers command receipt, not physical pointer
-release. See the timing matrix in [`../buffer/MANUAL-TEST.md`](../buffer/MANUAL-TEST.md).
+release. See the timing matrix in [`docs/platforms/linux/acceptance.md#buffer`](../../../docs/platforms/linux/acceptance.md#buffer).
 
 ## Dependencies
 
@@ -322,8 +321,8 @@ their bottom edge when the second rail opens. Positions live in the private
 user-data `windows/` directory and survive upgrades and uninstall. A compositor
 without layer-shell uses XWayland when available. Without either placement
 backend, the compositor controls the window; return to the input field and
-reopen Buffer to capture it. See [window validation](../runtime/WINDOWS-VALIDATION.md)
-for tested environments and outstanding desktop/pixel comparisons.
+reopen Buffer to capture it. Use the [desktop acceptance checklist](../../../docs/platforms/linux/acceptance.md#desktop)
+to record placement and focus behavior on each target environment.
 
 ## Packaging
 
@@ -343,7 +342,7 @@ fonts (including emoji). GStreamer base/good/PipeWire plugins and
 `xdg-desktop-portal` are runtime dependencies for capture. Install the portal
 backend appropriate to the desktop; GTK alone does not provide screen recording.
 A wlroots session can use `xdg-desktop-portal-wlr`. See
-[capture validation](../capsule/CAPTURE-VALIDATION.md) for tested paths and limits.
+[Capsule usage](../capsule/README.md) and the [desktop checklist](../../../docs/platforms/linux/acceptance.md#capsule) for capture behavior and checks.
 Flatpak notes are in
 `packaging/flatpak/README.md`. The data preview tarball is a separate artifact
 and stays data-only.
@@ -406,7 +405,7 @@ the controlled old-version fixture. The script refuses an already installed
    seat-less compositor is a documented limitation
 7. A separate strict Xvfb/Xfwm4 suite reads actual GTK/Qt commits, xterm PTY
    input and optional Firefox DOM values, including Buffer and password-field
-   checks; see [desktop acceptance](../validation/desktop-acceptance.md).
+   checks; see [desktop acceptance](../../../docs/platforms/linux/acceptance.md#desktop).
 
 GitHub Actions workflow `.github/workflows/linux-ime.yml` runs the same
 sequence on `ubuntu-latest`. It is **not** a macOS merge/release gate.

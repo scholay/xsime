@@ -7,8 +7,8 @@
 
 namespace rimes::windows::ui {
 
-// Verbatim sRGB values from reference themes.json (SHA-256 recorded in
-// MACOS-VISUAL-PARITY.md). No runtime file dependency.
+// Theme definitions correspond to DesignSystem/src/design-system/tokens/themes.json.
+// No runtime file dependency.
 enum class ThemeId : std::uint8_t { kNight = 0, kDay, kQuiet, kRasta };
 
 inline constexpr const char* kThemeIds[] = {"night", "day", "quiet", "rasta"};

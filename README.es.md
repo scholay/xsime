@@ -9,7 +9,7 @@ Admite esquemas de pinyin completo, doble pinyin, Shengbi, Wubi e inglés, adem�
 
 Las cinco plataformas incluyen **Wubi 86** y **XSIME Wubi**. Wubi 86 permite buscar con `z` seguido de pinyin y muestra los códigos Wubi entre paréntesis junto a los candidatos. XSIME Wubi busca Wubi y pinyin sin cambiar de modo y prioriza las coincidencias Wubi exactas. Ambos esquemas confirman automáticamente un candidato Wubi único tras cuatro teclas; los códigos ambiguos y las búsquedas en pinyin mantienen la selección de candidatos. Véase la [guía Wubi](docs/wubi.md).
 
-> **XSIME** es el nombre unificado del producto, proyecto y arquitectura: **犀术IME** en chino simplificado y **犀術IME** en chino tradicional (antes RIMES / Lingxi IME). Las aplicaciones publicadas, las fichas de las tiendas y los registros se actualizarán por separado. Véase la [política de nombres y compatibilidad](BRANDING.md).
+> **XSIME** es el nombre unificado del producto, proyecto y arquitectura: **犀术IME** en chino simplificado y **犀術IME** en chino tradicional (antes RIMES / Lingxi IME). Las aplicaciones publicadas, las fichas de las tiendas y los registros se actualizarán por separado. Véase la [política de nombres y compatibilidad](docs/development/branding.md).
 
 ## Vídeos
 
@@ -98,20 +98,13 @@ cd xsime
 
 ## Documentación
 
-| Documento | Contenido |
-|---|---|
-| [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md) | Arquitectura global vigente. Léela primero si retomas el desarrollo |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Contratos históricos de P1/P2 y problemas encontrados |
-| [PLUGIN-CONFIGURATION.md](PLUGIN-CONFIGURATION.md) | Configuración declarativa de complementos |
-| [UNSIGNED-PREVIEW.md](UNSIGNED-PREVIEW.md) | Descarga, verificación e instalación segura de la vista previa sin firmar |
-| [CROSS-PLATFORM-PREVIEW.md](CROSS-PLATFORM-PREVIEW.md) | Límites y comprobaciones de la vista previa de esquemas para Windows / Linux |
-| [platforms/ios/README.md](platforms/ios/README.md) | Teclado y app principal de iOS |
-| [platforms/windows/native/README.md](platforms/windows/native/README.md) | Método de entrada TSF nativo de Windows |
-| [platforms/linux/ime/README.md](platforms/linux/ime/README.md) | Método de entrada Fcitx5 de Linux, Buffer y Capsule |
-| [RELEASE.md](RELEASE.md) | Proceso de publicación: canales, un comando, ritmo y reglas de versión |
-| [RELEASE-REFERENCE.md](RELEASE-REFERENCE.md) | Referencia técnica: firma, instalador, actualización dentro de la app, CI |
-| [RELEASE-HISTORY.md](RELEASE-HISTORY.md) | Canales de publicación cerrados, la migración del repositorio antiguo y el cambio de nombre |
-| [CHANGELOG.md](CHANGELOG.md) | Cambios por versión, generados a partir de los GitHub Releases públicos y de los mensajes de commit |
+| Documentación | Contenido |
+| --- | --- |
+| [Índice de documentación](docs/README.md) | Guías vigentes y entradas por plataforma |
+| [Arquitectura del sistema](docs/architecture/system.md) | Entrada nativa, Buffer, código compartido y datos |
+| [Desarrollo y mantenimiento](docs/development/maintenance.md) | Rama principal, plugins, CI y validación |
+| [Proceso de publicación](docs/release/README.md) | Compilación, firma, actualizaciones y distribución |
+| [Historial de cambios](CHANGELOG.md) | Cambios de versiones publicadas |
 
 ## Actualizaciones de la aplicación
 
@@ -123,7 +116,7 @@ iOS comprueba la versión disponible en la tienda y abre App Store para descarga
 
 Los cuatro instaladores comparten una publicación `vX.Y.Z` en [`scholay/xsime`](https://github.com/scholay/xsime/releases/latest). CI sube y vuelve a descargar todos los paquetes antes de publicar el archivo común `update-manifest.json`. Las versiones preliminares quedan fuera de este canal estable. iOS utiliza un flujo separado `ios-vX.Y.Z` para la tienda.
 
-Los mantenedores publican cuando pasan los cinco flujos de CI de main. Consulta [RELEASE.md](RELEASE.md) y [CHANGELOG.md](CHANGELOG.md):
+Los mantenedores publican cuando pasan los cinco flujos de CI de main. Consulta [docs/release/README.md](docs/release/README.md) y [CHANGELOG.md](CHANGELOG.md):
 
 ```bash
 ./scripts/release.sh stable --dry-run  # comprobar versiones, CI de cinco plataformas y requisitos
@@ -157,4 +150,4 @@ El código propio de XSIME usa [Apache License 2.0](LICENSE). El alcance y las a
 
 La entrada de chino se basa en el [motor Rime (librime)](https://github.com/rime/librime). Véanse [NOTICE](NOTICE) para las atribuciones y [ATTRIBUTION.md](ATTRIBUTION.md) para ejemplos de reconocimiento voluntario. Estas recomendaciones no añaden condiciones a la licencia.
 
-Los componentes de terceros, esquemas, diccionarios y datos de Lua/OpenCC conservan sus propias licencias y atribuciones; véanse [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [LICENSES](LICENSES/) y `rime-data/licenses/`. Los plugins oficiales gratuitos se mantienen en [rimes-plugins](https://github.com/scholay/rimes-plugins).
+Los componentes de terceros, esquemas, diccionarios y datos de Lua/OpenCC conservan sus propias licencias y atribuciones; véanse [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [LICENSES](LICENSES) y `rime-data/licenses/`. Los plugins oficiales gratuitos se mantienen en [rimes-plugins](https://github.com/scholay/rimes-plugins).

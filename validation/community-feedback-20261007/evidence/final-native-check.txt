@@ -1,4 +1,0 @@
-PASS 26 pinned Lucide SVG/VectorDrawable hashes and complete packaged license
-arm64-v8a ELF LOAD alignment: [16384, 16384, 16384]
-x86_64 ELF LOAD alignment: [16384, 16384, 16384]
-PASS: precompiled resources, schemas, licenses, ABI libraries and 16 KB ELF alignment

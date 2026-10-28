@@ -3,7 +3,7 @@
 感谢你帮助改进 RIMES。提交代码前，请先在最新 `main` 上复现问题，并确认没有把用户输入正文、
 API 密钥、剪贴板内容或本机路径放进 Issue、日志和测试夹具。
 
-统一分支、各平台独立构建和发布的日常约定见 [MAINTENANCE.md](MAINTENANCE.md)。
+统一分支、各平台独立构建和发布的日常约定见 [docs/development/maintenance.md](docs/development/maintenance.md)。
 本地整合可以领先 `origin/main`；没有明确授权时，不推送、不创建发布 tag、不安装。
 
 ## 报告问题
@@ -13,31 +13,20 @@ API 密钥、剪贴板内容或本机路径放进 Issue、日志和测试夹具�
 - 输入法行为必须区分“源码 smoke 通过”和“安装后的真实宿主验证”。候选窗、焦点、secure input、
   输入源切换和跨 Space 问题不能只凭单元测试宣布解决。
 - 附日志前先脱敏。RIMES 的日志不得包含输入正文、候选正文、剪贴板内容、token 或密钥。
+- 验收截图、对比图、重复截图和原始日志不提交到 Git；保留在本地或 CI 附件中。
+  仓库保留验收结论、来源、哈希、结构化摘要和复现脚本，具体见
+  [验收资料存放规则](validation/README.md)。不要用 `git add -f` 绕过附件忽略规则。
 
 ## 开发与验证
 
-```bash
-swift build -c debug
-python3 -B scripts/sync-buffer-plugin-catalog.py --check
-python3 scripts/lint-log-privacy.py
-```
+先阅读[文档索引](docs/README.md)、[系统架构](docs/architecture/system.md)和
+[维护规则](docs/development/maintenance.md)。产品构建与自动测试在远端 CI 执行；
+本地文档或静态检查不能替代平台构建和真实宿主验收。
 
-按改动范围运行对应 smoke；Buffer 与焦点改动至少运行：
+提交前检查改动范围、相对链接和 `git diff --check`。按变更涉及的平台选择 CI，
+记录确切提交、自动检查结果和仍需实际设备验证的场景。
 
-```bash
-BIN="$(swift build --show-bin-path)/RimeBuffer"
-"$BIN" schema-smoke
-"$BIN" buffer-smoke
-"$BIN" buffer-window-smoke
-"$BIN" clipboard-history-smoke
-"$BIN" settings-routing-smoke
-```
-
-设计系统改动在 `DesignSystem/` 运行 `npm run check`。Windows/Linux 数据预览改动运行：
-
-```bash
-python3 -m unittest discover -s scripts/platform-preview -p 'test_*.py'
-```
+说明优先补充现有专题；不要把临时排查过程、逐次构建流水和已完成的发布准备另存成文档。
 
 ## Pull Request
 

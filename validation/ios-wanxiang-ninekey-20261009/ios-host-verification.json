@@ -923,7 +923,12 @@
     }
   ],
   "errorLevelLogs": [],
-  "stderr": "       11.39 real        10.05 user         0.64 sys\n          1358069760  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n              166520  page reclaims\n                7678  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                 320  voluntary context switches\n               49425  involuntary context switches\n        120464904309  instructions retired\n         40922683306  cycles elapsed\n          1135740464  peak memory footprint\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
   "passed": true,
-  "deployedBytes": 217752282
+  "deployedBytes": 217752282,
+  "stderrArtifact": {
+    "path": "ios-host-verification.stderr.log",
+    "bytes": 802,
+    "sha256": "ed5e93e4fc3277da917d23053924b6aa183b23e960c9a7f988dd27c96d0aa5ea",
+    "storage": "local-only; excluded from Git"
+  }
 }

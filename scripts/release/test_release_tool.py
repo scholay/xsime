@@ -414,7 +414,7 @@ class FormalPackageOnlyWorkflowTests(unittest.TestCase):
         cls.publish_job = workflow.split("  publish_staged_release:", 1)[1]
         cls.package_script = (root / "scripts/make-pkg.sh").read_text()
         cls.rehearsal_script = (root / "scripts/rehearse-release-pkg.sh").read_text()
-        cls.reference_doc = (root / "RELEASE-REFERENCE.md").read_text()
+        cls.reference_doc = (root / "docs/release/reference.md").read_text()
 
     def test_formal_job_notarizes_only_the_final_package(self):
         self.assertIn('notarize-macos.sh pkg "RIMES-${VERSION}.pkg"', self.signing_job)

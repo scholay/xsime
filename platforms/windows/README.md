@@ -1,6 +1,6 @@
 # XSIME Windows Data / Input-Schemes Preview
 
-原生犀术IME开发与日用安装请从 [Windows 接手指南](DEVELOPMENT-HANDOFF.md)、[TSF/Broker 开发说明](native/README.md) 和 [EXE 安装器说明](installer/README.md) 进入。下文仅介绍较早的 Weasel 词库预览通道。
+原生犀术IME开发与日用安装请从 [TSF/Broker 开发说明](native/README.md) 和 [EXE 安装器说明](installer/README.md) 进入。下文仅介绍较早的 Weasel 词库预览通道。
 
 This is an **experimental data preview for the official Weasel input method**. It packages XSIME's current Rime schemas, dictionaries, OpenCC data, and Lua modules so Windows users can try the input schemes with Weasel.
 

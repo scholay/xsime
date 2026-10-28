@@ -124,7 +124,7 @@ jobs:
           # macOS burns these ids into the protected TIS preferences: any drift
           # orphans the old rows and stacks duplicate "RIMES" entries in
           # System Settings (this bit us across the 0.3–0.4 renames — see
-          # RELEASE.md). Never change these without a migration story.
+          # docs/release/README.md). Never change these without a migration story.
           # The RIMES rename (com.isaac.inputmethod.RimeBuffer / ETInput ->
           # com.scholay.inputmethod.isaac / RIMES) carries one: rimes-update-handoff
           # hands the session off from the legacy source ids, preinstall and

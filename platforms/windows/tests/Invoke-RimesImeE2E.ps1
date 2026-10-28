@@ -82,7 +82,7 @@ function Get-RimesDesktopProbe {
             'Hosted windows-2022 runners usually have a logon session and can start Notepad, but they do not provide a reliable interactive IME desktop.',
             'Registering RimesTsf and SendInput into Notepad/Edge cannot assert preedit, candidates, or 你好 on this image: there is no Chinese language pack, no user IME switch, and TSF often never attaches.',
             'The required typing assertions therefore run in-process: Fake ITfThreadMgr/ITfContext + real TextService + real Broker + pinned rime.dll.',
-            'A later real-hardware pass must cover Win32, browsers, Electron, Office, DPI, password fields, and sleep/lock. See platforms/windows/native/MANUAL-TEST.md.'
+            'A later real-hardware pass must cover Win32, browsers, Electron, Office, DPI, password fields, and sleep/lock. See docs/platforms/windows/manual-testing.md.'
         )
     }
 }

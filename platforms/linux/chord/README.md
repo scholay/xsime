@@ -27,4 +27,4 @@
 
 目录和文件分别使用 `0700`、`0600` 权限。损坏的数据会保留并报告错误，避免覆盖；并发编辑会检查版本。`apt remove fcitx5-rimes` 和源码 `uninstall.sh` 都保留这些数据及用户词库。安装和卸载方法见 [完整 Linux 版说明](../ime/README.md)。
 
-实现和测试证据见 [VALIDATION.md](VALIDATION.md)；双端界面和实际桌面验收继续由 [#179](https://github.com/scholay/xsime/issues/179) 跟踪。
+实际宿主检查见 [桌面验收](../../../docs/platforms/linux/acceptance.md#extensions)；双端界面和实际桌面验收继续由 [#179](https://github.com/scholay/xsime/issues/179) 跟踪。

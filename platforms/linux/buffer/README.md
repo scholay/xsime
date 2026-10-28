@@ -1,8 +1,8 @@
 # XSIME Buffer (Linux)
 
 Default and derived Buffer workbench host for the Fcitx5 XSIME addon. Behavior and the
-deliberate macOS gaps are in [SPEC.md](SPEC.md). Real-desktop checks are in
-[MANUAL-TEST.md](MANUAL-TEST.md).
+deliberate macOS gaps are in [the behavior specification](../../../docs/platforms/linux/buffer-spec.md). Real-desktop checks are in
+[the desktop checklist](../../../docs/platforms/linux/acceptance.md#buffer).
 
 ## Layout
 
@@ -52,7 +52,7 @@ platforms/linux/ime/tests/e2e/e2e.sh --build-dir platforms/linux/ime/build
 `rimes-buffer --render DIRECTORY` renders five themes and nine states using the
 actual GTK workbench without connecting to a live socket. CTest checks the
 standard → dual → exchange → restored dimensions. The native geometry and
-colors are generated from macOS sources; see [visual acceptance](../VISUAL-PARITY.md).
+colors are generated from macOS sources; see [visual acceptance](../../../docs/platforms/linux/visual-parity.md).
 
-The selector lists only enabled compiled adapters. The host foundation does not
-make pending translation or AI ports available. Their issues remain open.
+The selector lists only enabled compiled adapters; catalog entries alone do not
+make a plugin available.

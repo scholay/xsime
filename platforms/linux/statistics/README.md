@@ -32,4 +32,4 @@
 
 “导出…”只导出两份聚合，不包含设置和诊断信息。“清空当天键频…”只影响当前选中日期的键频；“清空键频历史…”与“清空输入趋势…”互相独立，均需确认。词库、输入学习、笔记及文章测速成绩不受影响。
 
-推荐从项目同一 `v*` Release 安装 `fcitx5-rimes_<version>_<arch>.deb`，使用 `sudo apt remove fcitx5-rimes` 卸载。源码安装使用同目录的 `ime/scripts/uninstall.sh`；两种卸载都保留这些用户数据。完整安装说明见 [Linux IME README](../ime/README.md)，验证及尚未通过的视觉/桌面验收见 [VALIDATION.md](VALIDATION.md)。
+推荐从项目同一 `v*` Release 安装 `fcitx5-rimes_<version>_<arch>.deb`，使用 `sudo apt remove fcitx5-rimes` 卸载。源码安装使用同目录的 `ime/scripts/uninstall.sh`；两种卸载都保留这些用户数据。完整安装说明见 [Linux IME README](../ime/README.md)，真实宿主与视觉检查见 [桌面验收](../../../docs/platforms/linux/acceptance.md#extensions)。

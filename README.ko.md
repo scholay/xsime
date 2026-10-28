@@ -9,7 +9,7 @@
 
 다섯 플랫폼 모두 **오필 86**과 **XSIME Wubi**를 제공합니다. 오필 86에서는 `z` 다음에 완전 병음을 입력해 글자를 찾을 수 있으며, 후보 옆 괄호에 오필 코드를 표시합니다. XSIME Wubi는 모드 전환 없이 오필과 병음을 검색하고 정확히 일치하는 오필을 우선합니다. 두 방안 모두 네 글자 오필 코드의 후보가 하나뿐이면 자동 확정하며, 중복 코드와 병음 검색에서는 후보 선택을 유지합니다. [오필 안내](docs/wubi.md)를 참고하세요.
 
-> 제품·프로젝트·아키텍처 이름은 **XSIME**, 중국어 간체는 **犀术IME**, 번체는 **犀術IME**입니다(이전 RIMES / Lingxi IME). 기존 앱, 스토어 정보와 등록 정보는 별도로 순차 변경합니다. [명명 및 호환성 정책](BRANDING.md)을 참고하세요.
+> 제품·프로젝트·아키텍처 이름은 **XSIME**, 중국어 간체는 **犀术IME**, 번체는 **犀術IME**입니다(이전 RIMES / Lingxi IME). 기존 앱, 스토어 정보와 등록 정보는 별도로 순차 변경합니다. [명명 및 호환성 정책](docs/development/branding.md)을 참고하세요.
 
 ## 시연 영상
 
@@ -99,19 +99,12 @@ cd xsime
 ## 문서
 
 | 문서 | 내용 |
-|---|---|
-| [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md) | 현재의 기준이 되는 전체 구조. 개발을 이어받을 때 먼저 읽는다 |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | P1/P2의 지난 계약과 겪은 문제 |
-| [PLUGIN-CONFIGURATION.md](PLUGIN-CONFIGURATION.md) | 플러그인의 선언적 설정 |
-| [UNSIGNED-PREVIEW.md](UNSIGNED-PREVIEW.md) | 서명되지 않은 미리보기의 다운로드, 검증, 안전한 설치 |
-| [CROSS-PLATFORM-PREVIEW.md](CROSS-PLATFORM-PREVIEW.md) | Windows / Linux 입력 방안 미리보기의 범위와 검증 |
-| [platforms/ios/README.md](platforms/ios/README.md) | iOS 키보드와 본체 앱 |
-| [platforms/windows/native/README.md](platforms/windows/native/README.md) | Windows 네이티브 TSF 입력기 |
-| [platforms/linux/ime/README.md](platforms/linux/ime/README.md) | Linux Fcitx5 입력기, Buffer, Capsule |
-| [RELEASE.md](RELEASE.md) | 릴리스 절차. 채널, 명령 하나, 주기, 버전 규칙 |
-| [RELEASE-REFERENCE.md](RELEASE-REFERENCE.md) | 릴리스 기술 참고. 서명, 설치기, 앱 안 업데이트, CI |
-| [RELEASE-HISTORY.md](RELEASE-HISTORY.md) | 닫힌 릴리스 경로, 옛 저장소 이전, 이름 변경 기록 |
-| [CHANGELOG.md](CHANGELOG.md) | 공개 GitHub Release와 커밋 메시지로 만든 버전별 변경 |
+| --- | --- |
+| [문서 목록](docs/README.md) | 현재 안내와 플랫폼별 진입점 |
+| [시스템 구조](docs/architecture/system.md) | 입력, Buffer, 공유 코드와 데이터 경계 |
+| [개발 및 유지보수](docs/development/maintenance.md) | 주 브랜치, 플러그인 의존성, CI 및 검증 |
+| [릴리스 절차](docs/release/README.md) | 빌드, 서명, 업데이트 및 배포 |
+| [변경 기록](CHANGELOG.md) | 공개 버전별 변경 사항 |
 
 ## 앱 업데이트
 
@@ -123,7 +116,7 @@ iOS는 실제로 제공되는 스토어 버전을 확인한 뒤 App Store에서 
 
 네 플랫폼의 설치 파일은 [`scholay/xsime`](https://github.com/scholay/xsime/releases/latest)의 같은 `vX.Y.Z` Release에 게시됩니다. CI가 모든 파일을 업로드하고 다시 내려받아 확인한 뒤 마지막으로 공통 `update-manifest.json`을 게시합니다. 미리보기 버전은 정식 업데이트에 포함되지 않습니다. iOS는 별도의 `ios-vX.Y.Z` 스토어 배포 절차를 사용합니다.
 
-관리자는 다섯 플랫폼의 main CI가 통과한 뒤 배포합니다. [RELEASE.md](RELEASE.md)와 [CHANGELOG.md](CHANGELOG.md)를 참고하세요.
+관리자는 다섯 플랫폼의 main CI가 통과한 뒤 배포합니다. [docs/release/README.md](docs/release/README.md)와 [CHANGELOG.md](CHANGELOG.md)를 참고하세요.
 
 ```bash
 ./scripts/release.sh stable --dry-run  # 버전, 다섯 플랫폼 CI와 배포 조건 확인
@@ -157,4 +150,4 @@ XSIME 자체 코드는 [Apache License 2.0](LICENSE)을 따릅니다. 적용 범
 
 중국어 입력은 [Rime 입력 엔진(librime)](https://github.com/rime/librime)을 사용합니다. 출처 정보는 [NOTICE](NOTICE), 권장 표시 예시는 [ATTRIBUTION.md](ATTRIBUTION.md)에 있습니다. 표시 권고는 추가 라이선스 조건이 아닙니다.
 
-제3자 구성 요소, 방안, 사전, Lua/OpenCC 데이터는 각자의 라이선스와 저작권 표시를 유지합니다. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [LICENSES](LICENSES/), `rime-data/licenses/`를 참고하십시오. 공식 무료 플러그인은 [rimes-plugins](https://github.com/scholay/rimes-plugins)에서 관리합니다.
+제3자 구성 요소, 방안, 사전, Lua/OpenCC 데이터는 각자의 라이선스와 저작권 표시를 유지합니다. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [LICENSES](LICENSES), `rime-data/licenses/`를 참고하십시오. 공식 무료 플러그인은 [rimes-plugins](https://github.com/scholay/rimes-plugins)에서 관리합니다.

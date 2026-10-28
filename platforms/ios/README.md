@@ -1,40 +1,18 @@
-# XSIME iOS 1.1.5 preparation
+# XSIME iOS
 
-Native iPhone application and keyboard extension (iOS 17+). The local release
-target is **1.1.5 (60)**; both targets inherit the same marketing version and
-build number from `project.yml`. This build applies the XSIME / 犀术IME / 犀術IME
-branding without changing bundle identities or persistent data locations.
-Build 60 replaces provider-brand wording in AI settings with a general-purpose
-interface explanation; the user-configured connection and consent behavior are
-unchanged. See [the rebuild record](AppStore/release-preparation/1.1.5-build60.md)
-for verification and the new submission state.
+Native iPhone app and keyboard extension for iOS 17+. The source version and
+build number are defined in [`project.yml`](project.yml); the app and keyboard
+extension use the same values. See the [1.2.0 release record](../../docs/releases/1.2.0.md)
+for that delivery's channels and verification, and the [release guide](../../docs/platforms/ios/release.md)
+for current build, signing and submission procedures.
 
-Build 60 passed archive, App Store package validation, 82 shared-core tests and
-272 hosted iOS tests (three fixture/capture skips, zero failures). It was uploaded
-at 22:44 and **resubmitted for App Review at 22:50 Asia/Tokyo on 2026-10-15**.
-The submission page confirmed **1.1.5 (60), Waiting for Review**. The updated
-Review Notes and reviewer reply disclose the wording-only change accurately.
-
-Earlier on 2026-10-15, build 59's Release archive and App Store-signed IPA passed package
-verification. The development-signed Release app was installed over 1.1.4 (58)
-on the paired iPhone 15 Pro and launched. The same archive was uploaded through
-Xcode and **1.1.5 (59) was submitted for App Review at 15:47 Asia/Tokyo** with
-three-locale names/copy and the maintainer's six accepted screenshots. The observed
-initial state was **Waiting for Review**. App Review subsequently rejected build
-59 under Guideline 5.0 on October 15; a clarification was sent at 22:27 Asia/Tokyo.
-This is not approval or public release of 1.1.5. Automatic
-release after approval is retained; outstanding physical acceptance limitations
-are not marked passed by submission.
-See [the 1.1.5 preparation record](AppStore/release-preparation/1.1.5.md).
-
-Build 59 was submitted for external TestFlight review at 17:14 Asia/Tokyo
-on 2026-10-15 and assigned to RIMES Community. It was last observed as
-**Waiting for Review**. The [TestFlight invitation](https://testflight.apple.com/join/Kdj9RB4q)
-does not establish availability of build 59 until Apple approves that build.
-Build 60 was not added to an external TestFlight group during this resubmission.
-Earlier acceptance records, including
-[1.1.0](validation/release-1.1.0/README.md) and build 22 in `VALIDATION.md`, are
-historical. See `CI_RELEASE.md` for the separate release workflow.
+Install through the [App Store](https://apps.apple.com/app/id6814620242) or an
+available [TestFlight build](https://testflight.apple.com/join/Kdj9RB4q). The GitHub
+community IPA requires user signing of both the app and keyboard extension.
+Open the app for setup, then enable XSIME in Settings → General → Keyboard →
+Keyboards and select it with the system globe. Basic input and Buffer work
+without Full Access; optional AI, clipboard collection and image export have
+separate access requirements described below.
 
 ## Implemented
 
@@ -194,15 +172,17 @@ historical. See `CI_RELEASE.md` for the separate release workflow.
   endpoint consent, shared device-only Keychain credentials, cancellable streaming.
 - Containing app with keyboard setup, typing playground, profile editor/import/export,
   privacy and license notices. English and simplified Chinese interface, light/dark,
-  compact landscape keyboard. Layout remains provisional until physical thumb testing.
+  compact landscape keyboard.
 
 Excluded: Xiaohe, Yoyo/Zhemei/Hanmei, runtime scripts, Mailbox, Capsule, clipboard
 monitoring, dictation, music, cloud accounts/sync, subscriptions and auto-send.
 
 ## Build
 
-Requires macOS, full Xcode with iOS SDK (Xcode 27 was used locally), CMake, Python
-3.12+, Git and network access for the pinned build dependencies. The script sets
+Product builds and automated tests run through [iOS CI](../../.github/workflows/ios.yml).
+For maintainer-requested local work, use macOS, full Xcode with the iOS SDK, CMake,
+Python 3.12+, Git and the pinned build dependencies; match the Xcode version in
+the workflow. The script sets
 `DEVELOPER_DIR` per process and does not change `xcode-select` or install the macOS IME.
 
 From the repository root:
@@ -221,9 +201,9 @@ entitlements can be exercised; device builds are unsigned until a team is config
 Open `RIMES.xcodeproj` in Xcode after building. `project.yml` is the editable project
 source; regenerate with `Vendor/ios-build/xcodegen/bin/xcodegen generate --spec
 platforms/ios/project.yml` from the repository root. `Shared/` is a local Swift package.
-The project now selects the development team verified during the first physical
-iPhone installation. Other maintainers should select their own team in Xcode or
-override `DEVELOPMENT_TEAM` when building. No credentials or profiles are committed.
+The project uses the existing development team. Other maintainers should select
+their own team in Xcode or override `DEVELOPMENT_TEAM` when building. Credentials
+and profiles are not committed.
 
 For core tests only:
 
@@ -250,7 +230,6 @@ This smoke is not a substitute for keyboard-extension lifecycle or physical test
   gesture reduction, Buffer state, provider requests and bounded SSE decoding.
 - The original desktop encoding algorithm is preserved in a standalone mobile
   port. `scripts/verify.py` enforces source parity and the 427 mapping fixture.
-  Desktop imports/build products are deliberately not restructured in this version.
 - UIKit owns key hit testing, candidate UI and `UITextDocumentProxy` insertion.
   Each controller has one Rime session; initialization happens once per process.
 - The containing app alone writes App Group configuration. A missing/inaccessible
@@ -272,58 +251,29 @@ This smoke is not a substitute for keyboard-extension lifecycle or physical test
   library read access. Password fields and opting-out host apps use the
   system keyboard. No unsupported mechanisms are used to bypass those limits.
 
-## Distribution gate
+## Apple translation
 
-`distribution-audit.json` records evidence and outstanding physical acceptance.
-The Wubi license/source packaging and the publisher's representation about the
-functional default chord mapping are documented in `AppStore/RESOURCE_CLEARANCE.md`.
-App Store Content Rights and review contact are saved. The owner explicitly
-requested release; this does not mark unexecuted physical acceptance checks passed.
-The strict local `--distribution` checklist remains incomplete for those checks.
-Current upload/review state is recorded in `AppStore/README.md`.
+Choose Buffer → Plugins → Apple translation to enable previews for the current
+session, then choose a language pair. Download the on-device language models in
+the containing app first. The paper plane inserts the active result; explicit
+source insertion is available in More. Incomplete translation does not fall back
+to source insertion. Hiding the keyboard clears drafts and disables the active
+plugin for that session.
 
-All planned schemes remain present; public default chord naming preserves existing
-configuration IDs and JSON import. Third-party terms remain bundled.
+The DEBUG-only `--translation-smoke` app argument checks the Apple service using
+synthetic text and writes `Documents/translation-smoke.json`; it does not download
+missing models. Debug metrics contain aggregate presentation/input timings and
+sampled memory, not input text or a claim of end-to-end frame latency.
 
-Once ready, set the real team through `RIMES_DEVELOPMENT_TEAM` and run
-`scripts/archive.sh` from this directory. The script checks the gate before creating
-a release archive; it does not upload. In Xcode Organizer review signing, archive
-contents, privacy declarations and the intended App Store Connect record before
-uploading for internal TestFlight testing. External testing additionally requires
-Beta App Review. Never commit provisioning profiles, certificates or credentials.
+## Distribution and privacy
 
-See `VALIDATION.md` for actual results and remaining acceptance, and
-`PRIVACY.md` for the published policy and saved App Store privacy declarations.
-`RESOURCE_INVENTORY.md` records the source, changes and license obligations of each
-shipped dependency. `TESTFLIGHT.md` contains prepared signing, beta description,
-review notes and device-acceptance handoff materials.
+The [release guide](../../docs/platforms/ios/release.md) documents CI archives,
+Apple signing, App Store submission and community IPA packaging. Store copy and
+versioned update notes live in [AppStore/](AppStore/README.md). Upload, TestFlight
+review, App Review and public availability are separate states.
 
-## Historical physical acceptance: build 5
-
-Version 0.1.0 (5) removes the extra chord-center gutter, makes candidates borderless,
-and moves composition into the host field or Buffer cursor. The equal-size grid,
-Emoji, script toggle and tap/hold insertion from earlier builds remain intact.
-See `validation/build5-status.json` and `validation/build5/COMPARISON.md` for current
-build/device evidence and screenshots. All 25 shared-core and 22 hosted iOS tests
-pass. Eleven layout fixtures use UIKit with a test proxy; actual simulator extension
-captures verify native host typing, Buffer composition and refocusing separately.
-Physical thumb/haptic and cross-app acceptance remain device tasks.
-
-In the tested simulator, a field that has lost focus can retain its visual marked
-underline until it regains focus. XSIME ends stale marking during UIKit's document
-reset before starting new composition; the field's existing text is preserved.
-The earlier refocus failure caused by a temporarily missing document ID is fixed.
-This host-rendering behavior and physical cross-app coverage are recorded in
-`VALIDATION.md`, rather than counted as fully passed device acceptance.
-
-Choose Buffer → Plugins → Apple translation to enable automatic previews for the
-current session. Choose a language pair from the adjacent direction menu. The paper plane inserts the active result; explicit source insertion lives in More; incomplete translation never falls
-back to source insertion. First insertion retires the translated source and keeps
-remaining translated blocks, preventing retranslating already-inserted material.
-Hiding the keyboard clears drafts and disables the active plugin for that session.
-
-The DEBUG-only `--translation-smoke` app argument checks the actual Apple service
-with synthetic Chinese text and writes `Documents/translation-smoke.json`; it does
-not download missing models. Extension debug metrics contain only aggregate
-controller presentation, synchronous input-processing timings and sampled memory,
-not input text. They do not establish OS-level cold-start or frame latency targets.
+[Resource notices](../../docs/platforms/ios/resources.md) describe bundled licenses
+and distribution evidence; [`distribution-audit.json`](distribution-audit.json)
+is checked by the packaging tools. [Privacy disclosure](../../docs/platforms/ios/privacy.md)
+covers local data, Full Access and optional provider requests. Preserve existing
+bundle IDs, App Group, Keychain group and user data when preparing an update.

@@ -13,11 +13,11 @@
 
 五端内置 **五笔 86** 与 **犀术五笔**：五笔 86 输入 `z` 后可用全拼查字（如 `zni`），候选括号提示五笔码；犀术五笔无需切换，直接输入五笔码或全拼，同码时完整五笔匹配优先。两套方案均支持四码唯一自动上屏，重码和拼音查字保留候选。详见[五笔输入](docs/wubi.md)。
 
-> **犀术IME / 犀術IME / XSIME** 是产品、项目与架构的统一名称（原 RIMES / 灵犀输入法 / Lingxi IME）。品牌正在迁移；已发布客户端、商店和备案名称按各自流程更新，不代表已经全部更名。兼容标识与迁移顺序见 [命名规范](BRANDING.md)。
+> **犀术IME / 犀術IME / XSIME** 是产品、项目与架构的统一名称（原 RIMES / 灵犀输入法 / Lingxi IME）。品牌正在迁移；已发布客户端、商店和备案名称按各自流程更新，不代表已经全部更名。兼容标识与迁移顺序见 [命名规范](docs/development/branding.md)。
 
 ## 产品路线图
 
-[五端 Roadmap 看板](https://github.com/users/scholay/projects/1)按日常输入与 Buffer、输入方案与插件、个人词库、AI 与 Mailbox、品牌一致性、跨端与个人云六条主线组织。2026-10-19 的 29 项需求、依赖和旧计划衔接见[产品路线图](PLATFORM-ROADMAP.md)；新规划不代表已发布能力，各端实现与设备验收分别跟踪。
+[五端 Roadmap 看板](https://github.com/users/scholay/projects/1)按日常输入与 Buffer、输入方案与插件、个人词库、AI 与 Mailbox、品牌一致性、跨端与个人云六条主线组织。2026-10-19 的 29 项需求、依赖和旧计划衔接见[产品路线图](docs/plans/roadmap.md)；新规划不代表已发布能力，各端实现与设备验收分别跟踪。
 
 ## 联系与交流
 
@@ -142,21 +142,12 @@ cd xsime
 ## 文档
 
 | 文档 | 内容 |
-|---|---|
-| [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md) | 当前权威全局架构（接手开发请先读） |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | P1/P2 历史契约与踩坑 |
-| [PLUGIN-CONFIGURATION.md](PLUGIN-CONFIGURATION.md) | 插件声明式配置 |
-| [UNSIGNED-PREVIEW.md](UNSIGNED-PREVIEW.md) | 未签名预览版的下载、校验与安全安装步骤 |
-| [CROSS-PLATFORM-PREVIEW.md](CROSS-PLATFORM-PREVIEW.md) | Windows / Linux 输入方案预览边界与验证 |
-| [platforms/ios/README.md](platforms/ios/README.md) | iOS 键盘与主 App |
-| [platforms/windows/native/README.md](platforms/windows/native/README.md) | Windows 原生 TSF 输入法 |
-| [platforms/linux/ime/README.md](platforms/linux/ime/README.md) | Linux Fcitx5 输入法、Buffer 与 Capsule |
-| [PLATFORM-ROADMAP.md](PLATFORM-ROADMAP.md) | Windows / Android 对齐路线与当前验收边界 |
-| [platforms/android/README.md](platforms/android/README.md) | Android 原生工程、开发 APK 与验收 |
-| [RELEASE.md](RELEASE.md) | 发布流程：渠道、一条命令发布、节奏与版本号规则 |
-| [RELEASE-REFERENCE.md](RELEASE-REFERENCE.md) | 发布技术参考：签名、安装器、应用内更新、CI |
-| [RELEASE-HISTORY.md](RELEASE-HISTORY.md) | 已关闭的发布通道、旧仓库迁移与改名记录 |
-| [CHANGELOG.md](CHANGELOG.md) | 由公开 GitHub Release 与提交信息生成的逐版本变更 |
+| --- | --- |
+| [文档索引](docs/README.md) | 全部现行说明与平台入口 |
+| [系统架构](docs/architecture/system.md) | 五端输入、Buffer、共享层与数据边界 |
+| [开发维护](docs/development/maintenance.md) | 主线、插件依赖、远端 CI 与验收规则 |
+| [发布流程](docs/release/README.md) | 构建、签名、更新与分发 |
+| [更新日志](CHANGELOG.md) | 已发布版本的变更 |
 
 ## 应用更新
 
@@ -174,7 +165,7 @@ cd xsime
 
 四端正式安装包统一发布在 [`scholay/xsime`](https://github.com/scholay/xsime/releases/latest) 的 `vX.Y.Z` Release。CI 上传并读回全部安装包后，最后发布共同的 `update-manifest.json`；预览版不进入正式更新通道。iOS 使用独立的 `ios-vX.Y.Z` 商店发布流程。
 
-维护者在五端主线 CI 通过后发布，步骤见 [RELEASE.md](RELEASE.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)：
+维护者在五端主线 CI 通过后发布，步骤见 [docs/release/README.md](docs/release/README.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)：
 
 ```bash
 ./scripts/release.sh stable --dry-run  # 检查版本、五端 CI 与发布前提
@@ -208,4 +199,4 @@ XSIME 自有代码采用 [Apache License 2.0](LICENSE)，具体范围及历史 M
 
 中文输入基于 [Rime 输入法引擎（librime）](https://github.com/rime/librime)。来源声明见 [NOTICE](NOTICE)；我们倡议衍生版本说明 Rime、XSIME 及修改者的关系，示例见[来源与署名](ATTRIBUTION.md)。该展示倡议不增加许可证之外的限制。
 
-第三方组件、方案、词库和 Lua/OpenCC 数据保留各自的许可与署名，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)、[LICENSES](LICENSES/) 和 `rime-data/licenses/`。官方免费插件在 [rimes-plugins](https://github.com/scholay/rimes-plugins) 仓库维护。
+第三方组件、方案、词库和 Lua/OpenCC 数据保留各自的许可与署名，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)、[LICENSES](LICENSES) 和 `rime-data/licenses/`。官方免费插件在 [rimes-plugins](https://github.com/scholay/rimes-plugins) 仓库维护。

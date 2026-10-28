@@ -4,7 +4,7 @@ Capsule 与 Buffer 共用 Fcitx 输入宿主。五个模块（临时、捕获、
 
 `ui/` 是 GTK 3 管理页和不抢焦点的底栏；`core/` 提供 Markdown、原子附件、过滤、快照和授权边界。单条文本插入只使用原输入框的 Fcitx `commitString`，复制只改剪贴板。管理页编辑不会获得输入目标；返回底栏后需显式重新唤起以绑定目标。
 
-当前已支持普通、Bullet、富文本笔记，以及带分组的逐行详情。笔记标题、摘要、外部 Markdown 和富文本资产均可保存；临时剪贴板历史支持 X11 / Wayland 多格式收录与恢复；资源已支持路径分类、文献元数据、引用、文件复制和预览；截图、静音录屏及捕获归档已接入；密码库继续由 #167 实现。像素对齐仍在验收，见 [验证记录](HOST-VALIDATION.md) 和 [行为合同](SPEC.md)。
+当前已支持普通、Bullet、富文本笔记，以及带分组的逐行详情。笔记标题、摘要、外部 Markdown 和富文本资产均可保存；临时剪贴板历史支持 X11 / Wayland 多格式收录与恢复；资源已支持路径分类、文献元数据、引用、文件复制和预览；截图、静音录屏及捕获归档已接入；密码库用法见下文。授权规则见 [行为合同](../../../docs/platforms/linux/capsule-spec.md)，实际桌面检查见 [验收清单](../../../docs/platforms/linux/acceptance.md#capsule)。
 
 ## 构建与使用
 
@@ -19,7 +19,7 @@ platforms/linux/ime/tests/e2e/e2e.sh --build-dir platforms/linux/ime/build
 
 | 操作 | 行为 |
 |---|---|
-| Alt+Shift+C | 默认全局 Capsule 快捷键（可在设置调整）；X11/Wayland 支持条件见 runtime/SHORTCUTS-VALIDATION.md |
+| Alt+Shift+C | 默认全局 Capsule 快捷键（可在设置调整）；X11/Wayland 支持条件见 [IME 快捷键说明](../ime/README.md#desktop-launch-and-global-shortcuts) |
 | 底栏齿轮 | 打开 940×660 管理页，最小 620×430；撤销原输入目标 |
 | 管理页 Ctrl+S / Esc | 保存 / 确认未保存修改后返回底栏 |
 | 底栏 Return | 向仍绑定且聚焦的输入框插入整条笔记正文，成功后关闭 |
@@ -46,8 +46,6 @@ rimes-capsule-ctl rail
 
 富文本同时保存 macOS 兼容 RTFD 资产和可读 Markdown 副本。外部改动 Markdown 后，要在管理页明确选择「导入 Markdown 修改」才会替换富文本；未选择前保留原资产。复杂表格或不支持的 RTF 格式以只读正文保留，仍可编辑标题和摘要。单条文件格式损坏时显示原文和整理提示，其他笔记照常使用。
 
-测试与限制见 [结构化笔记验证](NOTES-VALIDATION.md)。
-
 ## 临时剪贴板历史
 
 在设置的 Capsule 页面开启「允许收录剪贴板内容」，并保持「临时」模块启用。默认关闭收录。启动、重新开启及解除保护时只建立当前剪贴板基线，随后新复制的内容才进入历史。底栏关闭后仍可收录；停止 XSIME 或停用模块会停止收录。
@@ -62,7 +60,7 @@ rimes-capsule-ctl rail
 
 X11 使用 XFixes / selection（含 INCR）；Wayland 优先 ext-data-control，兼容 wlr-data-control。不提供这些协议的桌面会提示历史接口不可用，不通过 XWayland 假装能观察全部 Wayland 应用。密码框、锁屏、休眠及机密/临时标记内容不收录，恢复不会补录保护期间的内容。图片解码仅用于有界预览，原始数据不变。
 
-单格式上限 128 MiB、每条原始数据 192 MiB、本地库最多 100,000 条 / 64 GiB；到达上限时淘汰最早未收藏条目。全部为收藏时拒绝新收录并提示。卸载 deb 或源码安装均保留这个库；要清空内容请使用 Capsule 中的删除/清空操作。验证和未完成的桌面/视觉验收见 [剪贴板验证](CLIPBOARD-VALIDATION.md)。
+单格式上限 128 MiB、每条原始数据 192 MiB、本地库最多 100,000 条 / 64 GiB；到达上限时淘汰最早未收藏条目。全部为收藏时拒绝新收录并提示。卸载 deb 或源码安装均保留这个库；要清空内容请使用 Capsule 中的删除/清空操作。X11、Wayland 与保护态行为分别按桌面验收清单检查。
 
 ## 资源与文献
 
@@ -76,8 +74,6 @@ X11 使用 XFixes / selection（含 INCR）；Wayland 优先 ext-data-control，
 
 默认仅保存路径。需要离线副本时，勾选表单下方「保存附件副本」再保存；最多 256 MiB，保留原始字节。副本存在 `capsule/assets`，显式预览/复制时在 `capsule/files` 生成同名文件。备份整个 `capsule` 目录即可保留条目、引用格式偏好和已导入附件；未导入的本机路径需要自行备份原文件。删除条目不删除附件副本，源码卸载、deb 升级/卸载也保留这些数据。
 
-功能和像素对照状态见 [资源验证](RESOURCES-VALIDATION.md)。
-
 ## 截图、录屏与捕获历史
 
 启用「捕获」模块后，点击底栏相机或管理页「新建」，再明确选择截图或录屏。X11 捕获整个屏幕；Wayland 通过桌面 Screenshot / ScreenCast portal 让用户选择或批准来源。拒绝授权、取消和编码失败会显示失败，不产生可用历史条目。需要系统已安装与当前桌面匹配的 portal 后端；GNOME、KDE 和 wlroots 的授权界面由桌面提供。
@@ -87,8 +83,6 @@ X11 使用 XFixes / selection（含 INCR）；Wayland 优先 ext-data-control，
 底栏可按图片/视频及标题/来源搜索，Return 或双击打开管理预览；视频目前展示首帧。Ctrl+C 或复制按钮将 PNG 或视频文件 URL 放到系统剪贴板，不模拟粘贴。「收藏到 Capsule」建立永久条目；已收藏内容不会被捕获历史的删除或自动清理移除。临时历史超过 30 天或累计 10 GiB 时从最早内容清理，正在预览或由剪贴板持有的文件会跳过。
 
 数据在 `capsule/captures/<UUID>/`，含原始媒体及 `record.json`；私有目录 0700、文件 0600。整个 `capsule` 目录备份可恢复本平台历史；收藏使用稳定 ID 保留，不依赖备份前的绝对路径来决定是否永久保存。此 JSON 索引是 Linux schema-v1，不能直接替换 macOS 的 SQLite/日期编码，也不提供跨设备同步。源码卸载、deb 升级和卸载均保留捕获及收藏。
-
-能力与验证边界见 [捕获验证](CAPTURE-VALIDATION.md)，实际双端卡片见 [四主题对照](../../../validation/linux-capsule-capture-20261018/README.md)。
 
 ## 密码库与动态验证码
 
@@ -110,4 +104,4 @@ Linux 默认根目录为 `~/.local/share/rimes/capsule/`（可由 `RIMES_USER_DI
 
 查看口令用于界面验证，与主密钥分开；更改口令不重新加密文档，不能替代操作系统账户和磁盘保护。macOS 将同一格式的口令摘要放在偏好 `capsule.passwordRevealPasscode.credential.v1`，Linux 放在上述私有文件。迁移文档不会自动迁移偏好：目标若没有凭据则使用默认四组口令，可在目标界面重新设置。不会自动上传、同步或把机密正文发送给 AI。
 
-功能、兼容及尚未完成的视觉/桌面验收见 [密码库验证](PASSWORD-VALIDATION.md)。
+密码库仅使用测试秘密执行桌面验收，不将真实秘密写入截图或日志。

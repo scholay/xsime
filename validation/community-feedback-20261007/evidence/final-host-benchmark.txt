@@ -1,5 +1,0 @@
-START accessibility
-START host
-START contract
-PASS BENCHMARK {"scope":"accessibility ACTION_CLICK request to actual host TextWatcher; includes IPC\/scheduling; no touch hardware or frame presentation","warmup":5,"first_key_ms":{"samples":60,"mean":12.800124916666666,"p50":12.666354,"p95":18.374531,"max":19.002708},"candidate_commit_ms":{"samples":60,"mean":10.463583283333334,"p50":10.475729,"p95":14.348854,"max":16.478593},"ime":"org.scholay.rimes.android.debug\/org.scholay.rimes.android.RimesInputMethodService"}
-PASS input contract; assertions=787

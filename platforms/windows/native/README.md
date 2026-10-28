@@ -1,11 +1,11 @@
 # XSIME Native Windows Foundation
 
-This source prepares **Windows 1.1.5**. Published installers are listed in
+Published installers are listed in
 [GitHub Releases](https://github.com/scholay/xsime/releases?q=windows&expanded=true);
 a source change or CI artifact does not establish a public release or desktop
 acceptance. Preview packages include their source commit, checksums and
 `ACCEPTANCE-WINDOWS.md`. Use that checklist and the
-[maintenance checklist](MANUAL-TEST.md) when testing a data-preserving upgrade.
+[maintenance checklist](../../../docs/platforms/windows/manual-testing.md) when testing a data-preserving upgrade.
 
 This directory contains the native Windows implementation of RIMES. It is
 separate from the Weasel data preview in the parent directory.
@@ -59,12 +59,7 @@ boundary before resuming either process, then the probes repeat Chinese input
 and endpoint isolation checks.
 Its TSF document host is a fixture;
 passing it does not establish compatibility with SearchHost or every app.
-See the [local validation record](../../../validation/windows-search-compatibility-20261014/README.md)
-and the [host checklist](MANUAL-TEST.md) for the remaining desktop acceptance.
-
-Installation and host acceptance are recorded in the
-[1.1.0 delivery report](../../../validation/release-1.1.0/delivery.md).
-The [1.0.0 preparation checklist](RELEASE-1.0.0.md) remains historical context.
+Use the [host checklist](../../../docs/platforms/windows/manual-testing.md) for desktop acceptance.
 
 ## Interaction (macOS-aligned)
 
@@ -83,7 +78,7 @@ downloaded and SHA-256 verified on first use (about 182 MiB). Subsequent transla
 is offline and requires no API key; this does not call a Windows system translation
 API. Other target languages can use the configured AI connector. See the
 [resource licenses](../translation/NOTICE.md) and
-[implementation/acceptance record](../../../validation/windows-buffer-parity-20261012/implementation.md).
+[connector guide](../../../docs/platforms/windows/connectors.md).
 
 Where the TSF host cooperates, typing matches the macOS XSIME controller:
 
@@ -356,7 +351,7 @@ launch Notepad, but they are **not** a reliable interactive IME desktop: no
 Chinese language pack, no user IME switch, and TSF often never attaches to a
 SendInput host. The required CI assertions are therefore in-process. The
 script records a desktop probe for honesty. Real-host coverage is
-[MANUAL-TEST.md](MANUAL-TEST.md).
+[MANUAL-TEST.md](../../../docs/platforms/windows/manual-testing.md).
 
 PR-time evidence is the non-required **Windows IME** workflow
 (`.github/workflows/windows-ime.yml`). The older **Windows Native Foundation**
@@ -410,7 +405,7 @@ independent attestation of that external build.
 
 Place the resulting `shared` beside `RimesBroker.exe` or pass `--shared-data-dir`.
 Run `RimesEngineSmoke` with the matching-architecture DLL and a **fresh test user
-directory**, then complete [real-host checks](MANUAL-TEST.md). Successful staging
+directory**, then complete [real-host checks](../../../docs/platforms/windows/manual-testing.md). Successful staging
 alone does not prove Windows librime, TSF or the final installer works.
 
 ## Safety boundaries
@@ -431,7 +426,7 @@ alone does not prove Windows librime, TSF or the final installer works.
   `ITfDisplayAttributeProvider`. The registrar does not add a new TSF
   category, so some hosts may skip the dotted underline.
 - This development tree adds Capsule and Mailbox preview windows through the tray,
-  Settings and Alt+Shift+C / Alt+Shift+M. See [PERIPHERALS.md](PERIPHERALS.md) for
+  Settings and Alt+Shift+C / Alt+Shift+M. See [PERIPHERALS.md](../../../docs/platforms/windows/peripherals.md) for
   implemented workflows and remaining macOS parity gaps. This is not an installed-version claim.
 - The 1.1.0 release uses an unsigned EXE installer. Windows security prompts may appear; signing is optional.
 - The EXE installer handles elevated dual-architecture registration. The actual upgrade was verified; fresh-install coverage and broader host acceptance remain separate follow-up checks.

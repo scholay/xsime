@@ -48,9 +48,8 @@ schema may depend on auxiliary schemas, but those dependencies do not become use
 choices automatically. The catalog builder still records every upstream component, license
 and modification in its manifest.
 
-Current import limits: ZIP 256 MiB, one resource 128 MiB, total expanded 512 MiB, 4,096
-entries, 32 schemas, compression ratio at most 100×, configuration 512 KiB, Lua source 1 MiB,
-and deployed data 512 MiB. File paths must also be representable on Windows; links,
+Current product import limits and unsupported formats are maintained in the
+[portable scheme import guide](../../docs/portable-scheme-import.md). File paths must also be representable on Windows; links,
 traversal, case/Unicode-normalization collisions and reserved device names are rejected.
 
 ## Earlier catalog builds
@@ -172,8 +171,7 @@ iOS app links (librime with the restricted Lua runtime, host slice) compiled and
 on a Mac. It does not show behaviour on a phone: deployment there is slower and memory is
 tighter. `engine.deploySeconds` and `engine.peakMemoryMB` are the Mac figures for compiling
 the dictionaries, and `engine.deviceRisk` grades them against the one package known to deploy
-on an iPhone 15 Pro (13 s and 1.2 GB on an M4, see
-[the iOS validation record](../../platforms/ios/validation/rime-schemes-20261002.md)):
+on an iPhone 15 Pro (13 s and 1.2 GB on an M4 in the recorded benchmark):
 `medium` from 10 s or 1 GB, `high` from 60 s or 2 GB. The grades are a guide to what to try
 on a device first, not a measurement. `high` packages are not `publishable`. Chord schemes load but need
 key-release events the iOS keyboard does not send to imported schemes. Typing probes exist

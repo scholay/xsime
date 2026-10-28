@@ -1,5 +1,0 @@
-START accessibility
-START host
-START contract
-PASS local dictionary, four OpenAI-format mock plugins, source/output isolation, exact Send, editing/cancel/hide/target/private guards
-PASS input contract; assertions=360

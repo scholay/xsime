@@ -1,6 +1,0 @@
-START accessibility
-START host
-START contract
-InputDispatcher rejected retired stream event 1
-PASS chord real multi-touch, split/orthogonal, all-fingers release, cancellation, Buffer, privacy, target revocation and rotation
-PASS input contract; assertions=119

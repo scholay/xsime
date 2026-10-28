@@ -3,6 +3,8 @@ Resources/EngineData/checksums.json
 Resources/EngineData/installation.yaml
 Resources/EngineData/user.yaml
 *.xcarchive/
+*.xcarchive.zip
+*.xcresult/
 *.ipa
 build/
 xcuserdata/

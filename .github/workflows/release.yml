@@ -119,7 +119,7 @@ jobs:
           # macOS burns these ids into the protected TIS preferences: any drift
           # orphans the old rows and stacks duplicate "RIMES" entries in
           # System Settings (this bit us across the 0.3–0.4 renames — see
-          # RELEASE.md). Never change these without a migration story.
+          # docs/release/README.md). Never change these without a migration story.
           test "$BUNDLE_ID" = 'com.scholay.inputmethod.isaac'
           test "$MODE_ID" = 'com.scholay.inputmethod.isaac.Hans'
           test "$MODE_ID" = "${BUNDLE_ID}.Hans"
@@ -1164,7 +1164,7 @@ jobs:
           被标记为 Latest。
 
           完整风险边界与安全安装步骤：
-          https://github.com/scholay/xsime/blob/main/UNSIGNED-PREVIEW.md
+          https://github.com/scholay/xsime/blob/main/docs/release/unsigned-preview.md
 
           ## 安装
 

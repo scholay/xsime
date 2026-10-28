@@ -559,7 +559,7 @@
       "url": "https://github.com/scholay/xsime/issues/177",
       "visual_status": "requires_review",
       "implementation_status": "implemented",
-      "validation": "statistics/VALIDATION.md"
+      "validation": "../../docs/platforms/linux/acceptance.md#extensions"
     },
     {
       "order": 28,
@@ -583,7 +583,7 @@
       "url": "https://github.com/scholay/xsime/issues/178",
       "visual_status": "requires_review",
       "implementation_status": "implemented",
-      "validation": "typing-practice/VALIDATION.md"
+      "validation": "../../docs/platforms/linux/acceptance.md#extensions"
     },
     {
       "order": 29,
@@ -630,7 +630,7 @@
       "url": "https://github.com/scholay/xsime/issues/179",
       "implementation_status": "partial",
       "visual_status": "requires_review",
-      "validation": "validation/desktop-acceptance.md"
+      "validation": "../../docs/platforms/linux/acceptance.md#desktop"
     },
     {
       "order": 30,
@@ -677,7 +677,7 @@
       "issue": 180,
       "url": "https://github.com/scholay/xsime/issues/180",
       "implementation_status": "implemented",
-      "validation": "validation/release-lifecycle.md"
+      "validation": "../../docs/platforms/linux/release-lifecycle.md#持续发布验收"
     }
   ],
   "milestone": {
