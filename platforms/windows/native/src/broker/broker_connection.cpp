@@ -258,12 +258,13 @@ ClientAction BrokerConnection::HandleHello(const core::Frame& request,
   broker_hello.session_id = broker_session_id_;
   broker_hello.capabilities = (runtime_ ? 1ULL : 0ULL) |
       core::kModifierSnapshotsCapability | core::kKeyRoutingCapability | core::kPendingChordCapability |
-      core::kCandidatePagingCapability;
+      core::kCandidatePagingCapability | core::kAsciiPunctCapability;
   modifier_snapshots_ =
       (hello.capabilities & core::kModifierSnapshotsCapability) != 0;
   key_routing_ = (hello.capabilities & core::kKeyRoutingCapability) != 0;
   pending_chord_ = (hello.capabilities & core::kPendingChordCapability) != 0;
   candidate_paging_ = (hello.capabilities & core::kCandidatePagingCapability) != 0;
+  ascii_punct_ = (hello.capabilities & core::kAsciiPunctCapability) != 0;
   peer_process_ = verified_client_process_id;
   broker_hello.broker_version = std::string(kBrokerVersion);
   std::vector<std::byte> payload;
@@ -697,6 +698,12 @@ ClientAction BrokerConnection::RespondWithInputState(const core::Frame& request,
     if (session != sessions_.end() &&
         engine_->IsAsciiMode(session->second.engine_session_id))
       state.state_flags |= StateFlag(core::InputStateFlags::kAsciiMode);
+  }
+  if (ascii_punct_ && key_routing_ && engine_) {
+    const auto session = sessions_.find(state.session_id);
+    if (session != sessions_.end() &&
+        engine_->IsAsciiPunctuation(session->second.engine_session_id))
+      state.state_flags |= StateFlag(core::InputStateFlags::kAsciiPunct);
   }
   std::vector<std::byte> payload;
   if (!core::EncodeInputState(state, &payload)) {

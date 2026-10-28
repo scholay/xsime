@@ -89,6 +89,7 @@ class BrokerConnection final {
   bool modifier_snapshots_ = false;
   bool key_routing_ = false;
   bool pending_chord_ = false;
+  bool ascii_punct_ = false;
   bool candidate_paging_ = false;
   workbench::Runtime* runtime_;
   workbench::Runtime* settings_;

@@ -77,37 +77,53 @@ int RunContractTests() {
   const auto shift = static_cast<std::uint32_t>(
       rimes::windows::core::KeyModifiers::kShift);
   for (const auto key : {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}) {
-    Expect(!RoutePrintableKey(key, 0, false, false, false),
+    Expect(!RoutePrintableKey(key, 0, false, false, false, false, false),
            "idle number row is never claimed before engine pass-through");
-    Expect(RoutePrintableKey(key, shift, false, false, false),
+    Expect(RoutePrintableKey(key, shift, false, false, false, false, false),
            "Shift+digit retains schema punctuation");
-    Expect(RoutePrintableKey(key, 0, true, false, false),
+    Expect(RoutePrintableKey(key, 0, true, false, false, false, false),
            "number selection during composition remains an IME key");
-    Expect(RoutePrintableKey(key, 0, false, true, true),
+    Expect(RoutePrintableKey(key, 0, false, true, true, false, false),
            "Buffer still captures idle ASCII numbers");
   }
   for (WPARAM key = VK_NUMPAD0; key <= VK_DIVIDE; ++key) {
     for (const auto modifiers : {std::uint32_t{0}, shift}) {
-      Expect(!RoutePrintableKey(key, modifiers, false, false, false),
+      Expect(!RoutePrintableKey(key, modifiers, false, false, false, false, false),
              "idle keypad digits, decimal and operators stay with the native editor, including Shift");
-      Expect(RoutePrintableKey(key, modifiers, true, false, false),
+      Expect(RoutePrintableKey(key, modifiers, true, false, false, false, false),
              "keypad commands during composition remain an IME key");
-      Expect(RoutePrintableKey(key, modifiers, false, true, true),
+      Expect(RoutePrintableKey(key, modifiers, false, true, true, false, false),
              "Buffer still captures keypad input in ASCII mode");
     }
   }
   for (const WPARAM key : std::vector<WPARAM>{'A', 'Z', VK_SPACE, VK_OEM_2}) {
-    Expect(!RoutePrintableKey(key, 0, false, false, true),
+    Expect(!RoutePrintableKey(key, 0, false, false, true, false, false),
            "authoritative ASCII mode does not claim host printable keys");
-    Expect(RoutePrintableKey(key, 0, false, true, true),
+    Expect(RoutePrintableKey(key, 0, false, true, true, false, false),
            "Buffer retains ASCII letters and punctuation");
   }
-  Expect(RoutePrintableKey('N', 0, false, false, false),
+  Expect(RoutePrintableKey('N', 0, false, false, false, false, false),
          "Chinese letters still start a composition");
+  // ascii_punct hands ASCII punctuation back to the host, so TSF must not claim
+  // a key the engine is configured to decline; letters stay claimed either way.
+  Expect(!RoutePrintableKey(VK_OEM_COMMA, 0, false, false, false, true, false),
+         "ascii_punct releases ASCII punctuation to the host");
+  Expect(RoutePrintableKey(VK_OEM_COMMA, 0, false, false, false, false, false),
+         "punctuation stays an IME key when ascii_punct is off");
+  Expect(!RoutePrintableKey(VK_OEM_2, shift, false, false, false, true, false),
+         "ascii_punct releases Shift+punctuation too");
+  Expect(RoutePrintableKey('A', 0, false, false, false, true, false),
+         "ascii_punct keeps Latin letters claimed for composition");
+  // Caps Lock belongs to the host: the editor already produces the upper-case
+  // letter, so the key must not be claimed once no composition is in flight.
+  Expect(!RoutePrintableKey('A', 0, false, false, false, true, true),
+         "Caps Lock lets the host emit the upper-case letter");
+  Expect(RoutePrintableKey('A', 0, true, false, false, true, true),
+         "Caps Lock does not interrupt an active composition");
   for (const bool ascii : {false, true}) {
-    Expect(!RoutePrintableKey(VK_SPACE, 0, false, false, ascii),
+    Expect(!RoutePrintableKey(VK_SPACE, 0, false, false, ascii, false, false),
            "idle space stays with the editor in both Chinese and ASCII modes");
-    Expect(RoutePrintableKey(VK_SPACE, 0, true, false, ascii),
+    Expect(RoutePrintableKey(VK_SPACE, 0, true, false, ascii, false, false),
            "composition space still confirms a candidate");
   }
   auto client = CreateBrokerClient();
