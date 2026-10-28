@@ -1,0 +1,64 @@
+{
+  "description": "Public-only test vector; private key discarded. Never trust this key in a product.",
+  "now": 1700000100,
+  "trustedKeys": {
+    "fixture-p256-key": "04da5f5792a9fa719d067db8313ece2d15acb235e050bc2a6fb0b4f4a479415faa5a01a378a7e3561504d5ae2d18a72603591dd055119132b202ed3cbf6809e8ec"
+  },
+  "document": {
+    "schemaVersion": 1,
+    "version": "9.8.7",
+    "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "platforms": {
+      "macos": {
+        "url": "https://github.com/scholay/xsime/releases/download/v9.8.7/RIMES-9.8.7.pkg",
+        "size": 25,
+        "sha256": "9450704cd71e48a1b7fa9694cf7006be3ba29249cf48c0c385262f21456d3325",
+        "architecture": "universal",
+        "minimumOS": "13.0"
+      },
+      "windows": {
+        "url": "https://github.com/scholay/xsime/releases/download/v9.8.7/RIMES-Windows-9.8.7-Setup.exe",
+        "size": 27,
+        "sha256": "33cbd46c0ce6ea5d840b672fe23b0ef1dae2e6bef69a42a712867a2c146ecae7",
+        "architecture": "x64-x86",
+        "minimumOS": "10.0"
+      },
+      "linux": {
+        "url": "https://github.com/scholay/xsime/releases/download/v9.8.7/fcitx5-rimes_9.8.7_amd64.deb",
+        "size": 25,
+        "sha256": "294538dc51f2df3874365613fae039a3597c8af6db9558b47114d53a24fe7b4a",
+        "architecture": "amd64",
+        "distribution": "ubuntu-24.04",
+        "distributions": [
+          "ubuntu-24.04",
+          "ubuntu-26.04"
+        ]
+      },
+      "android": {
+        "url": "https://github.com/scholay/xsime/releases/download/v9.8.7/RIMES-Android-9.8.7.apk",
+        "size": 27,
+        "sha256": "c24db2c5b613af84f408f0c09c652d8f2475cedba0c8a667acfd428d9010f912",
+        "architecture": "arm64-v8a,x86_64",
+        "minimumOS": 26,
+        "build": 99
+      }
+    },
+    "ios": {
+      "channel": "app-store",
+      "url": "https://apps.apple.com/app/id6814620242"
+    },
+    "issuedAt": 1700000000,
+    "expiresAt": 1700086400,
+    "authentication": {
+      "format": 1,
+      "algorithm": "ecdsa-p256-sha256",
+      "payload": "eyJleHBpcmVzQXQiOjE3MDAwODY0MDAsImlvcyI6eyJjaGFubmVsIjoiYXBwLXN0b3JlIiwidXJsIjoiaHR0cHM6Ly9hcHBzLmFwcGxlLmNvbS9hcHAvaWQ2ODE0NjIwMjQyIn0sImlzc3VlZEF0IjoxNzAwMDAwMDAwLCJwbGF0Zm9ybXMiOnsiYW5kcm9pZCI6eyJhcmNoaXRlY3R1cmUiOiJhcm02NC12OGEseDg2XzY0IiwiYnVpbGQiOjk5LCJtaW5pbXVtT1MiOjI2LCJzaGEyNTYiOiJjMjRkYjJjNWI2MTNhZjg0ZjQwOGYwYzA5YzY1MmQ4ZjI0NzVjZWRiYTBjOGE2NjdhY2ZkNDI4ZDkwMTBmOTEyIiwic2l6ZSI6MjcsInVybCI6Imh0dHBzOi8vZ2l0aHViLmNvbS9zY2hvbGF5L3hzaW1lL3JlbGVhc2VzL2Rvd25sb2FkL3Y5LjguNy9SSU1FUy1BbmRyb2lkLTkuOC43LmFwayJ9LCJsaW51eCI6eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsImRpc3RyaWJ1dGlvbiI6InVidW50dS0yNC4wNCIsImRpc3RyaWJ1dGlvbnMiOlsidWJ1bnR1LTI0LjA0IiwidWJ1bnR1LTI2LjA0Il0sInNoYTI1NiI6IjI5NDUzOGRjNTFmMmRmMzg3NDM2NTYxM2ZhZTAzOWEzNTk3YzhhZjZkYjk1NThiNDcxMTRkNTNhMjRmZTdiNGEiLCJzaXplIjoyNSwidXJsIjoiaHR0cHM6Ly9naXRodWIuY29tL3NjaG9sYXkveHNpbWUvcmVsZWFzZXMvZG93bmxvYWQvdjkuOC43L2ZjaXR4NS1yaW1lc185LjguN19hbWQ2NC5kZWIifSwibWFjb3MiOnsiYXJjaGl0ZWN0dXJlIjoidW5pdmVyc2FsIiwibWluaW11bU9TIjoiMTMuMCIsInNoYTI1NiI6Ijk0NTA3MDRjZDcxZTQ4YTFiN2ZhOTY5NGNmNzAwNmJlM2JhMjkyNDljZjQ4YzBjMzg1MjYyZjIxNDU2ZDMzMjUiLCJzaXplIjoyNSwidXJsIjoiaHR0cHM6Ly9naXRodWIuY29tL3NjaG9sYXkveHNpbWUvcmVsZWFzZXMvZG93bmxvYWQvdjkuOC43L1JJTUVTLTkuOC43LnBrZyJ9LCJ3aW5kb3dzIjp7ImFyY2hpdGVjdHVyZSI6Ing2NC14ODYiLCJtaW5pbXVtT1MiOiIxMC4wIiwic2hhMjU2IjoiMzNjYmQ0NmMwY2U2ZWE1ZDg0MGI2NzJmZTIzYjBlZjFkYWUyZTZiZWY2OWE0MmE3MTI4NjdhMmMxNDZlY2FlNyIsInNpemUiOjI3LCJ1cmwiOiJodHRwczovL2dpdGh1Yi5jb20vc2Nob2xheS94c2ltZS9yZWxlYXNlcy9kb3dubG9hZC92OS44LjcvUklNRVMtV2luZG93cy05LjguNy1TZXR1cC5leGUifX0sInNjaGVtYVZlcnNpb24iOjEsInNvdXJjZUNvbW1pdCI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJ2ZXJzaW9uIjoiOS44LjcifQ==",
+      "signatures": [
+        {
+          "keyId": "fixture-p256-key",
+          "signature": "ONvNKPf9rJ7wfMRjI/Y5id+mmwOTen4OAzRoJZ8aX3bya7K3bnIvAwVqEilnCtzcNeTaIm2hi3+OCNYgqVuP0A=="
+        }
+      ]
+    }
+  }
+}

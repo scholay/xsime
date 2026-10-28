@@ -3,7 +3,7 @@ name: Android checks
 on:
   pull_request:
     branches: [main]
-    paths: ['OfficialPlugins', 'plugins.lock.json', 'scripts/prepare-official-plugins.py', 'LICENSE', 'Shared/InputHabits/**', 'Shared/Tests/RimesCoreTests/Fixtures/punctuation-layout.tsv', 'platforms/android/**', 'scripts/input-schemes/repair-rime-table.py', 'platforms/ios/dependencies.lock.json', 'platforms/ios/Resources/EngineData/**', 'platforms/ios/Licenses/**', '.github/workflows/android.yml']
+    paths: ['OfficialPlugins', 'plugins.lock.json', 'scripts/prepare-official-plugins.py', 'LICENSE', 'Shared/InputHabits/**', 'Shared/AppUpdate/**', 'Shared/Tests/RimesCoreTests/Fixtures/punctuation-layout.tsv', 'platforms/android/**', 'scripts/input-schemes/repair-rime-table.py', 'platforms/ios/dependencies.lock.json', 'platforms/ios/Resources/EngineData/**', 'platforms/ios/Licenses/**', '.github/workflows/android.yml']
   push:
     branches: [main]
   workflow_call:
@@ -55,6 +55,8 @@ jobs:
           "$sdkmanager_path" 'platforms;android-37.2' 'build-tools;36.0.0' 'ndk;29.0.14206865' 'cmake;3.22.1'
       - name: Verify shared assistant starter translations
         run: python3 scripts/verify-assistant-starters.py
+      - name: Verify Android release identity tooling
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Build both native ABIs and offline dictionaries
         run: python3 scripts/build-engine.py
       - name: Run real Android x86_64 engine and learning contracts
@@ -63,6 +65,16 @@ jobs:
           python3 scripts/test-linux-native.py 2>&1 | tee .native/engine-contract.log
       - name: Test Buffer and keyboard layouts, build development APK and run Lint
         run: ./gradlew --no-daemon :core:test :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest :testhost:assembleDebug :testhost:assembleDebugAndroidTest :testhost:lintDebug
+      - name: Build an older debug package for real update installation
+        run: |
+          set -euo pipefail
+          mkdir -p .native/update-fixture
+          cp app/build/outputs/apk/debug/app-debug.apk .native/update-fixture/new.apk
+          old_code=$(python3 -c 'import re; from pathlib import Path; n=int(re.search(r"versionCode = (\d+)",Path("app/build.gradle.kts").read_text())[1]); assert n>1; print(n-1)')
+          ./gradlew --no-daemon "-PrimesUpdateFixtureVersionCode=$old_code" :app:assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk .native/update-fixture/old.apk
+          # Existing regression modes continue to use the normal package.
+          cp .native/update-fixture/new.apk app/build/outputs/apk/debug/app-debug.apk
       - name: Compile the 1.0 release configuration without publishing
         run: ./gradlew --no-daemon :app:assembleRelease :app:bundleRelease :app:lintRelease
       - name: Verify release APK alignment
@@ -72,7 +84,7 @@ jobs:
       - name: Verify APK 16 KB alignment
         run: "$ANDROID_HOME/build-tools/36.0.0/zipalign -c -P 16 -v 4 app/build/outputs/apk/debug/app-debug.apk"
       - name: Verify Android rendering, original scheme import and updates
-        timeout-minutes: 18
+        timeout-minutes: 24
         run: |
           set -euo pipefail
           sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -157,6 +169,18 @@ jobs:
           adb -s emulator-5554 shell am instrument -w -r -e mode wubi org.scholay.rimes.android.debug.test/org.scholay.rimes.android.EngineInstrumentation | tee .native/wubi-emulator.log
           grep -Fq 'PASS Wubi packaged JNI' .native/wubi-emulator.log
           grep -Fq 'INSTRUMENTATION_CODE: -1' .native/wubi-emulator.log
+          # The external host survives replacement of the input-method app.
+          # These packages share only a disposable debug identity and signing key.
+          adb -s emulator-5554 install -r -d -t .native/update-fixture/old.apk
+          adb -s emulator-5554 install -t testhost/build/outputs/apk/debug/testhost-debug.apk
+          adb -s emulator-5554 install -t testhost/build/outputs/apk/androidTest/debug/testhost-debug-androidTest.apk
+          adb -s emulator-5554 push .native/update-fixture/new.apk /data/local/tmp/xsime-update.apk
+          adb -s emulator-5554 shell am instrument -w -r -e mode app-update-prepare -e apk /data/local/tmp/xsime-update.apk org.scholay.rimes.android.debug.test/org.scholay.rimes.android.EngineInstrumentation | tee .native/app-update-prepare.log
+          grep -Fq 'PASS update upgrade fixture prepared' .native/app-update-prepare.log
+          grep -Fq 'INSTRUMENTATION_CODE: -1' .native/app-update-prepare.log
+          adb -s emulator-5554 shell am instrument -w -r -e mode app-update-upgrade org.scholay.rimes.testhost.test/org.scholay.rimes.testhost.InputContractInstrumentation | tee .native/app-update-upgrade.log
+          grep -Fq 'PASS real application upgrade' .native/app-update-upgrade.log
+          grep -Fq 'INSTRUMENTATION_CODE: -1' .native/app-update-upgrade.log
       - name: Upload development APK and reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -175,6 +199,8 @@ jobs:
             platforms/android/.native/service-delivery.log
             platforms/android/.native/scheme-import-emulator.log
             platforms/android/.native/app-update.log
+            platforms/android/.native/app-update-prepare.log
+            platforms/android/.native/app-update-upgrade.log
             platforms/android/.native/wubi-emulator.log
             platforms/android/.native/instrumentation-crash.log
             platforms/android/.native/instrumentation-anr.log
@@ -221,6 +247,7 @@ jobs:
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;36.0.0"'
       - name: Sign the tested package with the existing production identity
         env:
+          GH_TOKEN: ${{ github.token }}
           RIMES_ANDROID_KEYSTORE_BASE64: ${{ secrets.RIMES_ANDROID_KEYSTORE_BASE64 }}
           RIMES_ANDROID_STORE_PASSWORD: ${{ secrets.RIMES_ANDROID_STORE_PASSWORD }}
           RIMES_ANDROID_KEY_PASSWORD: ${{ secrets.RIMES_ANDROID_KEY_PASSWORD }}

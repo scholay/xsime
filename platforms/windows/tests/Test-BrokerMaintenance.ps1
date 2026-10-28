@@ -91,5 +91,6 @@ try {
     try{Check 'failed graceful maintenance releases only its own reservation' $created}finally{$afterFailure.Dispose()}
 }finally{$stopEvent.Dispose();$stopEvent=$null}
 Check 'alternate administrator never opens original-user kernel objects' ($null -eq (New-BrokerMaintenanceReservation 'S-1-5-21-1-2-3-1001'))
+& "$PSScriptRoot\Test-InstallRootLock.ps1" -OutputDirectory (Join-Path $OutputDirectory 'install-root-lock')
 [pscustomobject]@{status='passed';checks=$checks;realProcessesStopped=$false} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'result.json') -Encoding UTF8
 $global:LASTEXITCODE=0

@@ -4,6 +4,8 @@ param([string]$InstallRoot = "$env:ProgramFiles\RIMES",[switch]$NoAutostart,[swi
 . "$PSScriptRoot\Package.Common.ps1"
 Assert-Administrator
 $UserSid=Get-InstallUserSid $UserSid ([bool]$MachineOnly)
+$installRootLock=Enter-InstallRootLock $InstallRoot $UserSid
+try {
 Assert-InstallUser $InstallRoot $UserSid
 $PackageDirectory=[IO.Path]::GetFullPath($PackageDirectory)
 $manifest=Read-VerifiedPackage $PackageDirectory
@@ -104,3 +106,5 @@ try {
 if($requiresRestart){Write-Output 'Registered the new immutable version. SIGN-OUT REQUIRED before daily use; running hosts may still use the previous DLL. No old DLL was overwritten.'}
 else{Write-Output 'Installed and verified both TSF architectures. Select RIMES with Win+Space. User data was retained.'}
 } finally {foreach($gate in $maintenanceGates){if($gate){$gate.Dispose()}}}
+
+} finally { $installRootLock.Dispose() }

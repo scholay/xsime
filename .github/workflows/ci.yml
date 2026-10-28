@@ -38,8 +38,9 @@ jobs:
 
       - name: Application update manifest contracts
         run: |
-          g++ -std=c++17 -Wall -Wextra -Werror -Iplatforms/windows/native/third_party Shared/AppUpdate/manifest_tests.cpp -o "$RUNNER_TEMP/update-contract"
-          "$RUNNER_TEMP/update-contract"
+          python3 -B scripts/release/sync-update-trust.py --check
+          g++ -std=c++17 -Wall -Wextra -Werror -Iplatforms/windows/native/third_party Shared/AppUpdate/manifest_tests.cpp -lcrypto -o "$RUNNER_TEMP/update-contract"
+          "$RUNNER_TEMP/update-contract" Shared/AppUpdate/fixtures/signed_manifest.json
 
       - name: Release tool tests
         run: python3 -m unittest discover -s scripts/release -p "test*.py" -v

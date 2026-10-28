@@ -412,6 +412,7 @@ class FormalPackageOnlyWorkflowTests(unittest.TestCase):
             "  publish_staged_release:", 1
         )[0]
         cls.publish_job = workflow.split("  publish_staged_release:", 1)[1]
+        cls.publisher = (root / "scripts/release/publish_update_assets.py").read_text()
         cls.package_script = (root / "scripts/make-pkg.sh").read_text()
         cls.rehearsal_script = (root / "scripts/rehearse-release-pkg.sh").read_text()
         cls.reference_doc = (root / "docs/release/reference.md").read_text()
@@ -423,9 +424,10 @@ class FormalPackageOnlyWorkflowTests(unittest.TestCase):
         self.assertNotIn("app_zip", self.signing_job)
         self.assertNotIn('stapler validate -v "$payload_app"', self.signing_job)
 
-    def test_stage_and_public_release_contain_only_the_installer_asset(self):
+    def test_mac_stage_and_public_release_do_not_publish_an_app_zip(self):
         self.assertIn('"$PKG" SHA256SUMS RELEASE-NOTES.md release-manifest.txt', self.signing_job)
-        self.assertIn('"$stage/$PKG" "$stage/SHA256SUMS"', self.publish_job)
+        self.assertIn('package.name: package, "SHA256SUMS": mac / "SHA256SUMS"', self.publisher)
+        self.assertIn("scripts/release/publish-update-assets.sh", self.publish_job)
         self.assertNotIn("APP_ZIP", self.publish_job)
         self.assertNotIn("RIMES-${VERSION}.zip", self.publish_job)
 
@@ -459,11 +461,23 @@ class MacOSReleaseGatePolicyTests(unittest.TestCase):
         cls.platform_workflow = (root / ".github/workflows/platform-preview.yml").read_text()
         cls.windows_workflow = (root / ".github/workflows/windows-native.yml").read_text()
 
-    def test_stable_release_requires_the_five_current_native_workflows(self):
-        self.assertIn('REQUIRED_WORKFLOWS=("CI")', self.release_script)
-        self.assertIn('if [[ "$KIND" == "stable" ]]; then\n    REQUIRED_WORKFLOWS+=("iOS checks" "Android checks" "Windows IME" "Linux IME")\nfi', self.release_script)
-        self.assertNotIn('"Platform Preview Data"', self.release_script.split("REQUIRED_WORKFLOWS=", 1)[1].split("\n", 1)[0])
-        self.assertNotIn('"Windows Native Foundation"', self.release_script.split("REQUIRED_WORKFLOWS=", 1)[1].split("\n", 1)[0])
+    def test_stable_release_requires_exact_source_ci_before_signing(self):
+        self.assertIn('scripts/release/release_guard.py "${guard_arguments[@]}"', self.release_script)
+        self.assertIn('guard_arguments+=(--workflow ci.yml)', self.release_script)
+        self.assertIn('release_guard.py android-build --version "$VERSION" --build "$android_build"', self.release_script)
+        signing = self.release_workflow.split("  sign_and_stage:", 1)[1].split("  sign_update_manifest:", 1)[0]
+        self.assertLess(signing.index('release_guard.py ci --commit "$GITHUB_SHA"'),
+                        signing.index('name: Import protected Developer ID credentials'))
+
+    def test_complete_signed_metadata_precedes_the_only_stable_publisher(self):
+        job = self.release_workflow.split("  publish_staged_release:", 1)[1].split("  attach_linux_deb:", 1)[0]
+        self.assertIn("needs.sign_update_manifest.result == 'success'", job)
+        self.assertIn("group: stable-release-publication", job)
+        self.assertNotIn("gh release create", job)
+        self.assertNotIn("  publish_update_manifest:", self.release_workflow)
+        recovery = (Path(__file__).resolve().parents[2] / ".github/workflows/complete-release-assets.yml").read_text()
+        self.assertIn("environment: macos-publish", recovery)
+        self.assertIn("group: stable-release-publication", recovery)
 
     def test_cross_platform_workflows_are_scheduled_or_manual_maintenance_only(self):
         for workflow in (self.platform_workflow, self.windows_workflow):

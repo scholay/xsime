@@ -17,7 +17,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class AppUpdateContract {
     static void run(Instrumentation instrumentation) throws Exception {
         validateManifest();
+        UpdateManifestContract.run(instrumentation);
         systemConfirmation(instrumentation);
+        AppUpdateLifecycleContract.run(instrumentation);
     }
 
     static void validateManifest() throws Exception {

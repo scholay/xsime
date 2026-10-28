@@ -3,59 +3,41 @@
 日常发布只需要看 [docs/release/README.md](README.md)。本文记录发布链路各环节的设计与约束，修改工作流、
 安装器、更新器或签名配置前先读这里。
 
-## 一、release.yml 的三段隔离设计
+## 一、release.yml 的隔离与发布事务
 
-tag 推送后，[`.github/workflows/release.yml`](../../.github/workflows/release.yml) 使用彼此隔离的 runner：
+tag 推送后，[`.github/workflows/release.yml`](../../.github/workflows/release.yml) 将构建、签名、安装验收和公开分到独立 runner：
 
-- **`build_and_smoke`** 不绑定受保护 Environment，也不读取任何发布 Secret。它构建并实际执行 ad-hoc
-  签名 app 的 runtime smoke，再把 app、构建上下文和校验和作为短期 handoff Artifact 传出。
-- **`publish_unsigned_preview`**（`vX.Y.Z-preview.N`）是另一台无 secrets 的全新 runner，只做被动的成员集、
-  权限、版本、架构、签名状态与 SHA-256 复核，不执行 handoff 中的 app，然后创建 Pre-release。
-- **`sign_and_stage`**（`vX.Y.Z`）是全新 runner，才进入受保护的 `macos-release` Environment。它先按严格的
-  成员 / 路径 / 权限 / 大小规则解包 app 并被动校验，通过后才导入签名与公证凭据；凭据所在 runner
-  不执行 handoff 中的 app。签名、公证、staple 和最终资产复核通过后，它先销毁临时 keychain / P8，再产生
-  不可变 signed-stage Artifact。
-- **`publish_staged_release`** 是第三台全新 runner，进入不含任何签名/公证 Secrets 的受保护
-  `macos-publish` Environment。required reviewer 必须先审阅维护者的真机验收记录；该 job 只认证 stage 的
-  artifact ID/digest/运行号/commit，逐字节复核四个成员并从中发布，绝不 checkout、重建、重签或重公证。
-- **`build_linux_deb`** 在无发布权限的 Ubuntu 24.04 amd64 runner 上构建同一版本的 deb，并验证安装、
-  重装、卸载与用户数据保留。两个公开发布 job 都等待它成功；随后 **`attach_linux_deb`** 向已公开的
-  同名 `v*` Release 添加 deb 与单独的 `.sha256`，下载读回比对，不覆盖已存在的不同字节。
+- **`build_and_smoke`** 不读取发布 Secret。正式 tag 必须与当前 main、产品版本一致；服务端按固定 workflow ID、main push 事件及确切 SHA 复验五端最新 CI 成功，Android build 编号也须递增。
+- **`sign_and_stage`** 进入受保护的 `macos-release`，先被动检查交接 app 的成员、路径、权限、大小、版本与摘要，再导入 Developer ID 凭据。它不执行交接 app，公证和复核后先销毁临时 keychain/P8，再上传不可变 signed-stage。
+- **`verify_signed_install`** 在另一台一次性 Mac 上安装/升级同一签名包，校验实际安装身份和数据保留；这不等于所有真实用户宿主都已验收。
+- **`build_windows_release` / `build_android_release` / `build_linux_deb`** 各自产出同一提交的完整包与验证结果；Linux 包先完成安装、升级、重装和卸载检查。任何生产任务未通过都不能进入正式公开。
+- **`sign_update_manifest`** 使用独立的受保护 `macos-release` job。准备步骤只从当前 tag run 取不可变包，核验 run/SHA/artifact ID/digest、安全解包与包身份；签名步骤只接触生成的完整清单，不执行包。
+- **`publish_staged_release`** 进入无签名密钥的 `macos-publish`。它检出确切 tag 的已审核发布 helper，被动复核 macOS stage 的四个成员、四端包与签名清单；不重建、重签、重公证，也不执行下载产物。
+- **`publish_unsigned_preview`** 维持无发布密钥的 Pre-release 通道；`attach_linux_deb` 只为该预览附加 Linux 包，不参与正式 Release 的后置补包。
 
-构建步骤：
+macOS 构建与封存：
 
-1. arm64 与 x86_64 分别用 SwiftPM 原生构建系统构建，再 `lipo` 合并为**通用二进制**。一次传两个
-   `--arch` 会切到 Xcode 构建系统，它无法解析 SwiftTerm 1.20 的 build-tool plugin；两边的资源 bundle 必须
-   集合一致、逐字节相同，只拷一份。
-2. `scripts/fetch-rime.sh --force` 下载 librime 运行时（见第三节）。
-3. 组装 `RIMES.app`：二进制 → `MacOS/RIMES`，`Info.plist`，librime + 插件 + Rime 词库拷进
-   `Contents/Frameworks` 与 `Contents/SharedSupport`；ad-hoc 签名后执行 runtime smoke。
-4. 预览版与演练：打未签名 PKG，在一次性 runner 上先安装最新已发布 Release，再真实执行
-   `sudo installer` 安装新包，验证 PackageKit 退出状态、固定路径、输入法 metadata、通用架构、安装回执，
-   以及升级后 `/Library/Input Methods` 只剩 `RIMES.app` 一个 RIMES 身份。
-5. 正式版：用 Developer ID Application 证书逐个重签所有 bundled Mach-O，再以 hardened runtime
-   签 app；以 Developer ID Installer 签署 `RIMES-X.Y.Z.pkg`。用户实际接收的最终 PKG 是最外层分发容器，
-   因此只提交该 PKG 公证、等待 `Accepted` 并 staple；不创建或发布可直接解压的 App ZIP。
-6. 对最终 PKG 及其展开后的 Developer ID 签名 payload 执行 `codesign`、`pkgutil`、`stapler` 与 `spctl`
-   校验；随后销毁临时 keychain / P8，才把 pkg、`SHA256SUMS`、`RELEASE-NOTES.md` 与严格 manifest 作为
-   four-file signed-stage 上传。第二道 job 使用受控的 `gh` CLI 从该 stage 创建仅含 pkg 与 `SHA256SUMS` 的
-   Release，并下载正式资产读回校验；所有外部 Actions 都固定到完整 commit SHA。
+1. arm64/x86_64 分别用 SwiftPM 原生构建，再以 `lipo` 合并；两架构资源 bundle 集合及字节必须一致。
+2. 固定的 librime 运行时、引擎插件与词库进入 `RIMES.app`；ad-hoc smoke 与正式签名字节分别验收。
+3. Developer ID Application 重签 bundled Mach-O 和 app，Developer ID Installer 签精确 `RIMES-X.Y.Z.pkg`；只提交该 PKG 公证、等待 Accepted 并 staple，不创建 App ZIP。
+4. 最终 PKG 及展开的 payload 通过 `codesign`、`pkgutil`、`stapler`、`spctl` 后，销毁临时凭据；将 pkg、`SHA256SUMS`、`RELEASE-NOTES.md`、`release-manifest.txt` 四个成员作为 signed-stage 上传。ID、run、源码与压缩包摘要绑定该不可变 Artifact。
 
-`build_and_smoke` 执行的是 ad-hoc smoke bundle；正式 runner 会在之后重新签名、重新打包和公证。
-因此 build / smoke 成功不能替代对正式字节的验收：正式 workflow 会被动校验最终 pkg 的签名、票据和
-Gatekeeper 策略。signed-stage 出现后，维护者必须下载其中的**精确** `RIMES-X.Y.Z.pkg`，而不是用 checkout
-重打包或普通演练 Artifact，并在批准 `macos-publish` 前通过 `scripts/rehearse-release-pkg.sh` 做真实安装。
-发布器会证明随后公开的 Release 资产与该 stage 是同一批字节。
+正式发布事务由 [publish_update_assets.py](../../scripts/release/publish_update_assets.py) 统一执行：
 
-授权规则：
+1. 核验四端包的 source/version、checksum 与签名清单中的 URL、大小、SHA-256；过期或无效清单直接拒绝，不自动重签。
+2. 在 `stable-release-publication` 互斥组内，检查没有更高正式版本，Android versionCode 高于前一正式版本；恢复已公开同版本时只接受原编号。
+3. 创建 draft，或匹配带有相同 run/commit/资产集合摘要的既有 draft；来源不同、额外资产或已有不同字节都拒绝，绝不覆盖。
+4. 先核对全部已有资产，再补上传缺失资产；所有包、元数据与 `update-manifest.json` 都下载读回比较。此时旧 Latest 仍有效。
+5. 再次核对 tag 和版本单调性，然后一次将 draft 公开并设为 Latest。若服务端已公开但响应丢失，重试只读回完整资产，不重新发布或把旧版本设回 Latest。
 
-- 正式版 tag 必须在签名前精确指向当时的 `origin/main`；签名完成后 tag 不得移动，stage 与发布前各复核
-  其 commit，Release 必须仍为空位。主线随后有新提交不会改变已审计 tag 的字节。
-- 预览版 tag 必须指向已在 main 上的提交，tag 在发布前不得移动，Release 必须仍为空位。
-- 预览版 Release 的 macOS 资产为 `RIMES-X.Y.Z-preview.N.pkg` 与 `SHA256SUMS`；Linux job 随后附加
-  `fcitx5-rimes_X.Y.Z~preview.N_amd64.deb` 与其 `.sha256`。Release 标记为 Pre-release、`latest=false`，
-  正文写明 macOS unsigned / not notarized，链接 `docs/release/unsigned-preview.md` 并附 Linux 安装说明。
-- PR、定时和手动运行都是演练：版本号默认取下一个预览版本，只上传保留 7 天的 Artifact。
+恢复入口 [complete-release-assets.yml](../../.github/workflows/complete-release-assets.yml) 必须使用 `--ref vX.Y.Z` 从原稳定 tag dispatch，
+调用者的 repository、tag、commit 与原 source run 必须匹配；检出的 helper 来自该冻结 tag。它需要新的 `macos-publish` 批准并使用同一个互斥组，不放宽环境的 `v*` tag 限制。
+原构建、签名、清单签名及同包安装任务必须全部成功；不再要求此前发布 job 成功，因此可恢复“尚未创建/部分 draft/公开后读回失败”。
+恢复仅消费未过期、身份唯一的原 Artifact；无法证明来源、发现不同字节、签名过期或已有更新版本时拒绝，不用新构建或新签名偷偷替换旧 draft。
+
+正式 tag 在签名前必须精确指向当时 main，发布前重新核对 tag 未移动。允许同源 draft 续接，但不允许重用不同资产的版本号。
+预览 tag 必须来自 main 历史，Pre-release 保持 `latest=false`；PR、定时及手动演练不公开，默认采用产品目标版本并保留临时 Artifact。
+所有外部 Actions 固定完整 commit SHA；各 job 仅授予自身所需读写权限。真实设备验收按维护规则另行记录。
 
 <a id="release-environment"></a>
 
@@ -233,10 +215,38 @@ scripts/rehearse-release-pkg.sh --pkg /absolute/path/RIMES-X.Y.Z.pkg --install-g
 默认命令只做签名、公证、Gatekeeper、payload 与架构检查；`--install-gui` 才会打开与用户相同的 Installer，
 并在安装后验证固定路径、回执和真实输入源。它会退休当前 GUI 用户的开发 app / agent，因此必须使用测试账号
 或可恢复测试 Mac。记录 tag、stage asset SHA-256、macOS 版本和测试设备；reviewer 审阅这些证据后才批准
-`macos-publish`。发布 job 不执行本地 checkout 代码，只认证已封存 stage 并读回公开 Release；这两层都不能
-用开发 build/smoke 或普通演练 Artifact 替代。
+`macos-publish`。发布 job 执行确切 tag 的已审核发布 helper 和系统校验工具，仅被动检查交接包；它先认证完整 draft，随后公开并读回，不能用开发 build/smoke 或普通演练 Artifact 替代。
 
 ## 七、应用内自动更新（[`UpdateManager.swift`](../../Sources/RimeBuffer/UpdateManager.swift)）
+
+### 独立清单签名与兼容
+
+四端更新清单保留 `schemaVersion: 1`、版本、平台资产和来源提交等旧字段，新增签名有效期与
+`authentication`。旧客户端仍能读取原字段；新客户端在信任版本、地址或摘要前验证签名，缺签名、
+无受信任密钥、内容不一致、过期或版本回放都拒绝，不降级到旧的无签名路径。iOS 继续通过 App Store。
+
+签名为 P-256/SHA-256，覆盖 `authentication.payload` 中的原始 UTF-8 JSON 字节；签名编码为
+64 字节 `r || s` 的 Base64。解析后的签名内容必须与去掉 `authentication` 的顶层清单一致。
+公钥唯一来源为 `Shared/AppUpdate/trusted_keys.json`，运行
+`python3 -B scripts/release/sync-update-trust.py` 生成 Swift、Java、C++ 公钥常量；CI 检查三端一致性。
+共享公开测试向量不属于产品信任根，测试私钥不保存到仓库。
+
+受保护的 `macos-release` 环境增加 `RIMES_UPDATE_SIGNING_KEY_PEM_BASE64`，内容为更新专用
+P-256 PEM 私钥的 Base64。私钥只在独立清单签名步骤可见，以 0600 临时文件使用并在结束时清理；
+该 runner 不执行下载的安装包。签名清单、应用签名和公开发布各自经过环境批准，不把 GitHub
+公开资产上的 SHA-256 当成独立的发布者身份认证。
+
+清单最长有效 90 天，允许 5 分钟时钟偏差。新客户端会在检查、下载和安装前复验有效期，并保存
+已验证的最高版本；Android 同时保存最高构建号。长期停更导致清单过期时应明确提示不可核验，
+不能继续安装过期包。恢复发布复用原签名清单；到期后需发布更高的正式版本，不能覆盖旧资产续签。
+
+轮换密钥时先将新公钥加入受审查的信任表，保留旧公钥；可用
+`RIMES_UPDATE_SIGNING_PREVIOUS_KEY_PEM_BASE64` 对同一清单双签，至少一条受信任签名成功即可。
+旧客户端尚未获得新公钥时必须保留旧签名的桥接发布，不要直接换成它们不认识的单一新密钥。
+删除旧信任根、密钥丢失或泄漏需要独立评估已有客户端的升级通路。
+
+独立清单签名不会把 Windows EXE 变成 Authenticode 已签名文件，也不替代 macOS 公证、Android
+生产证书或 Linux 包身份检查。对应系统检查继续执行；版本号、签名身份和用户数据契约不变。
 
 已安装并运行的正式签名 RIMES：
 

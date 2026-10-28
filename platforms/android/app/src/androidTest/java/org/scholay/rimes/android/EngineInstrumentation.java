@@ -11,6 +11,9 @@ public final class EngineInstrumentation extends Instrumentation {
     @Override public void onStart() {
         Bundle result=new Bundle();
         try {
+            if(arguments!=null && "app-update-prepare".equals(arguments.getString("mode"))) {
+                result.putString("stream", AppUpdateUpgradeFixture.prepare(this,arguments.getString("apk"))); finish(-1,result); return;
+            }
             if(arguments!=null && "app-update".equals(arguments.getString("mode"))) {
                 AppUpdateContract.run(this); result.putString("stream", "PASS application update contracts and system installation cancellation\n"); finish(-1,result); return;
             }

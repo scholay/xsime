@@ -341,6 +341,18 @@ install(FILES ui/org.scholay.rimes.buffer.desktop ui/org.scholay.rimes.capsule.d
     DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
 
 if(BUILD_TESTING OR RIMES_BUILD_TESTS)
+    add_executable(rimes-update-manifest-tests "${RIMES_REPOSITORY_ROOT}/Shared/AppUpdate/manifest_tests.cpp")
+    target_include_directories(rimes-update-manifest-tests SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../windows/native/third_party")
+    target_compile_features(rimes-update-manifest-tests PRIVATE cxx_std_17)
+    target_link_libraries(rimes-update-manifest-tests PRIVATE OpenSSL::Crypto)
+    target_compile_options(rimes-update-manifest-tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    add_test(NAME update-manifest COMMAND rimes-update-manifest-tests
+        "${RIMES_REPOSITORY_ROOT}/Shared/AppUpdate/fixtures/signed_manifest.json")
+    add_executable(rimes-update-operation-tests tests/update_operation_tests.cpp)
+    target_link_libraries(rimes-update-operation-tests PRIVATE RimesRuntimeStorage Threads::Threads)
+    target_compile_options(rimes-update-operation-tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    add_test(NAME update-operation COMMAND rimes-update-operation-tests)
+    set_tests_properties(update-manifest update-operation PROPERTIES TIMEOUT 20)
     add_executable(rimes-window-geometry-tests tests/window_geometry_tests.cpp)
     target_link_libraries(rimes-window-geometry-tests PRIVATE RimesWindowGeometry)
     add_test(NAME window-geometry COMMAND rimes-window-geometry-tests)

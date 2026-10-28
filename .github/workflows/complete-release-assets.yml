@@ -1,12 +1,13 @@
 name: Complete approved release assets
 
-# Recovery only: the original tag workflow must already have passed signing,
-# install checks and protected macOS publication. Never creates a Release.
+# Reuses the original verified artifacts. A new protected publication approval
+# covers a missing/partial draft or readback failure after completed publication.
+# Dispatch at the original stable tag; macos-publish intentionally permits tags only.
 on:
   workflow_dispatch:
     inputs:
       source_run:
-        description: 'Original stable tag workflow run ID (already approved and published)'
+        description: 'Original stable tag workflow run ID with all signed producers and installation checks passed'
         required: true
         type: string
 
@@ -19,9 +20,13 @@ concurrency:
 
 jobs:
   complete:
-    if: github.repository == 'scholay/xsime' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    if: github.repository == 'scholay/xsime' && github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    timeout-minutes: 30
+    environment: macos-publish
+    concurrency:
+      group: stable-release-publication
+      cancel-in-progress: false
     permissions:
       contents: write
       actions: read
@@ -31,24 +36,37 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Authenticate original approvals, source, artifacts and published packages
+      - name: Require the protected publication environment
+        run: python3 scripts/release/release_guard.py environment --name macos-publish
+      - name: Authenticate original source, producer approvals and immutable artifacts
         id: source
         env:
           SOURCE_RUN: ${{ inputs.source_run }}
         run: python3 scripts/release/recover_update_assets.py --run-id "$SOURCE_RUN"
-      - name: Complete missing assets and read back the whole update feed
+      - name: Passively verify the original signed installer
+        env:
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          set -euo pipefail
+          pkg="$RUNNER_TEMP/rimes-signed-release-stage/RIMES-$VERSION.pkg"
+          /usr/sbin/pkgutil --check-signature "$pkg"
+          /usr/bin/xcrun stapler validate -v "$pkg"
+          /usr/sbin/spctl --assess --type install --verbose=4 "$pkg"
+      - name: Resume the same draft or verify the completed publication
         env:
           VERSION: ${{ steps.source.outputs.version }}
           RELEASE_COMMIT: ${{ steps.source.outputs.commit }}
           RELEASE_TAG: ${{ steps.source.outputs.tag }}
+          SOURCE_RUN_ID: ${{ steps.source.outputs.source_run }}
         run: bash scripts/release/publish-update-assets.sh
       - name: Keep completion evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: release-completion-evidence-${{ github.run_id }}
+          name: release-completion-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/release-completion-evidence.json
-            ${{ runner.temp }}/feed-readback/update-manifest.json
+            ${{ runner.temp }}/release-publication-evidence.json
           if-no-files-found: warn

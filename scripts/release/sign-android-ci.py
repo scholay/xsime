@@ -7,7 +7,9 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
+from release_guard import verify_android_build
 
 CERTIFICATE = "e6228d5b065f1f8c2f1e1162b80ea1a9245ce59a091bb6e403e47936c3820c54"
 
@@ -18,6 +20,8 @@ def main():
     assert re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version)
     assert os.environ["GITHUB_REF_NAME"] == "v" + version
     code = int(re.search(r"versionCode = (\d+)", (root / "platforms/android/app/build.gradle.kts").read_text())[1])
+    # Reject an un-upgradeable identity before importing the production key.
+    verify_android_build(version, code)
     source = Path(os.environ["RUNNER_TEMP"]) / "android-unsigned"
     output = Path(os.environ["RUNNER_TEMP"]) / "android-signed"
     output.mkdir(exist_ok=False)
@@ -46,6 +50,8 @@ def main():
     identity = run(sdk / "aapt2", "dump", "badging", apk).splitlines()[0]
     assert "name='org.scholay.rimes.android'" in identity
     assert f"versionCode='{code}'" in identity and f"versionName='{version}'" in identity
+    run(sys.executable, root / "platforms/android/scripts/verify-release.py",
+        apk, aab, "--sdk", sdk)
     hashes = {file.name: hashlib.sha256(file.read_bytes()).hexdigest() for file in [apk, aab]}
     (output / f"RIMES-Android-{version}-SHA256SUMS").write_text("".join(f"{digest}  {name}\n" for name, digest in hashes.items()))
     (output / f"RIMES-Android-{version}-BUILD-INFO.json").write_text(json.dumps({

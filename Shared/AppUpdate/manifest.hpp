@@ -39,4 +39,16 @@ inline Asset Parse(const std::string& bytes, const std::string& platform) {
 inline void Verify(const Asset& asset, std::uint64_t size, const std::string& sha256) {
     if (asset.size != size || asset.sha256 != sha256) throw std::runtime_error("Package size/SHA-256 mismatch; download again");
 }
+inline std::string PackageName(const Asset& asset, const std::string& platform) {
+    (void)Version(asset.version);
+    if (!std::regex_match(asset.sha256, std::regex("[a-f0-9]{64}")))
+        throw std::runtime_error("Invalid package identity");
+    if (platform != "windows" && platform != "linux") throw std::runtime_error("Unsupported package platform");
+    return "update-" + asset.version + "-" + asset.sha256 + (platform == "windows" ? ".exe" : ".deb");
+}
+inline void CheckVersionFloor(const Asset& asset, const std::string& installed, const std::string& highest) {
+    const auto candidate = Version(asset.version);
+    if (candidate < Version(installed) || (!highest.empty() && candidate < Version(highest)))
+        throw std::runtime_error("Update metadata is older than an installed or previously verified release");
+}
 } // namespace rimes::updates

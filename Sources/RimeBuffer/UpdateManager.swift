@@ -26,6 +26,22 @@ private struct GitHubAsset: Codable {
     }
 }
 
+// Platform metadata is intentionally heterogeneous: Android minimumOS is an
+// integer and Linux describes distributions. Decode only the macOS member.
+struct MacUpdateManifest: Decodable {
+    struct Asset: Decodable {
+        let url: String
+        let sha256: String
+        let size: Int64
+        let minimumOS: String
+        let architecture: String
+    }
+    struct Platforms: Decodable { let macos: Asset }
+    let schemaVersion: Int
+    let version: String
+    let platforms: Platforms
+}
+
 private enum UpdateNetworkRules {
     // Repository identity survives renames. Keep aliases explicit, never accept
     // arbitrary redirects or look-alike repositories under the same owner.
@@ -265,6 +281,7 @@ final class UpdateManager {
     private var downloadObservation: NSKeyValueObservation?
     private var expectedDigest: String?
     private var expectedSize: Int64?
+    private var authenticatedManifest: Data?
     private(set) var status: UpdateStatus = .idle
     /// Invoked on the main thread whenever `status` changes, so the status-bar
     /// menu can rebuild and reflect an available update.
@@ -412,12 +429,6 @@ final class UpdateManager {
 
     private func checkForUpdates(completion: @escaping () -> Void) {
         setStatus(.checking)
-        struct Manifest: Decodable {
-            struct Asset: Decodable { let url: String; let sha256: String; let size: Int64 }
-            let schemaVersion: Int
-            let version: String
-            let platforms: [String: Asset]
-        }
         var request = URLRequest(url: URL(string: "https://github.com/scholay/xsime/releases/latest/download/update-manifest.json")!)
         request.timeoutInterval = 30
         request.setValue("XSIME-updater/1", forHTTPHeaderField: "User-Agent")
@@ -430,10 +441,12 @@ final class UpdateManager {
                     guard let http = response as? HTTPURLResponse, http.statusCode == 200,
                           let final = http.url, UpdateNetworkRules.isSafeHTTPSURL(final),
                           let data, data.count <= 1024 * 1024 else { throw URLError(.badServerResponse) }
-                    let manifest = try JSONDecoder().decode(Manifest.self, from: data)
+                    let trustedPayload = try UpdateManifestAuthentication.verifiedPayload(data)
+                    let manifest = try JSONDecoder().decode(MacUpdateManifest.self, from: trustedPayload)
+                    let asset = manifest.platforms.macos
                     guard manifest.schemaVersion == 1,
                           UpdateNetworkRules.stableVersionComponents(manifest.version) != nil,
-                          let asset = manifest.platforms["macos"], let url = URL(string: asset.url),
+                          let url = URL(string: asset.url),
                           UpdateNetworkRules.isExactReleaseAssetURL(url, owner: self.githubOwner, repository: self.githubRepo, version: manifest.version),
                           asset.sha256.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
                           asset.size > 0, asset.size <= Self.maximumPackageBytes else { throw URLError(.cannotParseResponse) }
@@ -441,8 +454,21 @@ final class UpdateManager {
                     guard UpdateNetworkRules.stableVersionComponents(self.currentVersion) != nil else {
                         self.setStatus(.error("当前是开发构建，请从官方 Releases 安装正式版。")); return
                     }
+                    let previous = UserDefaults.standard.string(forKey: "applicationUpdateHighestVerifiedVersion")
+                    guard previous == nil || UpdateNetworkRules.stableVersionComponents(previous!) != nil else {
+                        throw UpdateManifestAuthentication.Failure(reason: "本机更新版本记录损坏，已停止自动更新。请从官方发布页手动安装并核对版本。")
+                    }
+                    guard !self.isNewerVersion(self.currentVersion, than: manifest.version),
+                          previous.map({ !self.isNewerVersion($0, than: manifest.version) }) ?? true else {
+                        throw UpdateManifestAuthentication.Failure(reason: "更新信息低于已安装或此前验证过的版本，已拒绝旧清单。")
+                    }
+                    UserDefaults.standard.set(manifest.version, forKey: "applicationUpdateHighestVerifiedVersion")
+                    guard UpdatePlatformCompatibility.supports(minimumOS: asset.minimumOS, architecture: asset.architecture) else {
+                        self.setStatus(.error("此更新要求 macOS \(asset.minimumOS) 与 \(asset.architecture) 架构，请查看官方发布说明。")); return
+                    }
                     guard self.isNewerVersion(manifest.version, than: self.currentVersion) else { self.setStatus(.noUpdate); return }
                     self.expectedDigest = asset.sha256; self.expectedSize = asset.size
+                    self.authenticatedManifest = data
                     self.installationRequested = false
                     self.setStatus(.available(version: manifest.version, downloadUrl: asset.url, notes: ""))
                 } catch { self.setStatus(.error("无法读取完整发布的更新信息，请稍后重试：\(error.localizedDescription)")) }
@@ -452,6 +478,10 @@ final class UpdateManager {
 
     private func downloadPackage(from urlString: String, version: String,
                                  completion: @escaping (Bool) -> Void) {
+        do {
+            guard let manifest = authenticatedManifest else { throw UpdateManifestAuthentication.Failure(reason: "请先取得签名更新清单。") }
+            _ = try UpdateManifestAuthentication.verifiedPayload(manifest)
+        } catch { setStatus(.error(error.localizedDescription)); completion(false); return }
         guard let expectedPackageName = UpdateNetworkRules.expectedPackageName(version: version),
               let url = URL(string: urlString),
               UpdateNetworkRules.isExactReleaseAssetURL(url,
@@ -606,8 +636,23 @@ final class UpdateManager {
 
     private func installStagedUpdate(version: String, package: URL) {
         setStatus(.installing)
+        let manifest = authenticatedManifest
+        let digest = expectedDigest
+        let size = expectedSize
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
+            do {
+                guard let manifest, let digest, let size else { throw UpdateManifestAuthentication.Failure(reason: "请重新检查并下载签名更新。") }
+                _ = try UpdateManifestAuthentication.verifiedPayload(manifest)
+                let bytes = try Data(contentsOf: package, options: .mappedIfSafe)
+                guard Int64(bytes.count) == size,
+                      SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == digest else {
+                    throw UpdateManifestAuthentication.Failure(reason: "待安装文件已变化，请重新下载。")
+                }
+            } catch {
+                self.onMain { self.setStatus(.error(error.localizedDescription)) }
+                return
+            }
             if let failure = self.packageVerificationFailure(at: package,
                                                              version: version) {
                 try? FileManager.default.removeItem(at: package.deletingLastPathComponent())
@@ -1080,6 +1125,7 @@ final class UpdateManager {
 /// both product and component metadata must match the requested Release.
 func runUpdatePackageMetadataSmokeTest() -> Bool {
     print("== RIMES update package metadata smoke test ==")
+    guard runUpdateAuthenticationSmokeTest() else { return false }
     for (language, expected) in [("zh-Hans", "犀术IME"), ("zh-Hant", "犀術IME"),
                                   ("zh-TW", "犀術IME"), ("zh-HK", "犀術IME"),
                                   ("en", "XSIME"), ("ja", "XSIME")] {

@@ -9,6 +9,7 @@ on:
       - "platforms/linux/**"
       - "Shared/SchemeImport/**"
       - "Shared/CandidateMatrix/**"
+      - "Shared/AppUpdate/**"
       - "OfficialPlugins"
       - "plugins.lock.json"
       - "Catalog/buffer-plugins.json"

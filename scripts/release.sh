@@ -39,9 +39,7 @@ usage() {
 
 REMOTE="origin"
 EXPECTED_REPO="scholay/xsime"
-# Previews retain their existing gate. A stable application release now ships
-# four installers and the iOS source, so it requires all five native workflows.
-REQUIRED_WORKFLOWS=("CI")
+# Exact workflow IDs/events and versions are checked by release_guard.py.
 
 github_repo_from_url() {
     local url="$1" repo
@@ -192,25 +190,17 @@ if [[ "$KIND" != "platform" ]]; then
 fi
 
 info "确认 origin/main $(git rev-parse --short "$fetch_main") 的 CI 结果..."
-if ! runs="$(gh api "repos/$EXPECTED_REPO/actions/runs?head_sha=$fetch_main&event=push&per_page=100" \
-        --jq '.workflow_runs[] | [.name, .status, (.conclusion // "")] | @tsv' 2>&1)"; then
-    die "无法读取 GitHub Actions 状态: $runs"
+guard_arguments=(ci --commit "$fetch_main")
+if [[ "$KIND" != "stable" ]]; then
+    guard_arguments+=(--workflow ci.yml)
 fi
+python3 scripts/release/release_guard.py "${guard_arguments[@]}" \
+    || gate "确切 main 提交的原生 CI 未全部通过。"
 if [[ "$KIND" == "stable" ]]; then
-    REQUIRED_WORKFLOWS+=("iOS checks" "Android checks" "Windows IME" "Linux IME")
+    android_build=$(python3 -c 'import re; from pathlib import Path; print(re.findall(r"versionCode = ([0-9]+)", Path("platforms/android/app/build.gradle.kts").read_text())[0])')
+    python3 scripts/release/release_guard.py android-build --version "$VERSION" --build "$android_build" \
+        || gate "正式版本或 Android versionCode 未高于已公开版本。"
 fi
-for workflow in "${REQUIRED_WORKFLOWS[@]}"; do
-    rows="$(printf '%s\n' "$runs" | awk -F'\t' -v name="$workflow" '$1 == name')"
-    if printf '%s\n' "$rows" | awk -F'\t' '$3 == "success" { found = 1 } END { exit !found }'; then
-        success "CI · $workflow"
-    elif printf '%s\n' "$rows" | awk -F'\t' '$2 != "completed" { found = 1 } END { exit !found }'; then
-        gate "「${workflow}」仍在运行；等它通过后再发布。"
-    elif [[ -z "$rows" ]]; then
-        gate "origin/main 没有「${workflow}」的运行记录。"
-    else
-        gate "「${workflow}」没有通过；main 不可发布。"
-    fi
-done
 
 if [[ "$KIND" == "stable" ]]; then
     for formal_environment in macos-release macos-publish; do

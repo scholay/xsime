@@ -212,6 +212,16 @@ Then add **XSIME** in Fcitx5 configuration. Upgrade by downloading the next
 release and running the same `apt install` command. A downloaded deb does
 not configure an apt repository or automatic updates.
 
+The settings update dialog supports the same Ubuntu 24.04 / 26.04 amd64 target.
+It verifies the release manifest's P-256 signature, validity period and highest
+previously verified version, then checks the package size, SHA-256 and Debian
+identity. Checking, downloading and installing are explicit actions. Closing
+the dialog cancels downloads and storage-lock waits before installation starts.
+Once authorization is handed to the system package manager, closing the dialog
+does not terminate apt/dpkg; the completion check reads the installed package
+version back from dpkg. A signed update manifest does not configure or replace
+APT repository signing. Manual DEB installation remains available.
+
 To uninstall the deb:
 
 ```bash

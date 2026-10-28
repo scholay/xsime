@@ -2,6 +2,8 @@
 param([string]$InstallRoot="$env:ProgramFiles\RIMES")
 . "$PSScriptRoot\Package.Common.ps1"
 Assert-Administrator
+$installRootLock=Enter-InstallRootLock $InstallRoot
+try {
 Assert-InstallUser $InstallRoot (Get-InstallUserSid '' $false)
 $state=Get-Content -LiteralPath "$InstallRoot\state.json" -Raw | ConvertFrom-Json
 Assert-OwnedVersion $InstallRoot $state.active | Out-Null
@@ -37,3 +39,5 @@ try{
 }
 Write-Output 'Restored the exact previous DLL paths and startup setting. User data retained. Sign out before daily use if any host used the preview.'
 } finally {if($maintenance){$maintenance.Dispose()}}
+
+} finally { $installRootLock.Dispose() }

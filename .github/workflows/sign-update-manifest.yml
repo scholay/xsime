@@ -1,0 +1,102 @@
+name: Sign complete update manifest
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      source_commit:
+        required: true
+        type: string
+      source_run:
+        required: true
+        type: string
+      macos_artifact_name:
+        required: true
+        type: string
+      macos_artifact_id:
+        required: true
+        type: string
+      macos_artifact_digest:
+        required: true
+        type: string
+      linux_artifact_name:
+        required: true
+        type: string
+    outputs:
+      artifact_name:
+        value: ${{ jobs.sign.outputs.artifact_name }}
+      artifact_id:
+        value: ${{ jobs.sign.outputs.artifact_id }}
+      artifact_digest:
+        value: ${{ jobs.sign.outputs.artifact_digest }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sign:
+    name: Sign complete update manifest
+    if: github.repository == 'scholay/xsime' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: macos-release
+    outputs:
+      artifact_name: ${{ steps.identity.outputs.name }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+    steps:
+      - name: Checkout reviewed signing code at the exact tag source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.source_commit }}
+          persist-credentials: false
+      - name: Verify public trust anchors
+        run: python3 -B scripts/release/sync-update-trust.py --check
+      - name: Authenticate immutable package bytes without signing secrets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          MACOS_ARTIFACT_NAME: ${{ inputs.macos_artifact_name }}
+          MACOS_ARTIFACT_ID: ${{ inputs.macos_artifact_id }}
+          MACOS_ARTIFACT_DIGEST: ${{ inputs.macos_artifact_digest }}
+          LINUX_ARTIFACT_NAME: ${{ inputs.linux_artifact_name }}
+        run: |
+          python3 -B scripts/release/prepare_update_manifest.py \
+            --directory "$RUNNER_TEMP/update-signing-inputs" --version "$VERSION" \
+            --source-commit "$SOURCE_COMMIT" --source-run "$SOURCE_RUN" \
+            --macos-artifact-name "$MACOS_ARTIFACT_NAME" --macos-artifact-id "$MACOS_ARTIFACT_ID" \
+            --macos-artifact-digest "$MACOS_ARTIFACT_DIGEST" --linux-artifact-name "$LINUX_ARTIFACT_NAME"
+      - name: Revalidate protected signing environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B scripts/release/release_guard.py environment --name macos-release
+      - name: Sign the complete feed with a reviewed update key
+        env:
+          RIMES_UPDATE_SIGNING_KEY_PEM_BASE64: ${{ secrets.RIMES_UPDATE_SIGNING_KEY_PEM_BASE64 }}
+          RIMES_UPDATE_SIGNING_PREVIOUS_KEY_PEM_BASE64: ${{ secrets.RIMES_UPDATE_SIGNING_PREVIOUS_KEY_PEM_BASE64 }}
+        run: |
+          umask 077
+          mkdir "$RUNNER_TEMP/signed-update-feed"
+          python3 -B scripts/release/update_signing.py \
+            "$RUNNER_TEMP/update-signing-inputs/unsigned-update-manifest.json" --sign \
+            --output "$RUNNER_TEMP/signed-update-feed/update-manifest.json"
+      - name: Verify signed output after signing credentials leave scope
+        run: python3 -B scripts/release/update_signing.py "$RUNNER_TEMP/signed-update-feed/update-manifest.json"
+      - name: Name the immutable signed feed
+        id: identity
+        env:
+          VERSION: ${{ inputs.version }}
+        run: echo "name=RIMES-${VERSION}-signed-update-feed-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: Upload signed metadata only
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ steps.identity.outputs.name }}
+          path: ${{ runner.temp }}/signed-update-feed/update-manifest.json
+          if-no-files-found: error
+          retention-days: 14

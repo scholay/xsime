@@ -5,7 +5,7 @@ macOS、Windows、Android、Linux 安装包并附在同一 GitHub Release；iOS 
 分支与本地维护方式见 [docs/development/maintenance.md](../development/maintenance.md)。本地合入 `main` 不会触发远端构建，
 也不等于批准推送、创建 tag、安装或发布。下文的 `release.sh` 和签名包流程主要面向 macOS。
 
-**合并到 main → 五端远端 CI 全绿 → `./scripts/release.sh stable` → tag → 构建、签名与安装验证 → 受保护发布 → 四端安装包读回校验 → 更新清单。**
+**合并到 main → 确切提交的五端远端 CI 全绿 → `./scripts/release.sh stable` → tag → 四端构建、签名与安装验证 → 受保护的完整清单签名 → 受保护的 draft 上传与逐项读回 → 一次公开并切换 Latest。**
 
 产品构建、自动测试和发布包验收在远端 CI 执行；本机安装或真实设备验收需按维护规范明确授权，记录实际覆盖范围。
 签名、安装器测试和公开资产读回必须成功，不能把“发起安装”写成“更新完成”。
@@ -21,15 +21,26 @@ iOS 查询实际可用的 App Store 版本，跳转商店下载和安装；TestF
 GitHub Release 出现新版本不表示该 iOS 版本已经获批或上架。
 
 `update-manifest.json` 是四端共同更新入口，包含版本、源码提交、包地址、大小、SHA-256、架构和系统要求。
-CI 先上传并读回所有安装包，最后才上传并读回清单。失败时不能发布缺少某个平台的清单，也不覆盖
-已有不同字节的资产。旧 macOS 客户端使用的 `RIMES-X.Y.Z.pkg` 文件名保持兼容。
+签名清单与四端安装包先上传到同一个 draft，所有资产逐项下载并比对成功后，才一次公开 Release 并切换 Latest。
+期间旧的公开版本与更新入口保持可用；不先公开 macOS 包再补齐其他平台，也不覆盖已有不同字节的资产。
+旧 macOS 客户端使用的 `RIMES-X.Y.Z.pkg` 文件名保持兼容。
 
-若已通过受保护发布的正式 Release 因后续任务跳过或失败，缺少 Android／Windows 包或完整清单，
-可在 main 手动运行 `Complete approved release assets`，输入原 tag 工作流的 run ID。
-恢复流程逐项要求原签名、同包安装、四端构建及 macOS／Linux 发布任务成功，核验原 tag／commit、
-不可变 Artifact 的来源与压缩包 SHA-256，然后使用同一发布脚本补齐资产、逐个下载比对，最后发布清单。
-它不创建 Release、不重签、不覆盖不同字节的资产、不接受 PR／预览／取消的源流程，也不改变环境保护。
-正常正式发布显式要求所有生产任务成功，避免预览分支的预期跳过向清单任务传播。
+若全部生产任务已经通过，但发布在创建 draft 前、上传中或公开后的响应/读回阶段失败，必须以原稳定 tag 手动运行
+`Complete approved release assets`，输入该 tag 的原工作流 run ID，并重新通过 `macos-publish` 的人工批准：
+
+```bash
+gh workflow run complete-release-assets.yml --repo scholay/xsime --ref vX.Y.Z -f source_run=ORIGINAL_RUN_ID
+```
+
+恢复入口检出该 tag 的确切源码，调用者的 tag／commit 必须与原 run 一致；从 main 或其他 tag 运行会拒绝。
+这保留 `macos-publish` 仅允许 `v*` tag 的环境限制。原 tag 必须包含当前恢复协议及已签名清单生产任务，旧的无签名清单流程不能借此补签。
+恢复流程复验原 tag／commit、确切提交的五端 CI、原签名、同包安装、四端构建及清单签名任务，下载原始不可变
+Artifact 并核验来源、压缩包摘要和实际资产。它只创建或续接同源、同一资产摘要集合的 draft；如果已经完整公开，
+仅做读回验证，不重复切换 Latest。不同字节、来源不明、过期签名或过期/歧义 Artifact 都会拒绝，不重建、不重签、不覆盖。
+已取消的源流程只有全部生产任务成功、失败/取消局限于发布阶段时才可进入这次重新批准的恢复。
+
+正常发布与恢复共用 `stable-release-publication` 互斥组，并在公开前检查版本单调：旧版本不能晚到后夺回 Latest；
+Android `versionCode` 必须高于前一正式版本，已公开同版本的只读恢复则必须保持原编号。预览 job 的预期跳过不会放宽生产门禁。
 
 macOS 的 `VERSION`、`Info.plist` 与正式 tag 必须一致。发布脚本不修改、不提交任何文件，只在 `origin/main` 上创建并推送一个 tag；
 构建、验证、发布说明和 Release 由 GitHub Actions 完成。macOS 与数据预览的发布中心是
@@ -37,15 +48,15 @@ macOS 的 `VERSION`、`Info.plist` 与正式 tag 必须一致。发布脚本不�
 
 ```mermaid
 flowchart LR
-  PR["PR（Conventional Commits）"] -->|CI 全绿后合并| main
-  main -->|release.sh 校验 CI 并推送 tag| tag["vX.Y.Z-preview.N / vX.Y.Z"]
-  tag --> build["无 secrets runner：构建、smoke、升级安装"]
-  build -->|预览版| pre["Pre-release（未签名）"]
-  build -->|正式版| sign["macos-release：签名、公证"]
-  sign --> stage["不可变 signed-stage（已销毁密钥）"]
-  stage --> rehearse["维护者真机：同一 .pkg"]
-  rehearse --> publish["macos-publish：第二次批准，无密钥"]
-  publish --> latest["Latest Release + 自动更新"]
+  PR["PR（Conventional Commits）"] --> main
+  main -->|确切 SHA 五端 CI| tag["正式 tag"]
+  tag --> build["四端构建与平台验证"]
+  build --> sign["受保护签名、公证与不可变包"]
+  sign --> install["远端同包安装/升级验收"]
+  install --> feed["macos-release：完整清单签名"]
+  feed --> approve["macos-publish：公开批准，无签名密钥"]
+  approve --> draft["draft：全部资产和清单上传、读回"]
+  draft --> latest["一次公开并切换 Latest"]
 ```
 
 ## 渠道
@@ -105,21 +116,21 @@ git switch main && git pull --ff-only
 - `origin` 的 fetch / push 地址都指向 `scholay/xsime`；
 - 当前在 `main`，工作区干净，`HEAD` 等于 `origin/main`；
 - `origin/main` 这个提交的 `CI` 已通过（其中包含 macOS build/runtime smoke 与发布工具校验）；
-- 正式版还要求同一提交的 iOS checks、Android checks、Windows IME、Linux IME 全部通过；预览版维持原有门禁；
-- 新 tag 不存在，并高于同渠道已发布的版本；
-- `Info.plist` 版本仍是占位值，预置插件 catalog 已同步；
+- 正式版还要求同一提交的 iOS checks、Android checks、Windows IME、Linux IME 全部通过；按固定 workflow ID、main push 事件和确切 SHA 检查最新运行，不能用同名或较早的成功结果替代；预览版只要求主 CI；
+- 新 tag 不存在，并高于同渠道已发布的版本；Android versionCode 高于前一正式 feed/build-info 中的编号；
+- `Info.plist` 与 `VERSION` 发布目标一致，预置插件 catalog 已同步；
 - 正式版还要求 `macos-release` 与 `macos-publish` 都存在；二者都要有非空 required reviewers、禁止
   administrator bypass，并以 selected branch/tag policy 允许 `v*`。前者的受保护 job 要求
   Application / Installer 两份证书、同一 Team ID 与公证凭据完整可用，后者不得存放这些凭据。
 
-两个 Environment 表示两次批准，**不要求两名审核者**；同一个 reviewer 可以先批准签名，再在同一安装包的
-真机验收通过后批准公开。当前由 `scholay` 发起并分别审核两次，允许 self-review；仍必须通过审批门，
-不能以管理员身份跳过审批。以后需要独立复核时，可以另行启用 prevent self-review 并指定其他审核者。
+两个 Environment 分别保护签名与公开，**不要求两名审核者**；同一个 reviewer 可以批准签名、清单签名和公开阶段，
+但各 job 必须通过其 Environment 审批，不能以管理员身份绕过。发布审核应检查同一安装包的远端安装/升级结果，
+真实设备验收按维护规则另行记录；恢复流程也需要新的公开批准。需要独立复核时，可启用 prevent self-review 并指定其他审核者。
 
 此外，独立的 `release tag creation` ruleset 对 `refs/tags/v*` 施加 **creation** 限制，只允许指定的
 发布账号 `scholay` 创建标签。原有 `release tags` ruleset 仍无 bypass，禁止所有人删除或移动已有标签；
 不要把创建标签的例外权限加到不可变规则上。工作流会在导入凭据和创建 Release 前
-再次读取两个 Environment，配置变弱或缺失就拒绝继续；不要用直接 `git push` 绕开 `release.sh`。
+再次读取两个 Environment，配置变弱或缺失就拒绝继续。tag 工作流也会在签名前复验确切提交的五端 CI，直接推 tag 不会绕过这道服务端门禁。
 
 ## 三、tag 推送之后
 
@@ -138,9 +149,10 @@ git switch main && git pull --ff-only
 3. **正式版签名与暂存**：全新 runner 进入受保护的 `macos-release`，以 Developer ID Application 签 app、
    以 Developer ID Installer 签精确 `RIMES-X.Y.Z.pkg`，只公证并校验这个用户实际接收的最终 PKG；它销毁
    keychain / P8 后才上传不可变的 four-file signed-stage（pkg、`SHA256SUMS`、说明、manifest）。
-4. **维护者同路验收与发布**：维护者下载 staged pkg，先验证后用 macOS Installer 真实安装；只有验收通过才批准
-   无密钥的 `macos-publish`。它核验 artifact ID/digest、manifest 与逐文件 SHA-256，绝不重签、重打包或
-   重公证，然后以完全相同的字节创建 Latest，并下载公开资产再次读回校验。
+4. **同包验收、清单签名与公开**：一次性 Mac runner 安装/升级同一 signed-stage 的 PKG；所有平台生产任务成功后，
+   独立 `sign_update_manifest` job 认证四端不可变 Artifact、生成并签名完整清单。无签名密钥的 `macos-publish` 经批准后，
+   核对包、清单、源提交及逐文件摘要，将全部资产放入 draft 并逐个下载比较，最后才公开并切换 Latest。
+   发布 job 只执行确切 tag 中已审核的发布 helper 和系统校验工具，不运行交接产物，不重建、重签或重公证。
 5. **发布说明** = 安装与校验说明 + 自动生成的「变更」：自上一个**公开 GitHub macOS Release**以来的提交
    按类型分组，列出合并的 PR 和完整对比链接。取消或未公开的 tag 绝不作为比较基线。
 6. **Linux deb**：`linux-deb.yml` 在 Ubuntu 24.04 amd64 构建同一提交，运行原生测试与 deb 新装／升级／重装／
@@ -148,11 +160,11 @@ git switch main && git pull --ff-only
    优先从已公开项目 `v*` Release 选择低于本次版本且架构相同的最新 deb，验证摘要及包身份后升级。
    首次没有历史 deb 时明确使用当前载荷生成的旧版本夹具，并检查旧文件退役；这不代表历史应用数据迁移通过。
    API、下载或校验失败必须使验收失败，不能伪装成“没有旧包”。所有 Linux 模块变化都触发发布演练。
-   Release 公开须等待此 job 成功。随后只向已公开的同名 `v*` Release 附加 deb 与其 `.sha256`，
-   再下载读回比对，重试只接受相同字节，不覆盖资产。预览版本映射为 `X.Y.Z~preview.N`，正式版本必须与
+   正式 Release 公开须等待此 job 成功，deb 与其 `.sha256` 随其他平台一起在 draft 内验证；只有未签名预览仍由
+   `attach_linux_deb` 在 Pre-release 创建后附加相同字节。预览版本映射为 `X.Y.Z~preview.N`，正式版本必须与
    根 `VERSION` 一致。每次发布同步 Linux 变更与安装文档；完整验收另需 X11/Wayland 实际输入测试。
 
-工作流失败时**不要删除 tag 重来**：修复后发布下一个版本号。tag、资产与 SHA-256 一经发布即不可变，
+工作流失败时**不要删除 tag 重来**：传输或响应失败优先通过受保护恢复复用原字节；若源码、包或签名内容需要改变，则发布下一个版本号。tag、资产与 SHA-256 一经发布即不可变，
 ruleset 必须禁止删除或移动 `v*` 与 `platform-preview-v*` tag；正式 `v*` 还必须限制创建权限。
 
 ## 四、发布前演练
@@ -210,7 +222,7 @@ PR 里顺手更新，CI 在它落后或公开记录无法读取时会给出警�
 
 ## 相关文档
 
-- [docs/release/reference.md](reference.md)：三段式签名/暂存/发布设计、Environment 与 Secrets、自包含 librime、
+- [docs/release/reference.md](reference.md)：构建/签名/清单/发布隔离、Environment 与 Secrets、自包含 librime、
   安装器、应用内更新、CI、跨平台预览。
 - [docs/release/unsigned-preview.md](unsigned-preview.md)：面向用户的预览版下载、校验与安装说明。
 - [docs/release/platform-preview.md](platform-preview.md)：Windows / Linux 数据预览的能力边界。

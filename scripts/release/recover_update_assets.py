@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Authenticate and download artifacts for an already approved stable release.
+"""Recover immutable producer artifacts for a newly approved publication attempt.
 
-This read-only preparation never creates releases, executes packages, or signs.
-The caller publishes with the same append-only script used by the tag workflow.
+The recovery workflow independently requires macos-publish approval. Producers,
+including signing and exact-package installation, must already have succeeded.
+This module never signs, executes packages, modifies a Release or moves Latest.
 """
 import argparse
 import hashlib
@@ -15,14 +16,15 @@ import stat
 import subprocess
 import zipfile
 
-REPO = "scholay/xsime"
-PUBLISHER = "Publish verified Android, Windows and complete update feed"
+from release_guard import (GitHub, REPO, require, source_commit, stable_version,
+                           select_artifact, verify_ci)
+
+PUBLISHER = "Approve and publish complete stable release"
 REQUIRED_JOBS = {
     "Build and runtime-smoke macOS without secrets",
     "Sign, verify, and stage macOS",
     "Install the exact signed package on a disposable Mac",
-    "Approve and publish staged macOS release",
-    "Attach verified Linux deb to the same release",
+    "sign_update_manifest / Sign complete update manifest",
     "build_linux_deb / Ubuntu 24.04 amd64 deb installation and removal",
     "build_windows_release / Release x64",
     "build_windows_release / Release x86",
@@ -34,53 +36,49 @@ REQUIRED_JOBS = {
 }
 
 
-def require(condition, message):
-    if not condition:
-        raise ValueError(message)
-
-
 def authorize(run, jobs, artifacts, release, latest, tag_commit):
-    require(run["repository"]["full_name"] == REPO and
-            run["head_repository"]["full_name"] == REPO, "Wrong source repository")
-    require(run["path"] == ".github/workflows/release.yml" and
-            run["event"] == "push", "Source must be the canonical tag workflow")
-    require(run["status"] == "completed" and run["conclusion"] in {"success", "failure"},
-            "Source run is unfinished or cancelled")
-    tag, commit = run["head_branch"], run["head_sha"]
-    require(re.fullmatch(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", tag),
-            "Stable tag required")
-    require(re.fullmatch(r"[0-9a-f]{40}", commit) and tag_commit == commit,
-            "Tag no longer identifies the verified source")
+    require(run.get("repository", {}).get("full_name") == REPO and
+            run.get("head_repository", {}).get("full_name") == REPO, "Wrong source repository")
+    require(run.get("path") == ".github/workflows/release.yml" and run.get("event") == "push",
+            "Source must be the canonical tag workflow")
+    require(run.get("status") == "completed" and run.get("conclusion") in {"success", "failure", "cancelled"},
+            "Source workflow is unfinished")
+    tag, commit = run["head_branch"], source_commit(run["head_sha"])
+    require(tag.startswith("v"), "Stable tag required")
+    version = tag[1:]; target = stable_version(version)
+    require(tag_commit == commit, "Tag no longer identifies the verified source")
     by_name = {job["name"]: job for job in jobs}
-    require(len(by_name) == len(jobs), "Ambiguous job names")
+    require(len(by_name) == len(jobs), "Ambiguous source job names")
     for name in REQUIRED_JOBS:
         job = by_name.get(name, {})
         require(job.get("status") == "completed" and job.get("conclusion") == "success",
-                f"Required source job did not pass: {name}")
-    require(all(job["conclusion"] in {"success", "skipped"} or job["name"] == PUBLISHER
-                for job in jobs), "A source job failed outside final asset publication")
-    require(release["tag_name"] == tag and not release["draft"] and not release["prerelease"],
-            "Approved public stable release required")
-    require(release["id"] == latest["id"], "Only the latest release may be completed")
-    version = tag[1:]
-    names = {asset["name"] for asset in release["assets"] if asset["state"] == "uploaded"}
-    require({f"RIMES-{version}.pkg", "SHA256SUMS", f"fcitx5-rimes_{version}_amd64.deb",
-             f"fcitx5-rimes_{version}_amd64.deb.sha256"} <= names,
-            "Approved macOS and Linux assets must already be public")
-    selected = {}
-    for platform in ("Windows", "Android"):
-        name = f"RIMES-{platform}-release-{commit}"
-        matches = [asset for asset in artifacts if asset["name"] == name]
-        require(len(matches) == 1, f"Missing or ambiguous artifact: {name}")
-        asset = matches[0]
-        require(not asset["expired"] and 0 < asset["size_in_bytes"] <= 512 * 1024 * 1024,
-                f"Expired or oversized artifact: {name}")
-        require(asset["workflow_run"]["id"] == run["id"] and
-                asset["workflow_run"]["head_sha"] == commit, "Artifact source mismatch")
-        require(re.fullmatch(r"sha256:[0-9a-f]{64}", asset.get("digest", "")),
-                "Authenticated artifact digest required")
-        selected[platform.lower()] = asset
-    return {"version": version, "commit": commit, "tag": tag, "artifacts": selected}
+                f"Required producer did not pass: {name}")
+    require(all(job.get("conclusion") in {"success", "skipped"} or job["name"] == PUBLISHER for job in jobs),
+            "A source job failed outside the publication transaction")
+    if release is not None:
+        require(release.get("tag_name") == tag and release.get("prerelease") is False,
+                "Existing release is not the expected stable tag")
+        # Source/asset marker and every byte are checked by the common publisher.
+    if latest is not None:
+        require(stable_version(latest["tag_name"][1:]) <= target,
+                "A newer stable release already exists")
+    names = {
+        "windows-release": f"RIMES-Windows-release-{commit}",
+        "android-release": f"RIMES-Android-release-{commit}",
+    }
+    prefixes = {
+        "rimes-signed-release-stage": f"RIMES-{version}-signed-stage-{run['id']}-",
+        "signed-update-feed": f"RIMES-{version}-signed-update-feed-{run['id']}-",
+        "linux-deb": f"rimes-linux-deb-{run['id']}-",
+    }
+    for destination, prefix in prefixes.items():
+        matches = [artifact["name"] for artifact in artifacts
+                   if re.fullmatch(re.escape(prefix) + r"[1-9]\d*", artifact.get("name", ""))]
+        require(len(matches) == 1, f"Missing or ambiguous original artifact: {prefix}*")
+        names[destination] = matches[0]
+    selected = {destination: select_artifact(artifacts, name, run["id"], commit)
+                for destination, name in names.items()}
+    return {"version": version, "commit": commit, "tag": tag, "source_run": run["id"], "artifacts": selected}
 
 
 def extract_verified(archive, destination, digest):
@@ -89,15 +87,14 @@ def extract_verified(archive, destination, digest):
                 "Artifact archive digest mismatch")
     with zipfile.ZipFile(archive) as bundle:
         members = bundle.infolist()
-        require(0 < len(members) <= 32 and
-                sum(member.file_size for member in members) <= 1024 * 1024 * 1024,
+        require(0 < len(members) <= 32 and sum(member.file_size for member in members) <= 1024 * 1024 * 1024,
                 "Unexpected artifact size or member count")
         names = set()
         for member in members:
             name, mode = member.filename, member.external_attr >> 16
             require(name not in names and name not in {"", ".", ".."} and
                     "/" not in name and "\\" not in name and
-                    (stat.S_IFMT(mode) in {0, stat.S_IFREG}) and not member.is_dir(),
+                    stat.S_IFMT(mode) in {0, stat.S_IFREG} and not member.is_dir(),
                     "Artifact must contain unique regular files at its root")
             names.add(name)
         destination.mkdir()
@@ -106,13 +103,25 @@ def extract_verified(archive, destination, digest):
                 shutil.copyfileobj(source, target)
 
 
-def api(path):
-    return json.loads(subprocess.check_output(["gh", "api", path], text=True))
+def download_verified(artifact, destination):
+    archive = destination.parent / (destination.name + "-artifact.zip")
+    with archive.open("xb") as stream:
+        subprocess.run(["gh", "api", f"repos/{REPO}/actions/artifacts/{artifact['id']}/zip"],
+                       stdout=stream, check=True)
+    require(archive.stat().st_size == artifact["size_in_bytes"], "Artifact ZIP byte count changed")
+    extract_verified(archive, destination, artifact["digest"][7:])
 
 
-def pages(path, key):
-    data = json.loads(subprocess.check_output(["gh", "api", "--paginate", "--slurp", path], text=True))
-    return [item for page in data for item in page[key]]
+def verify_recovery_context(run, environ=None):
+    environ = os.environ if environ is None else environ
+    tag = run.get("head_branch", "")
+    require(tag.startswith("v"), "Stable source tag required")
+    stable_version(tag[1:])
+    commit = source_commit(run.get("head_sha"))
+    expected = {"GITHUB_REPOSITORY": REPO, "GITHUB_EVENT_NAME": "workflow_dispatch",
+                "GITHUB_REF": "refs/tags/" + tag, "GITHUB_REF_NAME": tag, "GITHUB_SHA": commit}
+    require(all(environ.get(name) == value for name, value in expected.items()),
+            "Recovery must be dispatched at the original stable tag and source commit")
 
 
 def main():
@@ -120,29 +129,27 @@ def main():
     parser.add_argument("--run-id", type=int, required=True)
     args = parser.parse_args()
     require(args.run_id > 0, "Positive source run ID required")
-    prefix = f"repos/{REPO}"
-    run = api(f"{prefix}/actions/runs/{args.run_id}")
-    # Validate tag syntax before placing it into an API path.
+    github = GitHub(); prefix = f"repos/{REPO}"
+    run = github.json(f"{prefix}/actions/runs/{args.run_id}")
+    verify_recovery_context(run)
     tag = run["head_branch"]
     require(re.fullmatch(r"v\d+\.\d+\.\d+", tag), "Stable source tag required")
     plan = authorize(
-        run, pages(f"{prefix}/actions/runs/{args.run_id}/jobs?per_page=100", "jobs"),
-        pages(f"{prefix}/actions/runs/{args.run_id}/artifacts?per_page=100", "artifacts"),
-        api(f"{prefix}/releases/tags/{tag}"), api(f"{prefix}/releases/latest"),
-        api(f"{prefix}/commits/{tag}")["sha"],
+        run, github.pages(f"{prefix}/actions/runs/{args.run_id}/jobs?per_page=100", "jobs"),
+        github.pages(f"{prefix}/actions/runs/{args.run_id}/artifacts?per_page=100", "artifacts"),
+        github.json(f"{prefix}/releases/tags/{tag}", missing_ok=True),
+        github.json(f"{prefix}/releases/latest", missing_ok=True),
+        github.json(f"{prefix}/commits/{tag}")["sha"],
     )
+    verify_ci(plan["commit"], github, require_tip=False)
     root = Path(os.environ["RUNNER_TEMP"])
     (root / "release-completion-evidence.json").write_text(json.dumps(plan, indent=2) + "\n")
-    for platform, artifact in plan["artifacts"].items():
-        archive = root / f"{platform}-artifact.zip"
-        with archive.open("xb") as stream:
-            subprocess.run(["gh", "api", f"{prefix}/actions/artifacts/{artifact['id']}/zip"],
-                           stdout=stream, check=True)
-        extract_verified(archive, root / f"{platform}-release", artifact["digest"][7:])
+    for destination, artifact in plan["artifacts"].items():
+        download_verified(artifact, root / destination)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as stream:
-        for key in ("version", "commit", "tag"):
+        for key in ("version", "commit", "tag", "source_run"):
             stream.write(f"{key}={plan[key]}\n")
-    print(f"Authenticated source run {args.run_id}, tag {tag}, commit {plan['commit']}")
+    print(f"Authenticated producer run {args.run_id}, tag {tag}, commit {plan['commit']}")
 
 
 if __name__ == "__main__":
