@@ -478,6 +478,10 @@ class MacOSReleaseGatePolicyTests(unittest.TestCase):
         recovery = (Path(__file__).resolve().parents[2] / ".github/workflows/complete-release-assets.yml").read_text()
         self.assertIn("environment: macos-publish", recovery)
         self.assertIn("group: stable-release-publication", recovery)
+        self.assertIn("startsWith(github.ref, 'refs/tags/v')", recovery)
+        self.assertIn("github.event_name == 'workflow_dispatch'", recovery)
+        self.assertNotIn("github.ref == 'refs/heads/main'", recovery)
+        self.assertIn("ref: ${{ github.sha }}", recovery)
 
     def test_cross_platform_workflows_are_scheduled_or_manual_maintenance_only(self):
         for workflow in (self.platform_workflow, self.windows_workflow):
