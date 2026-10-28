@@ -72,6 +72,8 @@ final class UpdateManifestContract {
     }
     private static void installedVersionFloor(Instrumentation instrumentation) throws Exception {
         Context context=instrumentation.getTargetContext();
+        if (!BuildConfig.DEBUG || !"org.scholay.rimes.android.debug".equals(context.getPackageName()))
+            throw new AssertionError("Trust-floor preferences are tested only in the disposable debug app");
         PackageInfo installed=context.getPackageManager().getPackageInfo(context.getPackageName(),0);
         long code=AppUpdateManager.versionCode(installed);
         if (code<=1 || "0.0.0".equals(installed.versionName)) throw new AssertionError("Version-floor fixture needs an established installed version");

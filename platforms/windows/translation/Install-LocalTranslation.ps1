@@ -16,7 +16,9 @@ function Throw-TranslationDownloadFailure([string]$Reason) {
     throw $failure
 }
 function Translation-DownloadFailureReason([Exception]$ErrorValue) {
+    $lastFailure = $ErrorValue
     for ($failureCursor = $ErrorValue; $failureCursor; $failureCursor = $failureCursor.InnerException) {
+        $lastFailure = $failureCursor
         if ($failureCursor.Data.Contains('TranslationSafeReason')) { return [string]$failureCursor.Data['TranslationSafeReason'] }
         if ($failureCursor -is [Net.WebException]) {
             $status = if ($failureCursor.Response -is [Net.HttpWebResponse]) { ' HTTP=' + [int]$failureCursor.Response.StatusCode } else { '' }
@@ -25,7 +27,7 @@ function Translation-DownloadFailureReason([Exception]$ErrorValue) {
     }
     # Exception messages may contain an authenticated redirect URL. Keep them out
     # of diagnostics; the logical resource and bounded phase are logged instead.
-    return 'I/O or transport failure'
+    return 'local-error=' + $lastFailure.GetType().Name + ' HRESULT=0x' + $lastFailure.HResult.ToString('X8')
 }
 function Test-TranslationArchive($Item, [string]$Path) {
     return (Test-Path -LiteralPath $Path -PathType Leaf) -and
@@ -110,29 +112,36 @@ function Get-VerifiedTranslationArchive($Item, [string]$Archive, [string]$Cache,
     }
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         $partial = $Archive + '.partial-' + [Guid]::NewGuid().ToString('N')
+        $phase = 'preflight'
         try {
             $remaining = Translation-RequestTimeout $Deadline
             Write-Host ('translation download resource=' + $Item.name + ' attempt=' + $attempt + '/3 expected-bytes=' + $Item.bytes)
             if ($Cache) {
+                $phase = 'offline-cache'
                 $cached = Join-Path $Cache $Item.file
                 if (!(Test-TranslationArchive $Item $cached)) { Throw-TranslationDownloadFailure 'offline cache is missing or differs from the pinned resource' }
                 Copy-Item -LiteralPath $cached -Destination $partial
             } else {
+                $phase = 'download'
                 $attemptDeadline = [DateTime]::UtcNow.AddMilliseconds([Math]::Min(120000, $remaining))
                 Invoke-TranslationTransfer $Item $partial $attemptDeadline
             }
+            $phase = 'cache-verification'
             if (!(Test-TranslationArchive $Item $partial)) { Throw-TranslationDownloadFailure 'resource changed before verified cache publication' }
             # A second caller may have populated the same verified cache while
             # this request was in flight. Preserve it instead of replacing it.
             if (!(Test-TranslationArchive $Item $Archive)) {
-                if ([IO.File]::Exists($Archive)) { [IO.File]::Replace($partial, $Archive, $null) }
+                $phase = 'cache-publication'
+                # PowerShell coerces $null to an empty string for a string
+                # argument. File.Replace requires a real null backup path.
+                if ([IO.File]::Exists($Archive)) { [IO.File]::Replace($partial, $Archive, [System.Management.Automation.Language.NullString]::Value) }
                 else { [IO.File]::Move($partial, $Archive) }
             }
             Write-Host ('translation verified resource=' + $Item.name + ' bytes=' + $Item.bytes + ' SHA256=' + $Item.sha256)
             return
         } catch {
             $reason = Translation-DownloadFailureReason $_.Exception
-            Write-Host ('translation failed resource=' + $Item.name + ' attempt=' + $attempt + '/3 reason=' + $reason)
+            Write-Host ('translation failed resource=' + $Item.name + ' attempt=' + $attempt + '/3 phase=' + $phase + ' reason=' + $reason)
             if ($Cache -or $attempt -eq 3 -or [DateTime]::UtcNow -ge $Deadline) {
                 throw [IO.IOException]::new('Translation resource ' + $Item.name + ' was not verified after ' + $attempt + ' attempt(s): ' + $reason)
             }

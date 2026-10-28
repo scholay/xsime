@@ -1,6 +1,8 @@
 package org.scholay.rimes.testhost;
 
 import android.app.Instrumentation;
+import android.content.ComponentName;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -20,6 +22,8 @@ import java.util.Iterator;
 /** External process survives replacement of the actual keyboard app. No simulated completion flag. */
 final class AppUpdateUpgradeContract {
     private static final String PACKAGE="org.scholay.rimes.android.debug";
+    // applicationIdSuffix changes the installed package, not Java class names.
+    private static final String UPDATER="org.scholay.rimes.android.AppUpdateActivity";
     static String run(Instrumentation instrumentation) throws Exception {
         {
             PackageManager pm=instrumentation.getTargetContext().getPackageManager();
@@ -79,9 +83,13 @@ final class AppUpdateUpgradeContract {
     private static void openUpdater(Instrumentation instrumentation) throws Exception {
         // This component is exported only by src/debug/AndroidManifest.xml.
         // Do not make a package-replacement test depend on unrelated settings navigation.
+        ActivityInfo activity=instrumentation.getTargetContext().getPackageManager()
+                .getActivityInfo(new ComponentName(PACKAGE,UPDATER),0);
+        if (!activity.exported || !activity.enabled || (activity.applicationInfo.flags&ApplicationInfo.FLAG_DEBUGGABLE)==0)
+            throw new AssertionError("The explicit updater entry must belong to the exported debug fixture");
         shell(instrumentation,"input keyevent KEYCODE_WAKEUP");
         shell(instrumentation,"wm dismiss-keyguard");
-        String launch=string(shell(instrumentation,"am start -W -f 0x10008000 -n "+PACKAGE+"/.AppUpdateActivity"));
+        String launch=string(shell(instrumentation,"am start -W -f 0x10008000 -n "+PACKAGE+"/"+UPDATER));
         if (!launch.contains("Status: ok")) throw new AssertionError("Debug updater launch failed: "+launch.substring(0,Math.min(launch.length(),1200))+"; "+diagnostic(instrumentation));
     }
     private static void click(Instrumentation instrumentation,String packagePart,String[] labels,long timeout) {
