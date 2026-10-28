@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.Iterator;
 
 /** External process survives replacement of the actual keyboard app. No simulated completion flag. */
@@ -76,8 +77,12 @@ final class AppUpdateUpgradeContract {
         }
     }
     private static void openUpdater(Instrumentation instrumentation) throws Exception {
-        shell(instrumentation,"am start -W -f 0x10008000 -n "+PACKAGE+"/.SetupActivity");
-        click(instrumentation,PACKAGE,new String[]{"Software update","检查更新"},15000);
+        // This component is exported only by src/debug/AndroidManifest.xml.
+        // Do not make a package-replacement test depend on unrelated settings navigation.
+        shell(instrumentation,"input keyevent KEYCODE_WAKEUP");
+        shell(instrumentation,"wm dismiss-keyguard");
+        String launch=string(shell(instrumentation,"am start -W -f 0x10008000 -n "+PACKAGE+"/.AppUpdateActivity"));
+        if (!launch.contains("Status: ok")) throw new AssertionError("Debug updater launch failed: "+launch.substring(0,Math.min(launch.length(),1200))+"; "+diagnostic(instrumentation));
     }
     private static void click(Instrumentation instrumentation,String packagePart,String[] labels,long timeout) {
         long deadline=SystemClock.uptimeMillis()+timeout;
@@ -90,11 +95,11 @@ final class AppUpdateUpgradeContract {
             }
             SystemClock.sleep(100);
         }
-        throw new AssertionError("Expected update/installer action did not appear");
+        throw new AssertionError("Expected action "+Arrays.toString(labels)+" in "+packagePart+" did not appear; "+diagnostic(instrumentation));
     }
     private static AccessibilityNodeInfo find(AccessibilityNodeInfo node,String[] labels) {
         if (node.isVisibleToUser() && node.isEnabled() && node.isClickable()) {
-            for (String label:labels) if (label.contentEquals(node.getText()==null?"":node.getText()) || label.contentEquals(node.getContentDescription()==null?"":node.getContentDescription())) return node;
+            for (String label:labels) if (sameLabel(label,node.getText()) || sameLabel(label,node.getContentDescription())) return node;
         }
         for (int i=0;i<node.getChildCount();i++) { AccessibilityNodeInfo child=node.getChild(i); if (child!=null) { AccessibilityNodeInfo match=find(child,labels); if (match!=null) return match; } }
         return null;
@@ -113,6 +118,39 @@ final class AppUpdateUpgradeContract {
             }
             SystemClock.sleep(100);
         }
-        throw new AssertionError("Updater did not confirm the installed version");
+        throw new AssertionError("Updater did not confirm the installed version; "+diagnostic(instrumentation));
+    }
+    private static boolean sameLabel(String expected,CharSequence actual) {
+        return actual!=null && expected.equalsIgnoreCase(actual.toString().trim());
+    }
+    private static String publicLabel(CharSequence value) {
+        if (value==null) return "null";
+        String text=value.toString().trim();
+        for (String label:new String[]{"Install","Update","Cancel","安装","更新","取消",
+                "安装更新 / Install","检查更新 / Check","下载更新 / Download","取消 / Cancel"})
+            if (label.equalsIgnoreCase(text)) return text;
+        // Diagnostics must not collect editable or arbitrary text even in CI.
+        return "<redacted:"+text.length()+">";
+    }
+    private static String diagnostic(Instrumentation instrumentation) {
+        StringBuilder output=new StringBuilder("UI[");
+        appendDiagnostic(instrumentation.getUiAutomation().getRootInActiveWindow(),output,new int[]{0},0);
+        if (output.length()>4000) output.setLength(4000);
+        return output.append(']').toString();
+    }
+    private static void appendDiagnostic(AccessibilityNodeInfo node,StringBuilder output,int[] count,int depth) {
+        if (node==null) { output.append("null;"); return; }
+        if (depth>8 || count[0]++>=48 || output.length()>3900) return;
+        android.graphics.Rect bounds=new android.graphics.Rect(); node.getBoundsInScreen(bounds);
+        output.append("pkg=").append(node.getPackageName()).append(" class=").append(node.getClassName())
+                .append(" id=").append(node.getViewIdResourceName()).append(" bounds=").append(bounds)
+                .append(" visible=").append(node.isVisibleToUser()).append(" enabled=").append(node.isEnabled())
+                .append(" clickable=").append(node.isClickable()).append(" scrollable=").append(node.isScrollable());
+        if (!node.isEditable() && !node.isPassword()) output.append(" text=").append(publicLabel(node.getText())).append(" desc=").append(publicLabel(node.getContentDescription()));
+        output.append(';');
+        for (int i=0;i<node.getChildCount() && count[0]<48 && output.length()<3900;i++) {
+            AccessibilityNodeInfo child=node.getChild(i);
+            if (child!=null) appendDiagnostic(child,output,count,depth+1);
+        }
     }
 }

@@ -144,10 +144,9 @@ final class AppUpdateManager {
         if (!envelope.isEmpty()) {
             JSONObject payload=UpdateManifestVerifier.verify(envelope,System.currentTimeMillis()/1000L,UpdateTrust::publicKeyFor);
             JSONObject asset=assetFrom(payload);
-            UpdateManifestVerifier.requireNotOlder(payload.getString("version"),asset.getLong("build"),
-                    preferences.getString("trustedVersion",""),preferences.getLong("trustedBuild",0));
+            PackageInfo installed=requireVersionFloor(asset);
             if (asset.getInt("minimumOS")>android.os.Build.VERSION.SDK_INT ||
-                    asset.getLong("build")<=versionCode(context.getPackageManager().getPackageInfo(context.getPackageName(),0))) return null;
+                    asset.getLong("build")<=versionCode(installed)) return null;
             return asset;
         }
         // Only a debuggable package can receive an instrumentation-owned local APK fixture.
@@ -171,15 +170,23 @@ final class AppUpdateManager {
             throw new Exception("Invalid Android update requirements");
         return asset;
     }
+    /** Installed identity is a floor even before any signed feed has been saved. */
+    PackageInfo requireVersionFloor(JSONObject asset) throws Exception {
+        PackageInfo installed=context.getPackageManager().getPackageInfo(context.getPackageName(),0);
+        String version=asset.getString("version"); long build=asset.getLong("build");
+        UpdateManifestVerifier.requireNotOlder(version,build,installed.versionName,versionCode(installed));
+        UpdateManifestVerifier.requireNotOlder(version,build,preferences.getString("trustedVersion",""),preferences.getLong("trustedBuild",0));
+        return installed;
+    }
     void check() {
         start("正在检查 / Checking…",true,operation -> {
             String envelope=new String(fetch(FEED,1024*1024,operation),StandardCharsets.UTF_8);
             JSONObject payload=UpdateManifestVerifier.verify(envelope,System.currentTimeMillis()/1000L,UpdateTrust::publicKeyFor);
             JSONObject asset=assetFrom(payload);
             String version=payload.getString("version"); long build=asset.getLong("build");
-            UpdateManifestVerifier.requireNotOlder(version,build,preferences.getString("trustedVersion",""),preferences.getLong("trustedBuild",0));
+            PackageInfo installed=requireVersionFloor(asset);
             operation.check();
-            boolean newer=build>versionCode(context.getPackageManager().getPackageInfo(context.getPackageName(),0));
+            boolean newer=build>versionCode(installed);
             // Update the rollback floor only after signature, schema and platform metadata validation.
             if (!preferences.edit().putString("trustedVersion",version).putLong("trustedBuild",build)
                     .putString("candidateManifest",newer?envelope:"").remove("candidate").remove("debugUpdateFixture")

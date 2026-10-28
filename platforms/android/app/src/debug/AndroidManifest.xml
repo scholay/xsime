@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- The external CI host must survive replacement of this disposable app.
+         Only the debug APK exposes its real updater page; release keeps the
+         main manifest's exported=false and all install verification remains. -->
+    <application>
+        <activity android:name=".AppUpdateActivity" android:exported="true"
+            tools:replace="android:exported" />
+    </application>
+</manifest>

@@ -1,12 +1,16 @@
 package org.scholay.rimes.android;
 
 import android.app.Instrumentation;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.util.Base64;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicReference;
 
 final class UpdateManifestContract {
     interface Attempt { void run() throws Exception; }
@@ -64,5 +68,33 @@ final class UpdateManifestContract {
         rejected(() -> UpdateManifestVerifier.requireNotOlder("1.9.9",25,"1.10.0",24));
         rejected(() -> UpdateManifestVerifier.requireNotOlder("1.11.0",23,"1.10.0",24));
         rejected(() -> UpdateManifestVerifier.requireNotOlder("01.11.0",25,"1.10.0",24));
+        installedVersionFloor(instrumentation);
+    }
+    private static void installedVersionFloor(Instrumentation instrumentation) throws Exception {
+        Context context=instrumentation.getTargetContext();
+        PackageInfo installed=context.getPackageManager().getPackageInfo(context.getPackageName(),0);
+        long code=AppUpdateManager.versionCode(installed);
+        if (code<=1 || "0.0.0".equals(installed.versionName)) throw new AssertionError("Version-floor fixture needs an established installed version");
+        AtomicReference<AppUpdateManager> manager=new AtomicReference<>();
+        instrumentation.runOnMainSync(() -> manager.set(AppUpdateManager.get(context)));
+        SharedPreferences preferences=context.getSharedPreferences(AppUpdateManager.PREFS,Context.MODE_PRIVATE);
+        boolean hadVersion=preferences.contains("trustedVersion"),hadBuild=preferences.contains("trustedBuild");
+        String savedVersion=preferences.getString("trustedVersion",""); long savedBuild=preferences.getLong("trustedBuild",0);
+        try {
+            if (!preferences.edit().remove("trustedVersion").remove("trustedBuild").commit()) throw new AssertionError("Could not clear trust-floor fixture");
+            // First check has no persisted high-water mark, but installed metadata is already trusted.
+            rejected(() -> manager.get().requireVersionFloor(new JSONObject().put("version","0.0.0").put("build",code+1)));
+            rejected(() -> manager.get().requireVersionFloor(new JSONObject().put("version",installed.versionName).put("build",code-1)));
+            manager.get().requireVersionFloor(new JSONObject().put("version",installed.versionName).put("build",code));
+            if (preferences.contains("trustedVersion") || preferences.contains("trustedBuild")) throw new AssertionError("A rejected check wrote the trust floor");
+            if (!preferences.edit().putString("trustedVersion",installed.versionName).putLong("trustedBuild",code+1).commit()) throw new AssertionError("Could not save trusted-build fixture");
+            rejected(() -> manager.get().requireVersionFloor(new JSONObject().put("version",installed.versionName).put("build",code)));
+            manager.get().requireVersionFloor(new JSONObject().put("version",installed.versionName).put("build",code+1));
+        } finally {
+            SharedPreferences.Editor restore=preferences.edit().remove("trustedVersion").remove("trustedBuild");
+            if (hadVersion) restore.putString("trustedVersion",savedVersion);
+            if (hadBuild) restore.putLong("trustedBuild",savedBuild);
+            if (!restore.commit()) throw new AssertionError("Could not restore trusted-version fixture");
+        }
     }
 }
