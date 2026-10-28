@@ -198,7 +198,14 @@ jobs:
           assert release_workflow.count('must allow the formal tag pattern v*') == 2
           assert 'Could not destroy the temporary signing keychain; refusing to stage release assets.' in release_workflow
           publish_job = release_workflow.split('  publish_staged_release:', 1)[1].split('\n  attach_linux_deb:', 1)[0]
-          assert 'actions/checkout@' not in publish_job
+          # Publication now runs reviewed Python helpers from the exact tag,
+          # while downloaded artifacts remain passive data and secrets stay out.
+          assert 'ref: ${{ github.sha }}' in publish_job
+          assert 'persist-credentials: false' in publish_job
+          assert 'environment: macos-publish' in publish_job
+          assert 'RIMES_UPDATE_SIGNING_KEY_PEM_BASE64' not in publish_job
+          assert 'scripts/sign-macos-app.sh' not in publish_job
+          assert 'scripts/make-pkg.sh' not in publish_job
           assert 'scripts/rehearse-release-pkg.sh' not in publish_job
 
           preinstall = Path("scripts/pkg/scripts/preinstall").read_text()
