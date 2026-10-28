@@ -85,6 +85,13 @@ jobs:
           python scripts/test-buffer-plugin-catalog.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Test bounded translation resource downloads
+        if: matrix.architecture == 'x64'
+        shell: powershell
+        run: |
+          ./platforms/windows/tests/Test-TranslationDownload.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Test isolated installer payload and verification result
         if: matrix.architecture == 'x64'
         shell: powershell

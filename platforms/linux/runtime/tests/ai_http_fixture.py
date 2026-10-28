@@ -9,6 +9,17 @@ import sys
 import threading
 import time
 
+CANCEL_PREVIEW_TIMEOUT = 5
+
+
+def configure(server, *, fcitx=False):
+    server.daemon_threads = True
+    server.failures = []
+    server.fcitx = fcitx
+    server.request_lock = threading.Lock()
+    server.fragmented_requests = 0
+    server.cancel_preview_closed = threading.Event()
+
 
 def event(text):
     data = {'choices': [{'index': 0, 'delta': {'content': text}, 'finish_reason': None}]}
@@ -20,6 +31,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_POST(self):
+        cancellation_preview = False
         try:
             length = int(self.headers.get('Content-Length', '0'))
             assert 0 < length <= 1024 * 1024
@@ -44,6 +56,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 time.sleep(1); return
             if route == 'fragmented':
                 raw = ['{"blocks":[{"text":"First 🙂.","title":null},', '{"text":"第二段。","title":null}]}']
+                if self.server.fcitx:
+                    with self.server.request_lock:
+                        self.server.fragmented_requests += 1
+                        request_number = self.server.fragmented_requests
+                    assert request_number <= 2, 'unexpected Fcitx fixture generation'
+                    cancellation_preview = request_number == 2
+                if cancellation_preview:
+                    # The second Fcitx request tests cancellation while a real
+                    # preview is visible. Keep that state until the client closes
+                    # instead of racing a 160 ms Running -> Ready transition.
+                    self.wfile.write(event(raw[0])); self.wfile.flush()
+                    deadline = time.monotonic() + CANCEL_PREVIEW_TIMEOUT
+                    while time.monotonic() < deadline:
+                        self.wfile.write(b': cancellation fixture heartbeat\n\n')
+                        self.wfile.flush()
+                        time.sleep(.05)
+                    raise AssertionError('Fcitx did not cancel the preview connection')
                 for part in raw:
                     for byte in event(part):
                         self.wfile.write(bytes([byte])); self.wfile.flush()
@@ -63,15 +92,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 raise AssertionError('unrecognized fixture route')
         except (BrokenPipeError, ConnectionResetError):
-            pass
+            if cancellation_preview:
+                self.server.cancel_preview_closed.set()
         except Exception as error:
             self.server.failures.append(type(error).__name__)
 
 
 if __name__ == '__main__':
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-    server.daemon_threads = True
-    server.failures = []
+    configure(server, fcitx=sys.argv[1] == '--fcitx')
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         endpoint = f'http://127.0.0.1:{server.server_port}'
@@ -81,6 +110,9 @@ if __name__ == '__main__':
             result = subprocess.run([str(build / 'rimes-buffer-fcitx-e2e'), str(build), '.', 'test-data'], env=env, timeout=45)
         else:
             result = subprocess.run([sys.argv[1], endpoint], timeout=30)
+        if server.fcitx and result.returncode == 0:
+            if server.fragmented_requests != 2 or not server.cancel_preview_closed.wait(2):
+                raise SystemExit('Fcitx did not close the explicit cancellation preview')
         if server.failures:
             raise SystemExit('Fixture contract failures: ' + ', '.join(server.failures))
         raise SystemExit(result.returncode)

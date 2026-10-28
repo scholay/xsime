@@ -866,7 +866,15 @@ void RunAISuite(SuiteCtx ctx) {
                 rimes::buffer::Snapshot s;
                 if (!rimes::buffer::ParseSnapshot(ReadDump(ctx.dump_path), &s)) Die("AI snapshot malformed");
                 const auto elapsed = std::chrono::steady_clock::now() - started;
-                if (elapsed > std::chrono::seconds(15)) Die("AI workbench deadline");
+                if (elapsed > std::chrono::seconds(15)) {
+                    std::cerr << "AI deadline state: test_phase=" << progress->phase
+                              << " derived_phase=" << static_cast<int>(s.phase)
+                              << " visible=" << s.visible << " capturing=" << s.capturing
+                              << " can_generate=" << s.can_generate << " can_deliver=" << s.can_deliver
+                              << " results=" << s.results.size() << " blocks=" << s.result_blocks.size()
+                              << " source_bytes=" << s.staged_text.size() << '\n';
+                    Die("AI workbench deadline");
+                }
                 if (s.phase == rimes::buffer::DerivedPhase::Failed) Die("AI workbench request failed: " + s.message);
                 if (progress->phase == 0 && elapsed > std::chrono::milliseconds(250)) {
                     if (s.active_plugin != "builtin.openai-compatible" || s.phase != rimes::buffer::DerivedPhase::Idle || !s.results.empty())
