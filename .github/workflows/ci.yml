@@ -200,7 +200,7 @@ jobs:
           publish_job = release_workflow.split('  publish_staged_release:', 1)[1].split('\n  attach_linux_deb:', 1)[0]
           # Publication now runs reviewed Python helpers from the exact tag,
           # while downloaded artifacts remain passive data and secrets stay out.
-          assert 'ref: ${{ github.sha }}' in publish_job
+          assert ('ref: $' + '{{ github.sha }}') in publish_job
           assert 'persist-credentials: false' in publish_job
           assert 'environment: macos-publish' in publish_job
           assert 'RIMES_UPDATE_SIGNING_KEY_PEM_BASE64' not in publish_job

@@ -20,9 +20,7 @@ import java.util.Iterator;
 final class AppUpdateUpgradeContract {
     private static final String PACKAGE="org.scholay.rimes.android.debug";
     static String run(Instrumentation instrumentation) throws Exception {
-        if (android.os.Build.VERSION.SDK_INT>=29)
-            instrumentation.getUiAutomation().adoptShellPermissionIdentity("android.permission.QUERY_ALL_PACKAGES");
-        try {
+        {
             PackageManager pm=instrumentation.getTargetContext().getPackageManager();
             PackageInfo before=pm.getPackageInfo(PACKAGE,0);
             if ((before.applicationInfo.flags&ApplicationInfo.FLAG_DEBUGGABLE)==0) throw new AssertionError("Only the disposable debug app can be upgraded");
@@ -64,7 +62,7 @@ final class AppUpdateUpgradeContract {
             }
             if (!height || !space || !learning) throw new AssertionError("Keyboard preferences were not retained");
             return "PASS real application upgrade; oldCode="+previous+" newCode="+expected+" processReplaced=true privateDataRetained=true\n";
-        } finally { if (android.os.Build.VERSION.SDK_INT>=29) instrumentation.getUiAutomation().dropShellPermissionIdentity(); }
+        }
     }
     private static long code(PackageInfo value) { return android.os.Build.VERSION.SDK_INT>=28?value.getLongVersionCode():value.versionCode; }
     private static String string(byte[] bytes) { return new String(bytes,StandardCharsets.UTF_8); }
