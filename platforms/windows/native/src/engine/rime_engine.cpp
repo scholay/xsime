@@ -446,6 +446,14 @@ class RimeEngine::Impl final {
     } catch (...) { return false; }
   }
 
+  bool IsAsciiPunctuation(SessionId session) const noexcept {
+    try {
+      std::lock_guard lock(mutex_);
+      return healthy_ && api_ && api_->get_option && sessions_.contains(session) &&
+             api_->get_option(session, "ascii_punct") != 0;
+    } catch (...) { return false; }
+  }
+
   bool ProcessChordText(SessionId session, const std::string& text, const std::string& replacement,
                         const EngineSnapshot& expected, EngineSnapshot* output,
                         bool* replaced, std::string* error) noexcept {

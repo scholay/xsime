@@ -57,6 +57,7 @@ class RimeEngine final {
   SessionId CreateSession(std::string* error = nullptr) noexcept;
   bool DestroySession(SessionId session, std::string* error = nullptr) noexcept;
   [[nodiscard]] bool IsAsciiMode(SessionId session) const noexcept;
+  [[nodiscard]] bool IsAsciiPunctuation(SessionId session) const noexcept;
 
   bool Configure(SessionId session, const std::string& schema, bool ascii,
                  bool traditional, bool ascii_punctuation,

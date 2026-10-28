@@ -115,6 +115,9 @@ inline constexpr std::uint64_t kKeyRoutingCapability = 1ULL << 2;
 inline constexpr std::uint64_t kPendingChordCapability = 1ULL << 3;
 // Last-page metadata is opt-in so an old, still-loaded DLL can decode updates.
 inline constexpr std::uint64_t kCandidatePagingCapability = 1ULL << 4;
+// Reports the schema's ascii_punct option so TSF can decline ownership of
+// punctuation it is configured to leave to the host.
+inline constexpr std::uint64_t kAsciiPunctCapability = 1ULL << 5;
 
 struct ClientHello {
   std::uint32_t process_id = 0;
@@ -247,6 +250,9 @@ enum class InputStateFlags : std::uint32_t {
   kEqualPageUp = 1U << 11,
   kEqualPageDown = 1U << 12,
   kEqualPagingOnly = 1U << 13,
+  // ascii_punct is on, so the engine deliberately declines ASCII punctuation
+  // and TSF must let the host keep the key.
+  kAsciiPunct = 1U << 14,
 };
 
 inline constexpr std::uint32_t kCandidatePageKeyFlags =
@@ -267,6 +273,7 @@ inline constexpr std::uint32_t kKnownInputStateFlags =
     static_cast<std::uint32_t>(InputStateFlags::kModifierSnapshot) |
     static_cast<std::uint32_t>(InputStateFlags::kAsciiMode) |
     static_cast<std::uint32_t>(InputStateFlags::kPendingChord) |
+    static_cast<std::uint32_t>(InputStateFlags::kAsciiPunct) |
     kCandidatePagingStateFlags;
 inline constexpr std::uint16_t kNoCandidateSelected = 0xffffU;
 

@@ -677,7 +677,8 @@ bool LaunchBrokerProcess() noexcept {
 }
 
 bool ShouldOfferKey(WPARAM virtual_key, std::uint32_t modifiers,
-                    bool composing, bool capturing, bool ascii_mode) noexcept {
+                    bool composing, bool capturing, bool ascii_mode,
+                    bool ascii_punct, bool caps_lock) noexcept {
   if (virtual_key == 0 || virtual_key > 0xffU || IsModifierKey(virtual_key)) {
     return false;
   }
@@ -690,7 +691,8 @@ bool ShouldOfferKey(WPARAM virtual_key, std::uint32_t modifiers,
     return false;
   }
   return (IsPrintableKey(virtual_key) && detail::RoutePrintableKey(
-              virtual_key, modifiers, composing, capturing, ascii_mode)) ||
+              virtual_key, modifiers, composing, capturing, ascii_mode, ascii_punct,
+        caps_lock)) ||
          (composing && IsCompositionCommand(virtual_key));
 }
 
@@ -782,6 +784,7 @@ class NamedPipeBrokerClient final : public BrokerClient {
       }
       composing_.store(false);
       pending_chord_.store(false);
+      ascii_punct_.store(false);
       ascii_mode_.store(false);
       for (auto& pressed : pressed_keys_) pressed.store(false);
       for (auto& observed : observed_shift_) observed.store(false);
@@ -944,7 +947,8 @@ class NamedPipeBrokerClient final : public BrokerClient {
         return BrokerKeyResult::kUnavailable;
       }
       return (observe_shift || ShouldOfferKey(event.virtual_key, modifiers, composing,
-                                             capturing_.load(), ascii_mode_.load()) || capture_key)
+                                             capturing_.load(), ascii_mode_.load(), ascii_punct_.load(),
+                                             (GetKeyState(VK_CAPITAL) & 1) != 0) || capture_key)
                  ? BrokerKeyResult::kConsumed
                  : BrokerKeyResult::kPassThrough;
     }
@@ -955,7 +959,8 @@ class NamedPipeBrokerClient final : public BrokerClient {
     if ((!key_down && !key_up) ||
         (key_down && !observe_shift &&
          !ShouldOfferKey(event.virtual_key, modifiers, composing,
-                         capturing_.load(), ascii_mode_.load()) && !capture_key) ||
+                         capturing_.load(), ascii_mode_.load(), ascii_punct_.load(),
+                                             (GetKeyState(VK_CAPITAL) & 1) != 0) && !capture_key) ||
         (key_up && !toggle && !pressed_keys_[key_index].load(std::memory_order_acquire) &&
          !held_shift_[key_index].load(std::memory_order_acquire))) {
       return BrokerKeyResult::kPassThrough;
@@ -1083,11 +1088,14 @@ class NamedPipeBrokerClient final : public BrokerClient {
       last_revision_ = decoded.revision;
       const bool ascii_mode = (decoded.state_flags & static_cast<std::uint32_t>(
           protocol::InputStateFlags::kAsciiMode)) != 0;
+      const bool ascii_punct = (decoded.state_flags & static_cast<std::uint32_t>(
+          protocol::InputStateFlags::kAsciiPunct)) != 0;
       if (ascii_mode && !key_routing_capable_.load()) {
         FailConnectionLocked();
         return BrokerKeyResult::kUnavailable;
       }
       if (key_routing_capable_.load()) ascii_mode_.store(ascii_mode);
+      if (ascii_punct_capable_.load()) ascii_punct_.store(ascii_punct);
       const bool pending_chord = (decoded.state_flags & static_cast<std::uint32_t>(protocol::InputStateFlags::kPendingChord)) != 0;
       if (pending_chord && !pending_chord_capable_.load()) {
         FailConnectionLocked(); return BrokerKeyResult::kUnavailable;
@@ -1328,7 +1336,7 @@ class NamedPipeBrokerClient final : public BrokerClient {
       hello.client_name = "RimesTsf";
       hello.capabilities = protocol::kModifierSnapshotsCapability |
                            protocol::kKeyRoutingCapability | protocol::kPendingChordCapability |
-                           protocol::kCandidatePagingCapability;
+                           protocol::kCandidatePagingCapability | protocol::kAsciiPunctCapability;
       std::vector<std::byte> payload;
       protocol::Frame response;
       if (!protocol::EncodeClientHello(hello, &payload)) {
@@ -1370,6 +1378,7 @@ class NamedPipeBrokerClient final : public BrokerClient {
       key_routing_capable_.store((broker_hello.capabilities &
                                  protocol::kKeyRoutingCapability) != 0);
       pending_chord_capable_.store((broker_hello.capabilities & protocol::kPendingChordCapability) != 0);
+      ascii_punct_capable_.store((broker_hello.capabilities & protocol::kAsciiPunctCapability) != 0);
       protocol::OpenInputSession open;
       open.context_id =
           (static_cast<std::uint64_t>(GetCurrentProcessId()) << 32U) ^
@@ -1606,7 +1615,9 @@ class NamedPipeBrokerClient final : public BrokerClient {
     last_revision_ = 0;
     composing_.store(false, std::memory_order_release);
     pending_chord_.store(false);
+    ascii_punct_.store(false);
     pending_chord_capable_.store(false);
+    ascii_punct_capable_.store(false);
     connected_.store(false, std::memory_order_release);
     modifier_capable_.store(false);
     key_routing_capable_.store(false);
@@ -1664,6 +1675,7 @@ class NamedPipeBrokerClient final : public BrokerClient {
   std::atomic_bool modifier_capable_{false};
   std::atomic_bool pending_chord_capable_{false}, pending_chord_{false};
   std::atomic_bool key_routing_capable_{false}, ascii_mode_{false};
+  std::atomic_bool ascii_punct_capable_{false}, ascii_punct_{false};
   std::atomic<std::uint64_t> connection_generation_{0};
   std::mutex notification_mutex_;
   std::deque<core::Json> notifications_;
