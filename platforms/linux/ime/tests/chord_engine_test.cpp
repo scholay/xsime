@@ -137,11 +137,11 @@ int main(int argc, char** argv) {
                         commits += snapshot.commit_text;
                     }
                 }
-                Check(commits == trace.at("commit"),
+                Check(commits == trace.at("commit").get<std::string>(),
                       "native committed text differs: " + profile.SchemaID());
                 if (trace.contains("firstCandidate"))
                     Check(!snapshot.candidates.empty() &&
-                              snapshot.candidates.front().text == trace.at("firstCandidate"),
+                              snapshot.candidates.front().text == trace.at("firstCandidate").get<std::string>(),
                           "native candidate differs: " + profile.SchemaID());
                 ++native_traces;
             }

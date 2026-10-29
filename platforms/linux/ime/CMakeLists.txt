@@ -65,7 +65,7 @@ set_target_properties(RimesBufferCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(RimesBufferCore PUBLIC RimesPluginCore RimesTranslationUnits)
 rimes_harden(RimesBufferCore)
 
-pkg_check_modules(CapsuleICU REQUIRED IMPORTED_TARGET icu-i18n)
+pkg_check_modules(CapsuleICU REQUIRED IMPORTED_TARGET icu-i18n icu-uc)
 find_package(SQLite3 REQUIRED)
 add_library(RimesCapsuleCore STATIC
     "${RIMES_CAPSULE_ROOT}/core/capsule_hash.cpp"

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import subprocess
 import sys
@@ -134,7 +135,12 @@ def prepare(root, source, update_lock=False):
         header += "};\n}\n"
         imports["platforms/linux/runtime/generated/official_plugin_catalog.hpp"] = header.encode()
     inputs = {name: digest(safe_path(source, name).read_bytes()) for name in sorted(input_names)}
-    revision = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True, encoding="utf-8").strip()
+    # Source tarballs (distro packaging) carry no git metadata; the file digests
+    # below still pin every input, so the revision may be supplied explicitly.
+    if not update_lock and not (source / ".git").exists() and os.environ.get("RIMES_OFFICIAL_PLUGINS_REVISION"):
+        revision = os.environ["RIMES_OFFICIAL_PLUGINS_REVISION"]
+    else:
+        revision = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True, encoding="utf-8").strip()
     if update_lock:
         dirty = subprocess.check_output(["git", "-C", str(source), "status", "--porcelain", "--untracked-files=no"], text=True, encoding="utf-8")
         if dirty:

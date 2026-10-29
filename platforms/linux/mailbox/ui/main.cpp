@@ -46,7 +46,7 @@ int RenderFixture(const std::filesystem::path& input, const std::filesystem::pat
                 const auto bytes = rimes::capsule::ReadResource(
                     std::filesystem::absolute(input.parent_path() / "images" / name), 24 * 1048576,
                     cancelled);
-                if (rimes::runtime::Sha256(bytes) != digest)
+                if (rimes::runtime::Sha256(bytes) != digest.get<std::string>())
                     throw std::runtime_error("fixture image digest differs");
                 rimes::runtime::PrivateDirectory(std::filesystem::path(path) / "mailbox/images")
                     .Write(name, bytes);

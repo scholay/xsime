@@ -84,7 +84,7 @@ set_target_properties(RimesPluginCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_options(RimesPluginCore PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 # The editor and input adapter share the actual native keymap contract.
-pkg_check_modules(ChordICU REQUIRED IMPORTED_TARGET icu-i18n)
+pkg_check_modules(ChordICU REQUIRED IMPORTED_TARGET icu-i18n icu-uc)
 set(RIMES_CHORD_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../chord")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${RIMES_CHORD_ROOT}/verify_contract.py" "${RIMES_CHORD_ROOT}/resources/native-chord.json")

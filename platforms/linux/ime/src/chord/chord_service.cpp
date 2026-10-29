@@ -288,10 +288,10 @@ struct ChordService::Impl {
                 const auto& trace = traces->at(verification_index);
                 for (const auto& keys : trace.at("chords"))
                     stroke(keys.get<std::string>());
-                ok = ok && commits == trace.at("commit");
+                ok = ok && commits == trace.at("commit").get<std::string>();
                 if (trace.contains("firstCandidate"))
                     ok = ok && !snapshot.candidates.empty() &&
-                         snapshot.candidates.front().text == trace.at("firstCandidate");
+                         snapshot.candidates.front().text == trace.at("firstCandidate").get<std::string>();
             } else {
                 const auto& entry = profile.mappings[verification_index];
                 stroke(entry.keys);

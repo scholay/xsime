@@ -1014,7 +1014,7 @@ struct ManagerWindow::Impl {
             gtk_widget_set_halign(button,GTK_ALIGN_START); Add(modules,button);
             if(selected) for(const auto& filter:definition.at("filters")) {
                 auto* choice=Button(filter.at("title"),[this,id=filter.at("id").get<std::string>()] { Navigate({{"v",1},{"op","filter"},{"text",id}}); },"capsule-filter");
-                if(state.filter==filter.at("id")) Class(choice,"selected");
+                if(state.filter==filter.at("id").get<std::string>()) Class(choice,"selected");
                 gtk_widget_set_halign(choice,GTK_ALIGN_START); Add(modules,choice);
             }
         }
