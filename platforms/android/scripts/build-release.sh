@@ -17,8 +17,7 @@ tools="$ANDROID_HOME/build-tools/36.0.0"
 ./gradlew --no-daemon :core:test :app:lintRelease :app:assembleRelease :app:bundleRelease
 apk=app/build/outputs/apk/release/app-release.apk
 aab=app/build/outputs/bundle/release/app-release.aab
-"$tools/apksigner" verify --verbose --print-certs "$apk"
-"$tools/zipalign" -c -P 16 4 "$apk"
+python3 scripts/verify-release.py "$apk" "$aab" --sdk "$tools"
 version="$(cat VERSION)"
 out="dist/$version"
 [[ ! -e "$out" ]] || { echo 'Output exists; retain it and choose a fresh build workspace.' >&2; exit 2; }

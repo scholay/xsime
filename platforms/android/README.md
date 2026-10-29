@@ -1,12 +1,16 @@
 # XSIME Android
 
-**[1.1.2](https://github.com/scholay/xsime/releases/tag/android-v1.1.2)** is the current release of the native Java Android input method for daily Chinese input and
-local dictionary learning. Minimum Android 8.0 / API 26; development package
-`org.scholay.rimes.android.debug`; release identity `org.scholay.rimes.android`.
-The public release uses build code **16**, signed with the existing production key.
-Its APK supports a data-preserving upgrade from the public 1.0.0 release.
-See the [release guide](RELEASE.md) for signing and upgrade requirements.
-Current evidence and remaining acceptance are in [VALIDATION.md](VALIDATION.md).
+Native Java Android input method for daily Chinese input and local dictionary
+learning, requiring Android 8.0 / API 26 or later. The source version is defined
+in [`VERSION`](VERSION), with `versionCode` in [`app/build.gradle.kts`](app/build.gradle.kts).
+See the [1.2.0 release record](../../docs/releases/1.2.0.md) for that delivery's
+packages and verification, and the [release guide](../../docs/platforms/android/release.md)
+for build, signing and upgrade requirements.
+
+Install the signed APK, enable XSIME in the system input-method settings, then
+select it as the active keyboard. The release identity is `org.scholay.rimes.android`;
+the independent development package is `org.scholay.rimes.android.debug`.
+Upgrade with the same package and signing identity, preserving application data.
 
 ## Main app settings
 
@@ -20,11 +24,6 @@ The keyboard and main app share validated preferences. Nine-key selects Pinyin;
 another Chinese scheme returns it to QWERTY. Selecting a regular scheme exits
 chord mode. Turning Mock off cancels existing AI work and revokes its output while
 preserving Buffer source; local translation remains available.
-
-The Android feature-status page lists remaining iOS differences. Other AI providers,
-image generation, Apple translation packs, custom Rime/chord imports,
-pet animation/rotation pools, poem word cards and typing-stat cards are not
-implemented in this Android revision.
 
 ## Input
 
@@ -266,20 +265,19 @@ Only validated, precompiled resources are extracted on-device. There is no runti
 maintenance/deployment or dictionary compiler invocation. Official plugin packages
 are separately verified against the bundled catalog before installation.
 
-CometAPI may reject an endpoint with `403 / region_restricted` for a network
-location it does not serve. XSIME shows a region-specific error and preserves the
-source; contact the provider to confirm service availability. The October 3
-phone run initially received this response. After the maintainer changed the
-phone's network, real quick-question, polish and translation replies succeeded.
-See [the dev.8 validation record](validation/2026-10-03-dev8.md) for exact scope.
+A provider may reject a request with `403 / region_restricted`. XSIME shows the
+provider error and preserves the source; service availability depends on the
+configured provider and network.
 
 ## Build
 
-Use JDK 21 and set `JAVA_HOME` and `ANDROID_HOME`. Gradle 9.7.1 and AGP 9.4.0 are
+Product builds and automated tests run through [Android CI](../../.github/workflows/android.yml).
+For maintainer-requested local work, use JDK 21 and set `JAVA_HOME` and `ANDROID_HOME`. Gradle 9.7.1 and AGP 9.4.0 are
 pinned. Install compile SDK 37.2, build tools 36.0.0, NDK 29.0.14206865 and CMake 3.22.1:
 
 ```sh
 sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0' 'ndk;29.0.14206865' 'cmake;3.22.1'
+python3 scripts/prepare-official-plugins.py
 cd platforms/android
 python3 scripts/build-engine.py
 ./gradlew --no-daemon :core:test :app:assembleDebug :app:lintDebug
@@ -304,142 +302,42 @@ is LGPL-3.0 and Pinyin data Apache-2.0. librime and every linked dependency reta
 their original license notices. The official Lucide icon subset is pinned and hash-verified; its complete ISC/MIT
 notice is packaged too. No iOS executable code or Apple framework is linked.
 
-## Checks
+## Checks and diagnostics
 
-`core:test` covers block boundaries, exact consumption, capacity, privacy, editor
-revocation, immutable snapshots, touch/cap geometry, nine-key spelling constraints,
-all 427 chord encodings, gesture resolution and cancellation. `app` instrumentation
-checks the real JNI Unicode bridge, nine-key schemas, all 18 keycap palettes,
-attached native Button/Looper cancellation, chord touch-stream contracts,
-vector icon visibility/tint/accessibility, Buffer glyph/chip rendering and near-capacity
-viewport/cache behavior, plus Android editor policies. Its rendering timings are
-component bitmap measurements, not hardware frame latency. `native/engine_contract.cpp`
-checks actual schemas, paging, punctuation, learning/restart and disabled learning.
+`core:test` covers Buffer boundaries, editor revocation, immutable snapshots,
+keyboard geometry and gesture cancellation. App instrumentation exercises the
+real JNI bridge, resources, rendering and delivery policies. The separate
+`testhost` app verifies actual host text in native, private, password and WebView
+fields; it is not included in the keyboard APK. The [workflow](../../.github/workflows/android.yml)
+is the source for the complete automated command sequence.
 
-On x86_64 Linux (including an x86_64 Linux container on an ARM development host):
+From `platforms/android`, the host-side native contract runs with:
 
 ```sh
 python3 scripts/test-linux-native.py
 ```
 
-This downloads a checksum-pinned AOSP runtime for validation only, extracts it
-with `debugfs` (e2fsprogs), and loads the Android `.so` with Bionic. This is native
-ABI/engine evidence, not Android emulator UI or 16 KB runtime acceptance.
+It requires x86_64 Linux and e2fsprogs, downloads a checksum-pinned AOSP runtime,
+and exercises Android native libraries through Bionic. This does not replace
+Android UI or physical-device testing.
 
-`testhost` is a separate, offline validation app with native, password, private and
-WebView fields. It is never included in the keyboard APK. Its instrumentation
-clicks the actual XSIME buttons and checks actual host text; it does not inject
-text through an automation keyboard. While visible it keeps its own window awake,
-without changing the device timeout. Close other UiAutomation sessions before use.
-Run JNI instrumentation with another enabled IME selected, then force-stop the
-instrumented keyboard process before reselecting RIMES. This isolates the test
-engine from the system's live keyboard service.
+For device diagnostics, build the instrumentation and test-host packages:
 
 ```sh
 ./gradlew :app:assembleDebugAndroidTest :testhost:assembleDebug :testhost:assembleDebugAndroidTest
-# Install the test APKs with install -r after approving any OEM USB-install prompts.
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w \
-  org.scholay.rimes.android.debug.test/org.scholay.rimes.android.EngineInstrumentation
-# With another enabled IME still selected: real dictionary and local OpenAI SSE mock.
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w -e mode plugins \
-  org.scholay.rimes.android.debug.test/org.scholay.rimes.android.EngineInstrumentation
-# Local rejecting InputConnection: source retention, retries and commit-time retirement.
-# This fixture bypasses editor IPC; it is not remote-host failure-return evidence.
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w -e mode delivery \
-  org.scholay.rimes.android.debug.test/org.scholay.rimes.android.EngineInstrumentation
-# Select RIMES after the app test (instrumentation restarts the keyboard process).
-adb -s "$RIMES_ANDROID_SERIAL" shell am force-stop org.scholay.rimes.android.debug
-adb -s "$RIMES_ANDROID_SERIAL" shell ime set \
-  org.scholay.rimes.android.debug/org.scholay.rimes.android.RimesInputMethodService
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w \
-  org.scholay.rimes.testhost.test/org.scholay.rimes.testhost.InputContractInstrumentation
-# Layout, touch coordinates, spelling, Buffer and orientation with screenshots.
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w -e mode layout \
-  org.scholay.rimes.testhost.test/org.scholay.rimes.testhost.InputContractInstrumentation
-# Actual injected multi-touch: held/released hands, cancellation, split, Buffer,
-# private fields, target changes and orientation.
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w -e mode chord \
-  org.scholay.rimes.testhost.test/org.scholay.rimes.testhost.InputContractInstrumentation
-# Ordinary held keys across target/selection changes and actual window hiding.
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w -e mode touch \
-  org.scholay.rimes.testhost.test/org.scholay.rimes.testhost.InputContractInstrumentation
-# Offline translation/mock execution, Send, source edits, cancellation and private targets.
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w -e mode plugins \
-  org.scholay.rimes.testhost.test/org.scholay.rimes.testhost.InputContractInstrumentation
-# Continuous mixed QWERTY/chord input; the runner reports every minute.
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w -e mode soak -e seconds 1800 -e chords true \
-  org.scholay.rimes.testhost.test/org.scholay.rimes.testhost.InputContractInstrumentation
 ```
 
-For a long run whose desktop ADB connection may close, start the same bounded job
-on the phone and read its log. The optional `-e chords true` alternates QWERTY
-with orthogonal/split chords, native fields and direct/Buffer delivery:
+Install the test APKs with `adb install -r`. Keep another enabled IME selected
+while running [EngineInstrumentation](app/src/androidTest/java/org/scholay/rimes/android/EngineInstrumentation.java),
+then force-stop the instrumented keyboard process before selecting XSIME for
+[InputContractInstrumentation](testhost/src/androidTest/java/org/scholay/rimes/testhost/InputContractInstrumentation.java).
+This isolates the test engine from the live keyboard service. Both runners accept
+`-e mode <mode>`; the host runner includes layout, chord, touch, plugin, soak and
+benchmark modes. Record the exact package, build and mode with each result.
 
-```sh
-adb -s "$RIMES_ANDROID_SERIAL" shell 'nohup am instrument -w -e mode soak -e seconds 1800 -e chords true org.scholay.rimes.testhost.test/org.scholay.rimes.testhost.InputContractInstrumentation > /data/local/tmp/rimes-dev5-soak.log 2>&1 < /dev/null &'
-adb -s "$RIMES_ANDROID_SERIAL" shell tail -n 6 /data/local/tmp/rimes-dev5-soak.log
-```
-
-Require `PASS SOAK` with at least 1,800 seconds, `mixedChords=true`, and successful
-instrumentation completion for the mixed run. Run the full input, layout and chord
-contracts separately. Elapsed desktop time or an interrupted run is not a pass;
-a plain dev.3 soak is not evidence for dev.5's chords or geometry.
-
-Always save and restore the original default keyboard and rotation settings.
-The host runner starts a fresh validation activity for each run; it clears only
-that activity's transient task. It uses UiAutomation's shell launch to avoid OEM
-background-activity restrictions and fails if the host is not created in 15 seconds.
-If an OEM replaces password input with a secure
-keyboard, record that result separately and pass `-e skipPassword true` to run the
-remaining contract. A skipped password case is not a XSIME password UI pass.
-The Android workflow builds/checks both ABIs and resources; it does not publish,
-install on a physical phone, or participate in macOS release jobs.
-
-## Optional benchmarks
-
-Keep baseline and optimized APK results on the same device, with the same
-orientation, theme, font scale and sampling settings. Record version/hash and
-whether resource extraction was needed. These runners do not establish human
-keystroke-to-visible-frame latency, and repeated short runs are not soak evidence.
-
-The engine benchmark uses four private schemas and a fresh synthetic user
-directory, never the user's dictionary. It records resource preparation, library
-load, initialization, first use, warm worker/JNI snapshot and serial queue/round-trip
-p50/p95/max, and process-level memory. Switch away from XSIME before starting it:
-its process-wide librime singleton cannot be cold if the IME service initialized
-it. Choose an already enabled alternative IME for `RIMES_ANDROID_BENCHMARK_IME`.
-
-```sh
-adb -s "$RIMES_ANDROID_SERIAL" shell ime set "$RIMES_ANDROID_BENCHMARK_IME"
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w -e mode benchmark -e samples 200 -e warmup 20 \
-  org.scholay.rimes.android.debug.test/org.scholay.rimes.android.EngineInstrumentation
-# Copy the exact REPORT files/engine-benchmark-<timestamp>.json printed by the runner.
-adb -s "$RIMES_ANDROID_SERIAL" exec-out run-as org.scholay.rimes.android.debug \
-  cat "files/$RIMES_ANDROID_ENGINE_REPORT" > engine-benchmark.json
-adb -s "$RIMES_ANDROID_SERIAL" shell ime set \
-  org.scholay.rimes.android.debug/org.scholay.rimes.android.RimesInputMethodService
-adb -s "$RIMES_ANDROID_SERIAL" shell am instrument -w -e mode benchmark -e samples 60 \
-  org.scholay.rimes.testhost.test/org.scholay.rimes.testhost.InputContractInstrumentation
-adb -s "$RIMES_ANDROID_SERIAL" exec-out run-as org.scholay.rimes.testhost \
-  cat files/benchmark.json > host-benchmark.json
-```
-
-Set `RIMES_ANDROID_ENGINE_REPORT` to the reported filename without `files/`.
-The engine metric includes JNI immutable snapshot construction; the serial metric
-also includes queueing and instrumentation-thread wakeup. It excludes touch,
-rendering, `InputConnection` and learning-enabled latency. Memory numbers cover
-the whole instrumentation process without forced GC; they are not an IME leak test.
-Synthetic benchmark directories stay separate under `no_backup/engine-benchmark-user-*`.
-
-The host benchmark has five warmup phrases, then 60 samples by default. It times
-native accessibility `ACTION_CLICK` submission to the actual host's TextWatcher
-for the first composing key and first-candidate commit, including IPC and thread
-scheduling. It excludes touch hardware, frame presentation and chord timing. The
-normal app instrumentation also emits a near-capacity Buffer bitmap-draw/cache
-measurement, which should be reported separately from these two benchmarks.
-Restore the original default IME and device settings after all validation.
-
-Out of scope: complete Buffer editing, live AI API calls, neural sentence translation, custom layout/profile
-importing, arbitrary gesture configuration, animated pets and complete iOS feature
-parity. The shipped orthogonal/split chord surface and built-in slide shortcuts
-are included since dev.5.
+Benchmarks report worker/JNI or host TextWatcher timings, not hardware touch-to-frame
+latency. Use a consistent device, theme, orientation and sample count; engine
+benchmarks use separate synthetic dictionaries. A short benchmark is not a soak
+test. Preserve and restore the original default IME and rotation settings, and
+record OEM secure-keyboard substitution or skipped password cases separately.
+Keep screenshots and raw diagnostic output local or in CI artifacts.

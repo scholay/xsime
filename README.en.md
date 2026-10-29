@@ -11,7 +11,7 @@ Schemes include full Pinyin, double Pinyin, Shengbi, Wubi, and English, plus the
 
 All five platforms include **Wubi 86** and **XSIME Wubi**. Wubi 86 supports `z` followed by Pinyin, such as `zni`, with Wubi codes shown in parentheses. XSIME Wubi accepts Wubi codes and Pinyin without switching modes, prioritizing exact Wubi matches. Both schemes automatically commit a unique four-key Wubi candidate; ambiguous codes and Pinyin lookups retain candidate selection. See the [Wubi guide](docs/wubi.md).
 
-> **XSIME** is the unified product, project and architecture name: **犀术IME** in Simplified Chinese and **犀術IME** in Traditional Chinese (formerly RIMES / Lingxi IME). Branding is in transition; installed apps, store listings and filings are updated separately. See [Branding and compatibility](BRANDING.md).
+> **XSIME** is the unified product, project and architecture name: **犀术IME** in Simplified Chinese and **犀術IME** in Traditional Chinese (formerly RIMES / Lingxi IME). Branding is in transition; installed apps, store listings and filings are updated separately. See [Branding and compatibility](docs/development/branding.md).
 
 ## Demo videos
 
@@ -127,20 +127,13 @@ cd xsime
 
 ## Documentation
 
-| Document | Contents |
-|---|---|
-| [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md) | Current authoritative architecture. Read this first when taking over development |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Historical P1/P2 contracts and pitfalls |
-| [PLUGIN-CONFIGURATION.md](PLUGIN-CONFIGURATION.md) | Declarative plug-in configuration |
-| [UNSIGNED-PREVIEW.md](UNSIGNED-PREVIEW.md) | Download, checksum, and safe install steps for the unsigned preview |
-| [CROSS-PLATFORM-PREVIEW.md](CROSS-PLATFORM-PREVIEW.md) | Scope and checks for the Windows / Linux scheme preview |
-| [platforms/ios/README.md](platforms/ios/README.md) | iOS keyboard and main app |
-| [platforms/windows/native/README.md](platforms/windows/native/README.md) | Native Windows TSF input method |
-| [platforms/linux/ime/README.md](platforms/linux/ime/README.md) | Linux Fcitx5 input method, Buffer, and Capsule |
-| [RELEASE.md](RELEASE.md) | Release process: channels, one-command release, cadence, and version rules |
-| [RELEASE-REFERENCE.md](RELEASE-REFERENCE.md) | Release reference: signing, installer, in-app updates, CI |
-| [RELEASE-HISTORY.md](RELEASE-HISTORY.md) | Closed release channels, the old repository move, and the rename |
-| [CHANGELOG.md](CHANGELOG.md) | Per-version changes generated from public GitHub Releases and commit messages |
+| Documentation | Contents |
+| --- | --- |
+| [Documentation index](docs/README.md) | Current guides and platform entry points |
+| [System architecture](docs/architecture/system.md) | Native input, Buffer, shared code and data boundaries |
+| [Development workflow](docs/development/maintenance.md) | Mainline, plugin dependencies, remote CI and acceptance |
+| [Release workflow](docs/release/README.md) | Builds, signing, updates and distribution |
+| [Changelog](CHANGELOG.md) | Published version changes |
 
 ## Application updates
 
@@ -152,7 +145,7 @@ iOS checks the available store version and opens App Store to download and insta
 
 The four installers share one `vX.Y.Z` release on [`scholay/xsime`](https://github.com/scholay/xsime/releases/latest). CI uploads and reads back every package before publishing the shared `update-manifest.json`. Preview builds stay outside this stable channel. iOS uses a separate `ios-vX.Y.Z` store workflow.
 
-Maintainers release after all five mainline CI workflows pass. See [RELEASE.md](RELEASE.md) and [CHANGELOG.md](CHANGELOG.md):
+Maintainers release after all five mainline CI workflows pass. See [docs/release/README.md](docs/release/README.md) and [CHANGELOG.md](CHANGELOG.md):
 
 ```bash
 ./scripts/release.sh stable --dry-run  # check versions, five-platform CI and release prerequisites
@@ -186,4 +179,4 @@ XSIME's own code is licensed under [Apache License 2.0](LICENSE), subject to the
 
 Chinese input uses the [Rime Input Method Engine (librime)](https://github.com/rime/librime). See [NOTICE](NOTICE) for attribution and [ATTRIBUTION.md](ATTRIBUTION.md) for optional display examples explaining the relationship between Rime, XSIME and downstream maintainers. These display suggestions add no license conditions.
 
-Third-party components, schemes, dictionaries and Lua/OpenCC data retain their own licenses and credits; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [LICENSES](LICENSES/) and `rime-data/licenses/`. Official free plugins are maintained in [rimes-plugins](https://github.com/scholay/rimes-plugins).
+Third-party components, schemes, dictionaries and Lua/OpenCC data retain their own licenses and credits; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [LICENSES](LICENSES) and `rime-data/licenses/`. Official free plugins are maintained in [rimes-plugins](https://github.com/scholay/rimes-plugins).

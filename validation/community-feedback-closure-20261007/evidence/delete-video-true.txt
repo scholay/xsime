@@ -1,6 +1,0 @@
-START accessibility
-START host
-START contract
-DELETE_VIDEO_ROI {"state":"buffer","roi":[133,1703,703,98]}
-PASS DELETE_VIDEO state=buffer actualIME=true operations=single,8-clicks,held scope=recorded-frames-only
-PASS input contract; assertions=105

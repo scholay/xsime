@@ -1,6 +1,81 @@
 ﻿#requires -Version 5.1
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
+
+# Every system mutation (including nested rollback/repair calls) serializes on
+# the canonical install root, independently of the Broker's user/session gate.
+function Enter-InstallRootLock([string]$InstallRoot,[string]$UserSid='') {
+    if(-not ('RimesInstallRootLock' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text;
+using System.Threading;
+using Microsoft.Win32.SafeHandles;
+public sealed class RimesInstallRootLock : IDisposable {
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    private static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder path, uint size, uint flags);
+    private Mutex mutex;
+    private bool held;
+    public static string Name(string directory) {
+        var full = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var suffix = new Stack<string>();
+        var existing = full;
+        while (!Directory.Exists(existing)) {
+            var parent = Path.GetDirectoryName(existing);
+            if (String.IsNullOrEmpty(parent) || parent == existing) throw new IOException("Cannot resolve the installation root.");
+            suffix.Push(Path.GetFileName(existing)); existing = parent;
+        }
+        using (var handle = CreateFile(existing, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero)) {
+            if (handle.IsInvalid) throw new IOException("Cannot identify the installation root.");
+            var buffer = new StringBuilder(32768);
+            var size = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
+            if (size == 0 || size >= buffer.Capacity) throw new IOException("Cannot identify the installation root.");
+            full = buffer.ToString();
+        }
+        while (suffix.Count > 0) full = Path.Combine(full, suffix.Pop());
+        using (var sha = SHA256.Create()) {
+            var hash = sha.ComputeHash(Encoding.Unicode.GetBytes(full.TrimEnd('\\').ToUpperInvariant()));
+            return "Global\\RIMES.InstallRoot.v1." + BitConverter.ToString(hash).Replace("-", "");
+        }
+    }
+    public RimesInstallRootLock(string directory, string userSid) {
+        var security = new MutexSecurity();
+        security.SetAccessRuleProtection(true, false);
+        var principals = new List<SecurityIdentifier> { WindowsIdentity.GetCurrent().User,
+            new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+            new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null) };
+        // Credential-prompt elevation may use a different administrator. The
+        // initiating account must still acquire the same gate without elevation.
+        if (!String.IsNullOrEmpty(userSid)) principals.Add(new SecurityIdentifier(userSid));
+        foreach (var sid in principals)
+            security.AddAccessRule(new MutexAccessRule(sid, MutexRights.FullControl, AccessControlType.Allow));
+        bool created;
+        mutex = new Mutex(false, Name(directory), out created, security);
+        try {
+            try { held = mutex.WaitOne(0); }
+            catch (AbandonedMutexException) { held = true; }
+            if (!held) throw new IOException("Another installation, repair, rollback or uninstall is using this installation root. Wait for it to finish.");
+        } catch { Dispose(); throw; }
+    }
+    public void Dispose() {
+        if (mutex == null) return;
+        if (held) { mutex.ReleaseMutex(); held = false; }
+        mutex.Dispose(); mutex = null;
+    }
+}
+'@
+    }
+    return [RimesInstallRootLock]::new($InstallRoot,$UserSid)
+}
+
 function Get-ProductDisplayName {
     $language = [Globalization.CultureInfo]::CurrentUICulture.Name
     if ($language -match '^zh-(Hant|TW|HK|MO)(-|$)') { return '犀術IME' }

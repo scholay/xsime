@@ -70,14 +70,18 @@ class MainlineChannelTests(unittest.TestCase):
                 if name != "ios.yml":
                     self.assertRegex(block, r"['\"]scripts/platform-preview/\*\*['\"]")
 
-    def test_linux_deb_is_required_and_attached_only_after_project_publication(self):
+    def test_stable_linux_deb_is_in_the_complete_draft_and_preview_stays_separate(self):
         text = workflow("release.yml")
         self.assertIn('needs: [build_and_smoke, build_linux_deb]', text)
         publish = text.split('  publish_staged_release:', 1)[1].split('\n  attach_linux_deb:', 1)[0]
-        self.assertIn('needs: [build_and_smoke, sign_and_stage, build_linux_deb, build_windows_release, build_android_release, verify_signed_install]', publish)
-        attach = text.split('  attach_linux_deb:', 1)[1]
+        self.assertIn("needs.build_linux_deb.result == 'success'", publish)
+        self.assertIn('name: ${{ needs.build_linux_deb.outputs.artifact_name }}', publish)
+        self.assertIn('path: ${{ runner.temp }}/linux-deb', publish)
+        self.assertIn('bash scripts/release/publish-update-assets.sh', publish)
+        self.assertNotIn('gh release create', publish)
+        attach = text.split('  attach_linux_deb:', 1)[1].split('\n  build_windows_release:', 1)[0]
         self.assertIn("needs.publish_unsigned_preview.result == 'success'", attach)
-        self.assertIn("needs.publish_staged_release.result == 'success'", attach)
+        self.assertNotIn('publish_staged_release', attach)
         self.assertIn("github.event_name == 'push'", attach)
         self.assertIn('gh release upload', attach)
         self.assertIn('gh release download', attach)
@@ -87,17 +91,23 @@ class MainlineChannelTests(unittest.TestCase):
         self.assertIn('tests/deb_lifecycle.sh', package)
         self.assertNotIn('contents: write', package)
 
-    def test_complete_feed_ignores_only_the_alternate_preview_skip(self):
-        job = workflow('release.yml').split('  publish_update_manifest:', 1)[1].split(
-            '\n  verify_signed_install:', 1)[0]
-        gate = job.split('    if: >-', 1)[1].split('    runs-on:', 1)[0]
-        self.assertIn('!cancelled()', gate)
-        self.assertIn("needs.build_and_smoke.outputs.is_release == 'true'", gate)
-        for producer in ('build_and_smoke', 'build_windows_release', 'build_android_release',
-                         'publish_staged_release', 'attach_linux_deb'):
-            self.assertIn(f"needs.{producer}.result == 'success'", gate)
-        self.assertNotIn('publish_unsigned_preview', gate)
-        self.assertIn('bash scripts/release/publish-update-assets.sh', job)
+    def test_signed_complete_feed_precedes_publication_without_preview_dependencies(self):
+        text = workflow('release.yml')
+        signing = text.split('  sign_update_manifest:', 1)[1].split('\n  publish_staged_release:', 1)[0]
+        publishing = text.split('  publish_staged_release:', 1)[1].split('\n  attach_linux_deb:', 1)[0]
+        producers = ('build_and_smoke', 'sign_and_stage', 'build_linux_deb',
+                     'build_windows_release', 'build_android_release', 'verify_signed_install')
+        for job in (signing, publishing):
+            gate = job.split('    if: >-', 1)[1].split('    concurrency:', 1)[0].split('    uses:', 1)[0]
+            self.assertIn('!cancelled()', gate)
+            self.assertIn("needs.build_and_smoke.outputs.is_release == 'true'", gate)
+            for producer in producers:
+                self.assertIn(f"needs.{producer}.result == 'success'", gate)
+            self.assertNotIn('publish_unsigned_preview', gate)
+        self.assertIn('uses: ./.github/workflows/sign-update-manifest.yml', signing)
+        self.assertIn("needs.sign_update_manifest.result == 'success'", publishing)
+        self.assertIn('bash scripts/release/publish-update-assets.sh', publishing)
+        self.assertNotIn('  publish_update_manifest:', text)
 
 
 if __name__ == "__main__":

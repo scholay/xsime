@@ -4,6 +4,16 @@ val rimesVersion = rootProject.file("VERSION").readText().trim()
 require(Regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)").matches(rimesVersion)) {
     "VERSION must contain MAJOR.MINOR.PATCH"
 }
+// Disposable debug upgrade fixture only. Release task graphs must never consume this override.
+val updateFixtureCode = providers.gradleProperty("rimesUpdateFixtureVersionCode").orNull?.toInt()
+if (updateFixtureCode != null) {
+    require(updateFixtureCode > 0) { "Update fixture code must be positive" }
+    gradle.taskGraph.whenReady {
+        require(allTasks.none { it.name.contains("release", ignoreCase = true) }) {
+            "rimesUpdateFixtureVersionCode is forbidden for release tasks"
+        }
+    }
+}
 val signingNames = listOf("RIMES_ANDROID_KEYSTORE", "RIMES_ANDROID_STORE_PASSWORD",
     "RIMES_ANDROID_KEY_ALIAS", "RIMES_ANDROID_KEY_PASSWORD")
 val releaseCredentials = signingNames.associateWith { providers.environmentVariable(it).orNull }
@@ -23,9 +33,14 @@ android {
         testInstrumentationRunner = "org.scholay.rimes.android.EngineInstrumentation"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         versionCode = 23
+        if (updateFixtureCode != null) {
+            require(updateFixtureCode < versionCode!!) { "Update fixture must be older than the normal package" }
+            versionCode = updateFixtureCode
+        }
         versionName = rimesVersion
     }
     ndkVersion = "29.0.14206865"
+    sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("../../Shared/AppUpdate/fixtures"))
     sourceSets.getByName("main") {
         assets.srcDir("build/generated/rime/assets")
         jniLibs.srcDir("build/generated/rime/jniLibs")

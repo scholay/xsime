@@ -1,3 +1,7 @@
 dist/
 .staging/
 native/out/
+
+# Per-machine Visual Studio and CMake configuration.
+/native/.vs/
+/native/CMakeUserPresets.json

@@ -1,5 +1,0 @@
-START accessibility
-START host
-START contract
-PASS CLOSURE_THUMBS actual ordinary IME split short taps, both release orders, hold suppression and armed cancellation
-PASS input contract; assertions=141

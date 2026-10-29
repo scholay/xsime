@@ -16,4 +16,4 @@
 
 损坏、外部改动、过大文件或符号链接会进入只读状态。“备份并重建…”经确认后保留原路径条目并创建空库，不跟随符号链接。“清空成绩…”只影响文章练习，词库、学习记录、日常统计和 CLI 凭据保持不变。卸载 deb 或运行源码 `uninstall.sh` 均保留这些数据。
 
-推荐从项目同一 `v*` Release 安装 deb，安装及卸载命令见 [Linux 安装说明](../ime/README.md)。当前实现和仍待完成的像素、桌面验收见 [VALIDATION.md](VALIDATION.md)。
+推荐从项目同一 `v*` Release 安装 deb，安装及卸载命令见 [Linux 安装说明](../ime/README.md)。真实宿主与像素检查见 [桌面验收](../../../docs/platforms/linux/acceptance.md#extensions)。

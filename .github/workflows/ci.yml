@@ -38,8 +38,9 @@ jobs:
 
       - name: Application update manifest contracts
         run: |
-          g++ -std=c++17 -Wall -Wextra -Werror -Iplatforms/windows/native/third_party Shared/AppUpdate/manifest_tests.cpp -o "$RUNNER_TEMP/update-contract"
-          "$RUNNER_TEMP/update-contract"
+          python3 -B scripts/release/sync-update-trust.py --check
+          g++ -std=c++17 -Wall -Wextra -Werror -Iplatforms/windows/native/third_party Shared/AppUpdate/manifest_tests.cpp -lcrypto -o "$RUNNER_TEMP/update-contract"
+          "$RUNNER_TEMP/update-contract" Shared/AppUpdate/fixtures/signed_manifest.json
 
       - name: Release tool tests
         run: python3 -m unittest discover -s scripts/release -p "test*.py" -v
@@ -124,7 +125,7 @@ jobs:
           # macOS burns these ids into the protected TIS preferences: any drift
           # orphans the old rows and stacks duplicate "RIMES" entries in
           # System Settings (this bit us across the 0.3–0.4 renames — see
-          # RELEASE.md). Never change these without a migration story.
+          # docs/release/README.md). Never change these without a migration story.
           # The RIMES rename (com.isaac.inputmethod.RimeBuffer / ETInput ->
           # com.scholay.inputmethod.isaac / RIMES) carries one: rimes-update-handoff
           # hands the session off from the legacy source ids, preinstall and
@@ -197,7 +198,14 @@ jobs:
           assert release_workflow.count('must allow the formal tag pattern v*') == 2
           assert 'Could not destroy the temporary signing keychain; refusing to stage release assets.' in release_workflow
           publish_job = release_workflow.split('  publish_staged_release:', 1)[1].split('\n  attach_linux_deb:', 1)[0]
-          assert 'actions/checkout@' not in publish_job
+          # Publication now runs reviewed Python helpers from the exact tag,
+          # while downloaded artifacts remain passive data and secrets stay out.
+          assert ('ref: $' + '{{ github.sha }}') in publish_job
+          assert 'persist-credentials: false' in publish_job
+          assert 'environment: macos-publish' in publish_job
+          assert 'RIMES_UPDATE_SIGNING_KEY_PEM_BASE64' not in publish_job
+          assert 'scripts/sign-macos-app.sh' not in publish_job
+          assert 'scripts/make-pkg.sh' not in publish_job
           assert 'scripts/rehearse-release-pkg.sh' not in publish_job
 
           preinstall = Path("scripts/pkg/scripts/preinstall").read_text()

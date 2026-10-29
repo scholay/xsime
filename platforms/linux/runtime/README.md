@@ -47,7 +47,8 @@ ctest --test-dir /tmp/xsime-runtime --output-on-failure
 
 These checks cover receipt races, invalid packages, offline failures, unsafe
 paths, lifecycle revocation and data retention. Desktop interaction and release
-package acceptance remain separately tracked in [the parity plan](../PARITY.md).
+package acceptance follow the [desktop checklist](../../../docs/platforms/linux/acceptance.md)
+and [release lifecycle](../../../docs/platforms/linux/release-lifecycle.md).
 
 ## Native settings and private configuration
 
@@ -76,7 +77,7 @@ enabled it clears local typing only and preserves staged external content.
 `generate_visual_tokens.py` imports native macOS palettes, Settings chrome,
 dimensions, navigation, catalog labels and existing brand images at build time.
 The current GTK implementation is still undergoing the
-[pixel comparison acceptance](../VISUAL-PARITY.md); screenshots do not establish
+[pixel comparison acceptance](../../../docs/platforms/linux/visual-parity.md); screenshots do not establish
 finished visual parity. Linux currently uses Inter/Noto Sans CJK and drawn
 semantic icons; Liquid Glass uses a solid fallback pending compositor work.
 
@@ -173,8 +174,8 @@ servers or API keys. The official CLI manages its credentials there. Login data,
 generated files and Mailbox history survive upgrades, source uninstall and deb
 removal. Keep this directory private when making backups.
 
-[Codex validation and remaining desktop checks](CODEX-VALIDATION.md) distinguish
-protocol tests, the actual official Linux CLI probe, native UI screenshots and
+The [desktop checklist](../../../docs/platforms/linux/acceptance.md#mailbox) distinguishes
+protocol tests, the official Linux CLI probe, native UI screenshots and
 live authenticated generation.
 
 
@@ -206,6 +207,6 @@ skipping incompatible candidates. To pin one installation, set
 `RIMES_CLAUDE_PATH=/absolute/path/to/claude` in the Fcitx desktop environment; a
 missing or incompatible pin fails without choosing another installation.
 
-[Claude validation and remaining desktop checks](CLAUDE-VALIDATION.md) separate
-protocol tests, the official prompt-free CLI check, actual native widget renders
-and still-pending authenticated generation.
+The [desktop checklist](../../../docs/platforms/linux/acceptance.md#mailbox) separates
+protocol tests, the official prompt-free CLI check, native widget renders
+and live authenticated generation.

@@ -1,9 +1,0 @@
-BUFFER_VIEWPORT scrollX=1317892 rail=1040x117 child=1318932x117 measured=1318932 clip=[0,0][1040,117] visible=13 window=1317900.1..1318923.9 clipAccepted=true blocks=16384 end=1318905.5
-NATIVE_TOUCH checks=18
-VECTOR_ICONS checks=872
-CHORD_SURFACE checks=23
-BUFFER_RENDER draws=24 capacityBlocks=16384 visibleChips=12 confirmedMeasurements=1 capacityGlyphPixels=5022 renders=1000 elapsedMs=445.785052
-HEIGHT_FIT checks=319
-PASS native keycaps, chord and Buffer rail rendering
-BUFFER_RENDER draws=24 capacityBlocks=16384 visibleChips=12 confirmedMeasurements=1 capacityGlyphPixels=5022 renders=1000 elapsedMs=445.785052
-HEIGHT_FIT checks=319

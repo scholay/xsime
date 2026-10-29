@@ -85,6 +85,13 @@ jobs:
           python scripts/test-buffer-plugin-catalog.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Test bounded translation resource downloads
+        if: matrix.architecture == 'x64'
+        shell: powershell
+        run: |
+          ./platforms/windows/tests/Test-TranslationDownload.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Test isolated installer payload and verification result
         if: matrix.architecture == 'x64'
         shell: powershell
@@ -225,7 +232,7 @@ jobs:
           $version = $env:PACKAGE_VERSION
           if (-not $version) { $version = (Get-Content platforms/windows/native/VERSION -Raw).Trim() }
           ./platforms/windows/scripts/New-RimesCiPackage.ps1 -Version $version -OutputDirectory "$env:RUNNER_TEMP/rimes-complete-package"
-          $checklist = 'docs/validation/windows-parity-20261016.md'
+          $checklist = 'docs/platforms/windows/manual-testing.md'
           if (Test-Path $checklist) { Copy-Item $checklist "$env:RUNNER_TEMP/rimes-complete-package/delivery/ACCEPTANCE-WINDOWS.md" }
       - name: Upload installable package and checksums
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

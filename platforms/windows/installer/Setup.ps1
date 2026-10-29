@@ -8,13 +8,18 @@ if($Action -eq 'Verify'){
     return
 }
 if($Action -eq 'CompleteUser'){
+    $completionLock=Enter-InstallRootLock "$env:ProgramFiles\RIMES" (Get-InstallUserSid '' $false)
+    try {
     & "$PSScriptRoot\Initialize-User.ps1" -ExpectedPackageDirectory $PSScriptRoot -NoAutostart:$NoAutostart | Out-Host
     $verification=& "$PSScriptRoot\Verify.ps1" -MachineOnly:$MachineOnly
     [ordered]@{verified=$true;installed=$true;version=$verification.Version;requiresSignOut=[bool]$verification.RequiresSignOut;requiresRestart=$false;directory=$verification.Directory} | ConvertTo-Json -Compress
     return
+    } finally { $completionLock.Dispose() }
 }
 Assert-Administrator
 $UserSid=Get-InstallUserSid $UserSid ([bool]$MachineOnly)
+$installRootLock=Enter-InstallRootLock "$env:ProgramFiles\RIMES" $UserSid
+try {
 Assert-InstallUser "$env:ProgramFiles\RIMES" $UserSid
 # The EXE carries the official installers so a clean Windows machine needs no
 # compiler, Python, manually opened shell, or separate runtime download.
@@ -34,3 +39,5 @@ foreach($arch in @('x64','x86')){
 $verification=& "$PSScriptRoot\Verify.ps1" -MachineOnly:$MachineOnly
 if(-not $verification.Verified -or $verification.Version -ne $manifest.version){throw 'Installed version verification failed'}
 [ordered]@{verified=$true;installed=$true;version=$manifest.version;requiresSignOut=[bool]$verification.RequiresSignOut;requiresRestart=$restart;directory=$verification.Directory} | ConvertTo-Json -Compress
+
+} finally { $installRootLock.Dispose() }

@@ -9,7 +9,7 @@
 
 5つのプラットフォームに **五筆 86** と **XSIME Wubi** を内蔵しています。五筆 86 は `z` に続けて全拼を入力して文字を検索でき、候補の括弧内に五筆コードを表示します。XSIME Wubi は切り替えなしで五筆と全拼を検索し、完全一致の五筆を優先します。両方案とも4打鍵で候補が一意なら自動確定し、重複コードと全拼検索では候補選択を維持します。[五筆ガイド](docs/wubi.md)を参照してください。
 
-> 製品・プロジェクト・アーキテクチャ名を **XSIME** に統一します。簡体字名は **犀术IME**、繁体字名は **犀術IME** です（旧 RIMES / Lingxi IME）。公開済みアプリ、ストア情報、届出は順次更新します。[命名・互換性方針](BRANDING.md)。
+> 製品・プロジェクト・アーキテクチャ名を **XSIME** に統一します。簡体字名は **犀术IME**、繁体字名は **犀術IME** です（旧 RIMES / Lingxi IME）。公開済みアプリ、ストア情報、届出は順次更新します。[命名・互換性方針](docs/development/branding.md)。
 
 ## デモ動画
 
@@ -99,19 +99,12 @@ cd xsime
 ## ドキュメント
 
 | ドキュメント | 内容 |
-|---|---|
-| [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md) | 現在の権威ある全体アーキテクチャ。開発を引き継ぐときは先に読む |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | P1/P2 の歴史的な契約と落とし穴 |
-| [PLUGIN-CONFIGURATION.md](PLUGIN-CONFIGURATION.md) | プラグインの宣言的な設定 |
-| [UNSIGNED-PREVIEW.md](UNSIGNED-PREVIEW.md) | 未署名プレビューのダウンロード、検証、安全なインストール |
-| [CROSS-PLATFORM-PREVIEW.md](CROSS-PLATFORM-PREVIEW.md) | Windows / Linux の入力方案プレビューの範囲と検証 |
-| [platforms/ios/README.md](platforms/ios/README.md) | iOS のキーボードと本体アプリ |
-| [platforms/windows/native/README.md](platforms/windows/native/README.md) | Windows ネイティブ TSF 入力メソッド |
-| [platforms/linux/ime/README.md](platforms/linux/ime/README.md) | Linux Fcitx5 入力メソッド、Buffer、Capsule |
-| [RELEASE.md](RELEASE.md) | リリース手順。チャネル、一つのコマンド、ペース、バージョン規則 |
-| [RELEASE-REFERENCE.md](RELEASE-REFERENCE.md) | リリースの技術資料。署名、インストーラ、アプリ内更新、CI |
-| [RELEASE-HISTORY.md](RELEASE-HISTORY.md) | 閉じたリリース経路、旧リポジトリの移行、改名の記録 |
-| [CHANGELOG.md](CHANGELOG.md) | 公開 GitHub Release とコミットメッセージから生成した版ごとの変更 |
+| --- | --- |
+| [ドキュメント一覧](docs/README.md) | 現行ガイドと各プラットフォームの入口 |
+| [システム構成](docs/architecture/system.md) | 入力、Buffer、共通処理とデータ境界 |
+| [開発・保守](docs/development/maintenance.md) | 主線、プラグイン依存、CI と検証 |
+| [リリース手順](docs/release/README.md) | ビルド、署名、更新と配布 |
+| [変更履歴](CHANGELOG.md) | 公開済みバージョンの変更 |
 
 ## アプリの更新
 
@@ -123,7 +116,7 @@ iOS は実際に提供されているストア版を確認し、App Store でダ
 
 4つのインストーラは [`scholay/xsime`](https://github.com/scholay/xsime/releases/latest) の同じ `vX.Y.Z` Release に公開します。CI はすべての配布ファイルをアップロードして読み戻した後、最後に共通の `update-manifest.json` を公開します。プレビュー版は正式更新の対象外です。iOS は独立した `ios-vX.Y.Z` のストア向け手順を使います。
 
-保守担当者は5つのプラットフォームの main CI が通過してから公開します。[RELEASE.md](RELEASE.md) と [CHANGELOG.md](CHANGELOG.md) を参照してください。
+保守担当者は5つのプラットフォームの main CI が通過してから公開します。[docs/release/README.md](docs/release/README.md) と [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
 ```bash
 ./scripts/release.sh stable --dry-run  # バージョン、5端の CI、公開条件を確認
@@ -157,4 +150,4 @@ XSIME 自身のコードは [Apache License 2.0](LICENSE) を採用していま�
 
 中国語入力には [Rime 入力エンジン（librime）](https://github.com/rime/librime)を使用しています。[NOTICE](NOTICE) に帰属情報、[ATTRIBUTION.md](ATTRIBUTION.md) に任意の表示例を記載しています。表示の推奨は追加のライセンス条件ではありません。
 
-第三者のコンポーネント、方案、辞書、Lua/OpenCC データはそれぞれのライセンスとクレジットを保ちます。[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)、[LICENSES](LICENSES/)、`rime-data/licenses/` を参照してください。公式の無料プラグインは [rimes-plugins](https://github.com/scholay/rimes-plugins) で管理します。
+第三者のコンポーネント、方案、辞書、Lua/OpenCC データはそれぞれのライセンスとクレジットを保ちます。[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)、[LICENSES](LICENSES)、`rime-data/licenses/` を参照してください。公式の無料プラグインは [rimes-plugins](https://github.com/scholay/rimes-plugins) で管理します。

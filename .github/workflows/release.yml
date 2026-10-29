@@ -72,6 +72,7 @@ jobs:
     runs-on: macos-15   # ARM64 runner; the app is built universal below
     permissions:
       contents: read
+      actions: read
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
       is_release: ${{ steps.version.outputs.IS_RELEASE }}
@@ -119,7 +120,7 @@ jobs:
           # macOS burns these ids into the protected TIS preferences: any drift
           # orphans the old rows and stacks duplicate "RIMES" entries in
           # System Settings (this bit us across the 0.3–0.4 renames — see
-          # RELEASE.md). Never change these without a migration story.
+          # docs/release/README.md). Never change these without a migration story.
           test "$BUNDLE_ID" = 'com.scholay.inputmethod.isaac'
           test "$MODE_ID" = 'com.scholay.inputmethod.isaac.Hans'
           test "$MODE_ID" = "${BUNDLE_ID}.Hans"
@@ -227,6 +228,16 @@ jobs:
             echo "tag=$GITHUB_SHA main=$main_sha" >&2
             exit 1
           }
+
+      - name: Require exact-source native CI and increasing Android build
+        if: steps.version.outputs.IS_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          python3 scripts/release/release_guard.py ci --commit "$GITHUB_SHA"
+          code=$(python3 -c 'import re; from pathlib import Path; print(re.findall(r"versionCode = ([0-9]+)", Path("platforms/android/app/build.gradle.kts").read_text())[0])')
+          python3 scripts/release/release_guard.py android-build --version "$VERSION" --build "$code"
 
       # An unsigned preview is still a public software release. Its tag must
       # name a commit that is already on main (scripts/release.sh tags the
@@ -1164,7 +1175,7 @@ jobs:
           被标记为 Latest。
 
           完整风险边界与安全安装步骤：
-          https://github.com/scholay/xsime/blob/main/UNSIGNED-PREVIEW.md
+          https://github.com/scholay/xsime/blob/main/docs/release/unsigned-preview.md
 
           ## 安装
 
@@ -1614,6 +1625,7 @@ jobs:
           git fetch --no-tags --depth=1 origin \
             '+refs/heads/main:refs/remotes/origin/main'
           [[ "$(git rev-parse refs/remotes/origin/main)" == "$GITHUB_SHA" ]]
+          python3 scripts/release/release_guard.py ci --commit "$GITHUB_SHA"
           remote_sha="$(gh api "repos/$GH_REPO/commits/$GITHUB_REF_NAME" --jq .sha)"
           [[ "$remote_sha" == "$GITHUB_SHA" ]]
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
@@ -1958,14 +1970,48 @@ jobs:
             exit 1
           }
 
-  publish_staged_release:
-    name: Approve and publish staged macOS release
+  sign_update_manifest:
     needs: [build_and_smoke, sign_and_stage, build_linux_deb, build_windows_release, build_android_release, verify_signed_install]
     if: >-
+      !cancelled() &&
+      needs.build_and_smoke.outputs.is_release == 'true' &&
       needs.build_and_smoke.result == 'success' &&
       needs.sign_and_stage.result == 'success' &&
+      needs.build_linux_deb.result == 'success' &&
+      needs.build_windows_release.result == 'success' &&
+      needs.build_android_release.result == 'success' &&
+      needs.verify_signed_install.result == 'success'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/sign-update-manifest.yml
+    with:
+      version: ${{ needs.build_and_smoke.outputs.version }}
+      source_commit: ${{ github.sha }}
+      source_run: ${{ github.run_id }}
+      macos_artifact_name: ${{ needs.sign_and_stage.outputs.artifact_name }}
+      macos_artifact_id: ${{ needs.sign_and_stage.outputs.artifact_id }}
+      macos_artifact_digest: ${{ needs.sign_and_stage.outputs.artifact_digest }}
+      linux_artifact_name: ${{ needs.build_linux_deb.outputs.artifact_name }}
+    secrets: inherit
+
+  publish_staged_release:
+    name: Approve and publish complete stable release
+    needs: [build_and_smoke, sign_and_stage, build_linux_deb, build_windows_release, build_android_release, verify_signed_install, sign_update_manifest]
+    if: >-
+      !cancelled() &&
+      needs.build_and_smoke.result == 'success' &&
+      needs.sign_and_stage.result == 'success' &&
+      needs.build_linux_deb.result == 'success' &&
+      needs.build_windows_release.result == 'success' &&
+      needs.build_android_release.result == 'success' &&
+      needs.verify_signed_install.result == 'success' &&
+      needs.sign_update_manifest.result == 'success' &&
       needs.build_and_smoke.outputs.is_release == 'true' &&
       github.repository == 'scholay/xsime'
+    concurrency:
+      group: stable-release-publication
+      cancel-in-progress: false
     runs-on: macos-15
     # This separate environment holds no signing or notarization credentials.
     # Required reviewers inspect the signed-stage rehearsal evidence. The
@@ -2028,6 +2074,12 @@ jobs:
               raise SystemExit(f"{name} must allow the formal tag pattern v*")
           PY
 
+      - name: Checkout the exact reviewed release helpers
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Authenticate the exact immutable signed stage
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2054,6 +2106,38 @@ jobs:
           name: ${{ needs.sign_and_stage.outputs.artifact_name }}
           path: ${{ runner.temp }}/rimes-signed-release-stage
           github-token: ${{ github.token }}
+
+      - name: Authenticate the exact immutable signed update feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FEED_ID: ${{ needs.sign_update_manifest.outputs.artifact_id }}
+          FEED_NAME: ${{ needs.sign_update_manifest.outputs.artifact_name }}
+          FEED_DIGEST: ${{ needs.sign_update_manifest.outputs.artifact_digest }}
+        run: |
+          python3 - <<'PYCODE'
+          import os, sys
+          sys.path.insert(0, 'scripts/release')
+          from release_guard import GitHub, REPO, validate_artifact, require
+          artifact = GitHub().json(f"repos/{REPO}/actions/artifacts/{int(os.environ['FEED_ID'])}")
+          validate_artifact(artifact, os.environ['FEED_NAME'], int(os.environ['GITHUB_RUN_ID']), os.environ['GITHUB_SHA'])
+          require(artifact['digest'] == 'sha256:' + os.environ['FEED_DIGEST'], 'Signed feed artifact digest changed')
+          PYCODE
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: ${{ needs.sign_update_manifest.outputs.artifact_name }}
+          path: ${{ runner.temp }}/signed-update-feed
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: ${{ needs.build_linux_deb.outputs.artifact_name }}
+          path: ${{ runner.temp }}/linux-deb
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: RIMES-Windows-release-${{ github.sha }}
+          path: ${{ runner.temp }}/windows-release
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: RIMES-Android-release-${{ github.sha }}
+          path: ${{ runner.temp }}/android-release
 
       - name: Verify staged bytes before publication
         env:
@@ -2113,75 +2197,30 @@ jobs:
           /usr/bin/xcrun stapler validate -v "$stage/$PKG"
           /usr/sbin/spctl --assess --type install --verbose=4 "$stage/$PKG"
 
-      - name: Reauthorize canonical tag and vacant Release after package review
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: scholay/xsime
-        run: |
-          set -euo pipefail
-          [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF_TYPE" == tag ]]
-          remote_sha="$(gh api "repos/$GH_REPO/commits/$GITHUB_REF_NAME" --jq .sha)"
-          [[ "$remote_sha" == "$GITHUB_SHA" ]] || {
-            echo "The immutable release tag moved after staging." >&2
-            exit 1
-          }
-          if gh release view "$GITHUB_REF_NAME" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "Release already exists; refusing to replace assets: $GITHUB_REF_NAME" >&2
-            exit 1
-          fi
-
-      - name: Create Release from the reviewed staged bytes
+      - name: Read back complete draft assets, then publish once
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: scholay/xsime
           VERSION: ${{ needs.build_and_smoke.outputs.version }}
-          PKG: ${{ needs.sign_and_stage.outputs.pkg }}
-        run: |
-          set -euo pipefail
-          stage="$RUNNER_TEMP/rimes-signed-release-stage"
-          gh release create "$GITHUB_REF_NAME" --repo "$GH_REPO" \
-            "$stage/$PKG" "$stage/SHA256SUMS" \
-            --verify-tag \
-            --latest \
-            --title "犀术IME / 犀術IME / XSIME $VERSION" \
-            --notes-file "$stage/RELEASE-NOTES.md"
-
-      - name: Read back the official Release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: scholay/xsime
-          PKG: ${{ needs.sign_and_stage.outputs.pkg }}
-          EXPECTED_PKG_SHA: ${{ needs.sign_and_stage.outputs.pkg_sha256 }}
-        run: |
-          set -euo pipefail
-          [[ "$(gh release view "$GITHUB_REF_NAME" --repo "$GH_REPO" --json isDraft --jq .isDraft)" == false ]]
-          [[ "$(gh release view "$GITHUB_REF_NAME" --repo "$GH_REPO" --json isPrerelease --jq .isPrerelease)" == false ]]
-          [[ "$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name)" == "$GITHUB_REF_NAME" ]]
-
-          expected_assets="$RUNNER_TEMP/rimes-published-assets.expected"
-          actual_assets="$RUNNER_TEMP/rimes-published-assets.actual"
-          printf '%s\n' "$PKG" SHA256SUMS | LC_ALL=C sort >"$expected_assets"
-          gh release view "$GITHUB_REF_NAME" --repo "$GH_REPO" --json assets --jq '.assets[].name' \
-            | LC_ALL=C sort >"$actual_assets"
-          cmp "$expected_assets" "$actual_assets"
-
-          readback="$RUNNER_TEMP/rimes-published-readback"
-          [[ ! -e "$readback" ]]
-          mkdir -m 700 "$readback"
-          gh release download "$GITHUB_REF_NAME" --repo "$GH_REPO" \
-            --pattern "$PKG" --pattern SHA256SUMS --dir "$readback"
-          [[ "$(shasum -a 256 "$readback/$PKG" | awk '{print $1}')" == "$EXPECTED_PKG_SHA" ]]
-          expected_sums="$RUNNER_TEMP/rimes-published-sums.expected"
-          printf '%s  %s\n' "$EXPECTED_PKG_SHA" "$PKG" >"$expected_sums"
-          cmp "$expected_sums" "$readback/SHA256SUMS"
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        run: bash scripts/release/publish-update-assets.sh
+      - name: Retain publication evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: stable-publication-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-publication-evidence.json
+          if-no-files-found: warn
 
   attach_linux_deb:
-    name: Attach verified Linux deb to the same release
-    needs: [build_and_smoke, build_linux_deb, publish_unsigned_preview, publish_staged_release]
+    name: Attach verified Linux deb to unsigned preview
+    needs: [build_and_smoke, build_linux_deb, publish_unsigned_preview]
     if: >-
       !cancelled() &&
       needs.build_linux_deb.result == 'success' &&
-      (needs.publish_unsigned_preview.result == 'success' || needs.publish_staged_release.result == 'success') &&
+      needs.publish_unsigned_preview.result == 'success' &&
       github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') &&
       github.repository == 'scholay/xsime'
     runs-on: ubuntu-24.04
@@ -2244,45 +2283,6 @@ jobs:
     with:
       signed_release: true
     secrets: inherit
-
-  publish_update_manifest:
-    name: Publish verified Android, Windows and complete update feed
-    needs: [build_and_smoke, build_windows_release, build_android_release, publish_staged_release, attach_linux_deb]
-    # The alternate preview publisher is intentionally skipped for stable tags.
-    # Override transitive skip propagation while still requiring every producer.
-    if: >-
-      !cancelled() &&
-      needs.build_and_smoke.result == 'success' &&
-      needs.build_and_smoke.outputs.is_release == 'true' &&
-      needs.build_windows_release.result == 'success' &&
-      needs.build_android_release.result == 'success' &&
-      needs.publish_staged_release.result == 'success' &&
-      needs.attach_linux_deb.result == 'success'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-      actions: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: scholay/xsime
-      VERSION: ${{ needs.build_and_smoke.outputs.version }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
-        with:
-          name: RIMES-Windows-release-${{ github.sha }}
-          path: ${{ runner.temp }}/windows-release
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
-        with:
-          name: RIMES-Android-release-${{ github.sha }}
-          path: ${{ runner.temp }}/android-release
-      - name: Publish and verify packages, then activate the complete update feed
-        env:
-          RELEASE_COMMIT: ${{ github.sha }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: bash scripts/release/publish-update-assets.sh
 
   verify_signed_install:
     name: Install the exact signed package on a disposable Mac

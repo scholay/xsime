@@ -46,7 +46,7 @@ File-format compliance does not guarantee review approval.
   suggestion, not an asserted App Review rejection.
 - Attachment #5 (`06-home.png`) still shows the old two-line slogan. The same
   strings remain in `platforms/ios/App/RimesApp.swift`; the canonical Simplified
-  slogan in `BRANDING.md` is “心有灵犀，落笔见术”. Fixing this requires an app
+  slogan in `docs/development/branding.md` is “心有灵犀，落笔见术”. Fixing this requires an app
   change and a new homepage capture, not editing the screenshot to depict an
   interface the installed app does not show. The maintainer chose to retain the
   current app slogan for this release. No app code was changed here.

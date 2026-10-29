@@ -8,7 +8,7 @@
 
 ## 发布影响
 
-<!-- 合并后是否需要发布预览版？一个 PR 只做一件事；提交信息使用 Conventional Commits（feat/fix/perf/refactor/docs/test/build/ci/chore/style/revert），发布说明由它们生成。见 RELEASE.md。 -->
+<!-- 合并后是否需要发布预览版？一个 PR 只做一件事；提交信息使用 Conventional Commits（feat/fix/perf/refactor/docs/test/build/ci/chore/style/revert），发布说明由它们生成。见 docs/release/README.md。 -->
 
 - [ ] 提交信息符合 Conventional Commits（CI「Release tooling」会检查）
 - [ ] 如上次发布后 CI 提示 CHANGELOG 落后，已运行 `python3 scripts/release/release_tool.py changelog --write`

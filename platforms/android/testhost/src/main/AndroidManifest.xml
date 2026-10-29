@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The external upgrade runner reads only its disposable debug target.
+         Package visibility is explicit; no QUERY_ALL_PACKAGES permission is needed. -->
+    <queries><package android:name="org.scholay.rimes.android.debug" /></queries>
     <application android:label="RIMES validation host" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false" android:usesCleartextTraffic="false">
         <activity android:name=".HostActivity" android:exported="true" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>

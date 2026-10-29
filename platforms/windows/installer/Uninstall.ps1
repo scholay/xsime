@@ -3,6 +3,8 @@ param([string]$InstallRoot="$env:ProgramFiles\RIMES",[switch]$AllowPendingRestar
 . "$PSScriptRoot\Package.Common.ps1"
 Assert-Administrator
 $UserSid=Get-InstallUserSid $UserSid ([bool]$MachineOnly)
+$installRootLock=Enter-InstallRootLock $InstallRoot $UserSid
+try {
 Assert-InstallUser $InstallRoot $UserSid
 $state=Get-RimesInstallation $InstallRoot -AllowIncomplete
 # Use this verified current package for both registrar architectures even if
@@ -42,3 +44,5 @@ try {
 Write-Host 'Unregistered RIMES. Version files, user dictionaries, settings and credentials retained for recovery. No other input method was changed.'
 [pscustomobject]@{Uninstalled=$true;RequiresSignOut=$requiresSignOut;SignOutReason=$signOutReason;UserDataRetained=$true}
 } finally {if($maintenance){$maintenance.Dispose()}}
+
+} finally { $installRootLock.Dispose() }

@@ -4,7 +4,7 @@
 
 窗口包含终端、对话、收件三个官方模块入口、收件未读角标、列表搜索和筛选。支持查看已有对话/收件、重命名、归档/恢复和本地备注；备注只保存在本机。窗口正常大小为 1000×700，最小 680×500；窄窗口通过顶部侧栏按钮展开列表，点击正文外侧或 Escape 收起。显示并激活的收件才标记已读。窗口尺寸与最后模块自动保存；未发送草稿按模块/会话保留在当前进程，退出进程不持久化草稿，与当前 macOS 行为一致。
 
-宿主与收件流转分别对应 [#168](https://github.com/scholay/xsime/issues/168)、[#169](https://github.com/scholay/xsime/issues/169)。本地 HTTP/MCP 来源接入对应 [#170](https://github.com/scholay/xsime/issues/170)，CLI 渠道在 #171/#172，AI 对话在 [#173](https://github.com/scholay/xsime/issues/173)；PTY 终端见 [#174](https://github.com/scholay/xsime/issues/174) 和 [终端验证](TERMINAL-VALIDATION.md)。
+宿主与收件流转分别对应 [#168](https://github.com/scholay/xsime/issues/168)、[#169](https://github.com/scholay/xsime/issues/169)。本地 HTTP/MCP 来源接入对应 [#170](https://github.com/scholay/xsime/issues/170)，CLI 渠道在 #171/#172，AI 对话在 [#173](https://github.com/scholay/xsime/issues/173)；PTY 终端见 [#174](https://github.com/scholay/xsime/issues/174)。
 
 ## PTY 终端
 
@@ -28,7 +28,7 @@
 
 最多同时生成 4 个对话，每个请求默认 120 秒；提问最多 256 KiB，完整请求上下文最多 1 MiB。历史内容超过范围时请新建会话。续聊上下文只包含用户提问和 AI 正文，不包含本地备注或状态事件。CLI 未连接、路由失效、容量不足或提交失败时保留草稿。历史 API 会话没有保存的路由时不会猜测当前 Provider；旧 CLI 会话首次续聊会固定适配器默认模型。
 
-对话不会自动读取 Buffer、自动上屏或执行工具。需要使用结果时，明确点 **加入 Buffer**，再在 Buffer 中编辑和发送。API 密钥保留在私有配置目录，CLI 凭据仍由各自渠道管理，不进入 Mailbox JSON。验证与剩余桌面/视觉门槛见 [对话验证](CHAT-VALIDATION.md)。
+对话不会自动读取 Buffer、自动上屏或执行工具。需要使用结果时，明确点 **加入 Buffer**，再在 Buffer 中编辑和发送。API 密钥保留在私有配置目录，CLI 凭据仍由各自渠道管理，不进入 Mailbox JSON。实际账号、宿主与跨模块行为按 [桌面验收](../../../docs/platforms/linux/acceptance.md#mailbox) 分别检查。
 
 ## 处理收件
 
@@ -91,4 +91,4 @@ TZ=Asia/Tokyo xvfb-run -a platforms/linux/ime/build/rimes-mailbox \
   --render-dir /tmp/mailbox-linux
 ```
 
-[网关验证](GATEWAY-VALIDATION.md)、[宿主验证](HOST-VALIDATION.md)、[收件验证](INBOX-VALIDATION.md) 和 [48 组双端实际截图](../../../validation/linux-mailbox-inbox-20261018/README.md) 分开记录行为与视觉。当前截图仍需审查；功能测试通过不代表像素一致或真实 GNOME/KDE 桌面已验收。
+行为、视觉和真实服务分别按 [桌面验收](../../../docs/platforms/linux/acceptance.md#mailbox) 记录；功能测试通过不代表像素一致或真实 GNOME/KDE 桌面已验收。

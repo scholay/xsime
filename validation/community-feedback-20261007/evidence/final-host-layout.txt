@@ -1,5 +1,0 @@
-START accessibility
-START host
-START contract
-PASS keyboard layouts, equal touch geometry, theme, spelling, emoji, Buffer and orientation
-PASS input contract; assertions=398

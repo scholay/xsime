@@ -1,5 +1,0 @@
-START accessibility
-START host
-START contract
-PASS native held keys, target/selection/hide retirement and fresh accessibility clicks
-PASS input contract; assertions=90

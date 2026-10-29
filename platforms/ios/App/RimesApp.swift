@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 import UniformTypeIdentifiers
 import RimesCore
 
@@ -428,9 +429,16 @@ private struct StoreUpdateView: View {
         checking = true; available = nil
         defer { checking = false }
         do {
+            // The Apple-account storefront can differ from the device's region.
+            // Fetch it for each check; never cache it or silently query another country.
+            guard let storefront = await Storefront.current,
+                  let country = StorefrontRegion.lookupCountry(for: storefront.countryCode) else {
+                message = L("无法确定当前 App Store 地区，请直接在 App Store 查看更新。", "The App Store region is unavailable. Check for updates in App Store.")
+                return
+            }
             var url = URLComponents(string: "https://itunes.apple.com/lookup")!
             url.queryItems = [URLQueryItem(name: "id", value: "6814620242"),
-                             URLQueryItem(name: "country", value: Locale.current.region?.identifier ?? "US")]
+                             URLQueryItem(name: "country", value: country)]
             var request = URLRequest(url: url.url!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 25)
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             let (data, response) = try await URLSession.shared.data(for: request)

@@ -1,8 +1,0 @@
-Desktop probe: session=0 explorer=2 notepad=not attempted
-
-
-Passed        : True
-Architecture  : x86
-WorkDirectory : D:\AI\rimes-community-repair-20261007\650762b-v8-e2e-x86
-RimeDll       : D:\AI\rimes-community-repair-20261007\650762b-v8-e2e-x86\librime\rime.dll
-DesktopProbe  : {SessionId, SessionName, ExplorerProcessCount, InteractiveSession...}

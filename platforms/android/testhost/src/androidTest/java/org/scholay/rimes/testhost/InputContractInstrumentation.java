@@ -27,6 +27,9 @@ public final class InputContractInstrumentation extends Instrumentation {
     @Override public void onStart() {
         Bundle result=new Bundle();
         try {
+            if ("app-update-upgrade".equals(arguments.getString("mode"))) {
+                result.putString("stream",AppUpdateUpgradeContract.run(this)); finish(-1,result); return;
+            }
             report("START accessibility");
             AccessibilityServiceInfo info=getUiAutomation().getServiceInfo();
             info.flags|=AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;

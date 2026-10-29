@@ -9,6 +9,7 @@ on:
       - "platforms/linux/**"
       - "Shared/SchemeImport/**"
       - "Shared/CandidateMatrix/**"
+      - "Shared/AppUpdate/**"
       - "OfficialPlugins"
       - "plugins.lock.json"
       - "Catalog/buffer-plugins.json"
@@ -168,6 +169,7 @@ jobs:
 
       - name: Real AI API transport and Fcitx derived delivery
         run: |
+          python3 -m unittest discover -s platforms/linux/runtime/tests -p 'test_ai_http_fixture.py'
           RIMES_SHARED_DIR="$RUNNER_TEMP/translation-shared" python3 platforms/linux/runtime/tests/ai_http_fixture.py \
             --fcitx platforms/linux/ime/build
 

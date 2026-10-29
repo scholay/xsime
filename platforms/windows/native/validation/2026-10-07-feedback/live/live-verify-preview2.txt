@@ -1,9 +1,0 @@
-
-
-Verified            : True
-Version             : 1.1.0-preview.2
-Commit              : 58fc4bcf8319c8a640037267b6af43e52f79ca5b
-Directory           : C:\Program Files\RIMES\versions\1.1.0-preview.2-58fc4bcf8319-ecab591174ef
-UserData            : %APPDATA%\RIMES
-RequiresSignOut     : True
-HostInputAcceptance : Requires desktop testing

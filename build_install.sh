@@ -3,7 +3,7 @@
 # data are packaged inside, so no separate Squirrel install is needed. Installs into the per-user Input Methods folder and
 # registers + enables + selects it so it shows in System Settings / the input menu.
 #
-# IMPORTANT invariants (learned the hard way — see RELEASE.md):
+# IMPORTANT invariants (learned the hard way — see docs/release/README.md):
 #   * Bundle, executable, identifier and display name are all RIMES. Older
 #     installs under ETInput.app / RimeBuffer.app advertise the same input
 #     source, so they are deregistered and removed here rather than left to

@@ -1,9 +1,0 @@
-START accessibility
-START host
-START contract
-CLOSURE_FIELDS layout=9 inputType=2 direct=true composing=false restored=true
-CLOSURE_FIELDS layout=9 inputType=3 direct=true composing=false restored=true
-CLOSURE_FIELDS layout=26 inputType=2 direct=true composing=false restored=true
-CLOSURE_FIELDS layout=26 inputType=3 direct=true composing=false restored=true
-PASS CLOSURE_FIELDS real NUMBER/PHONE EditorInfo and preserved nine-key/QWERTY preferences
-PASS input contract; assertions=180

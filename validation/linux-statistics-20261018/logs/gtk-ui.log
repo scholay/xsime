@@ -1,3 +1,0 @@
-dbus-daemon[61439]: [session uid=0 pid=61439] Activating service name='ca.desrt.dconf' requested by ':1.1' (uid=0 pid=61454 comm="/tmp/xsime-ime-build/runtime/rimes-metrics-ui-test")
-dbus-daemon[61439]: [session uid=0 pid=61439] Successfully activated service 'ca.desrt.dconf'
-PASS: eight native-data renders, chart/calendar/date navigation, offline history, independent consent without activation, cancel/clear isolation, private aggregate export, restart and explicit repair

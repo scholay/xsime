@@ -1,0 +1,37 @@
+# Linux Capsule 行为合同
+
+基于 macOS `CapsuleModules.swift`、`CapsuleWindowController.swift`、`CapsuleContentStore.swift` 和 `ClipboardRailView.swift`。Linux 使用原生 Fcitx 投递和 GTK 3；模块身份、标题、过滤和管理页尺寸从原生源码生成。业务验证与像素验证分别记录，检查步骤见 [Capsule 桌面验收](acceptance.md#capsule)。
+
+## 导航与窗口
+
+五模块固定顺序：临时、捕获、笔记、资源、密码。每个模块有独立 `builtin.capsule.*` 授权，禁用后退出导航及查询结果但不删除文件。管理页和底栏共用模块、过滤、查询及选中 UUID。旧 tab 命令映射到相应模块/过滤。
+
+底栏为 940×208，卡片 206×126、间距 8、外圆角 14。管理页默认 940×660，最小 620×430；标题栏高 30、边距 14，模块栏宽 118，列表宽为窗口的 24%（170–286），编辑区位于分隔线右侧。所有主题来自同一 macOS 调色板。控件字体、图标及系统材质需通过真实双端渲染继续校准。
+
+底栏不抢键盘焦点，X11 与支持 layer-shell 的 Wayland 使用共享 `PanelWindow`。无 layer-shell 时可用 XWayland 回退。管理页是正常可聚焦窗口，可以用中文输入法编辑标题、查询和正文，不启动第二个 librime。
+
+## 授权与投递
+
+- 底栏打开时绑定确切的 Fcitx 输入框；切换输入框撤销绑定，显式快捷键才可重绑。
+- Return、Ctrl+1–9、双击均重新核验模块、当前记录修订、输入框身份和保护能力，随后调用 `InputContext::commitString`。成功后关闭底栏。
+- Copy 与 Activate 是不同命令，`copy_seq` 只在明确复制时增加；后续快照、关闭、重启不会重复写剪贴板。没有合成 Ctrl+V。
+- 管理页及返回底栏都撤销原投递授权。管理页 Esc 返回底栏；关闭按钮关闭整个 Capsule。
+- 密码/敏感输入、锁屏、睡眠和会话失效立即隐藏内容、撤销目标。未保存的普通笔记草稿只保留在进程内，恢复后仍需显式操作；不会自动保存或投递。
+- 卡片列表只传摘要，不传完整正文；密码模块只有脱敏元数据，明文密码不得进入 Markdown 仓库。
+- 桌面快捷键、失败状态和平台差异见 [IME 使用说明](../../../platforms/linux/ime/README.md#desktop-launch-and-global-shortcuts) 与 [桌面验收](acceptance.md#desktop)。
+
+## 持久化与并发
+
+`entries/<uuid>.md` 保持 `capsule`、`version: 1`、UUID、title、updated_at、summary、note/resource 分类及未知 front matter。读取无效单条记录时跳过且保留原文件。单条大小 1 MiB、正文 256 KiB；最多 20,000 条及 64 MiB 正文/摘要内存预算。首次空库只种入一次默认笔记；`content-seed-v1` 留存，删除默认条目后不会重建。
+
+所有编辑和删除都要求与现存 SHA-256 revision 一致。新条目使用新 UUID。写入由受限目录描述符、0600 文件、原子 rename 与 fsync 完成；目录为 0700。保存失败、修订冲突、停用或更新插件不会覆盖当前草稿。单条读取观察一次原子发布，不等待编辑器持有的写锁；列表读取及文件处理在工作线程执行。
+
+附件存为 `assets/<sha256>.asset`，导入和读取有 256 MiB 限制、常规文件与符号链接检查、修改检测和哈希验证。记录删除保留附件。此基础存储不等同于媒体预览或密码库，后者由各模块任务实现。
+
+## 输入与生命周期
+
+已绑定底栏中的 ASCII 搜索、Tab/Shift+Tab、左右移动、Return、Esc 和 Ctrl+C 在 Rime 前处理；解绑后键盘继续交给当前输入框。管理页用正常 GTK 输入处理，支持中文查询。管理页关闭/切换前确认未保存草稿；搜索刷新保留草稿及其原始 revision，避免覆盖外部编辑。
+
+后台读取仅在当前加载身份仍有效时发布结果。停用模块清除其内存投影。UI 进程退出不影响普通输入；重连恢复当前状态并忽略历史复制事件。Fcitx 卸载先停止工作与回调，再解绑 dispatcher。
+
+模块用法见 [Capsule README](../../../platforms/linux/capsule/README.md)。跨设备同步不属于本规范。

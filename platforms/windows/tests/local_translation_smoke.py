@@ -23,9 +23,18 @@ with tempfile.TemporaryDirectory(prefix="rimes-local-translation-test-") as dire
         command += ["-Cache", str(args.cache.resolve())]
     setup_environment = dict(os.environ)
     setup_environment.pop("PSModulePath", None)
-    setup = subprocess.run(command, env=setup_environment, timeout=600, capture_output=True)
+    try:
+        setup = subprocess.run(command, env=setup_environment, timeout=600, capture_output=True)
+    except subprocess.TimeoutExpired as error:
+        # The installer logs only logical resource names, byte counts and hashes;
+        # retain those bounded diagnostics even when its outer deadline fires.
+        for value in (error.stdout, error.stderr):
+            if value:
+                print(value[-128 * 1024:].decode("utf-8", errors="replace"), flush=True)
+        print("Translation setup exceeded its 600-second deadline; no unverified resource was accepted.", flush=True)
+        raise
+    print(setup.stdout.decode("utf-8", errors="replace"), flush=True)
     if setup.returncode:
-        print(setup.stdout.decode("utf-8", errors="replace"))
         print(setup.stderr.decode("utf-8", errors="replace"))
         setup.check_returncode()
     environment = dict(os.environ, LOCALAPPDATA=str(profile))

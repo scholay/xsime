@@ -3,6 +3,8 @@
 param([string]$InstallRoot="$env:ProgramFiles\RIMES",[Parameter(Mandatory)][string]$ExpectedPackageDirectory,[switch]$NoAutostart)
 . "$PSScriptRoot\Package.Common.ps1"
 $UserSid=Get-InstallUserSid '' $false
+$installRootLock=Enter-InstallRootLock $InstallRoot $UserSid
+try {
 Assert-InstallUser $InstallRoot $UserSid
 $state=Get-RimesInstallation $InstallRoot
 Read-VerifiedPackage $ExpectedPackageDirectory | Out-Null
@@ -32,3 +34,4 @@ try {
     try{Restore-SettingsShortcut $oldShortcut}catch{$recoveryFailures+=$_.ToString()}
     throw "RIMES system files were installed, but setup for this Windows user is incomplete. Run Setup.exe again from this account to retry. Dictionaries were retained. $failure Recovery errors: $($recoveryFailures -join '; ')"
 }
+} finally { $installRootLock.Dispose() }
