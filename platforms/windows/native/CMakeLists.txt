@@ -379,6 +379,9 @@ if(RIMES_BUILD_TESTS)
     add_test(NAME RimesTypingPracticeUI COMMAND RimesMetricsUiTests --typing-parity
         "${CMAKE_CURRENT_BINARY_DIR}/typing-practice-renders")
     set_tests_properties(RimesTypingPracticeUI PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
+    add_test(NAME RimesTypingGeometry96 COMMAND RimesMetricsUiTests --typing-geometry-96
+        "${CMAKE_CURRENT_BINARY_DIR}/typing-geometry-96")
+    set_tests_properties(RimesTypingGeometry96 PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
     add_executable(RimesPeripheralTests src/peripherals/tests.cpp)
     target_link_libraries(RimesPeripheralTests PRIVATE RimesWorkbench)
     rimes_harden_target(RimesPeripheralTests)

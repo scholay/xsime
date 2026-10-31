@@ -88,6 +88,8 @@ class SettingsUiHost {
   ui::SettingsLayout layout_{};
   ui::SettingsFonts fonts_{};
   ui::ThemeId opened_theme_ = ui::ThemeId::kNight;
+  ui::ThemeId themed_theme_ = ui::ThemeId::kNight;
+  unsigned themed_dpi_ = 0;
   bool ready_ = false, updating_controls_ = false, pending_save_ = false;
   HICON settings_icon_ = nullptr;
   HWND hwnd_ = nullptr;

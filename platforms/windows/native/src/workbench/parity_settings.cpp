@@ -2,6 +2,7 @@
 #include "chord_profile.hpp"
 #include "codex_cli.hpp"
 #include "local_gateway.hpp"
+#include "../ui/settings_scrollbar.hpp"
 #include <atomic>
 #include <set>
 #include <commctrl.h>
@@ -487,7 +488,9 @@ void ParitySettings::Layout(ui::SettingsPage page, int subpage,
     p.gateway_font = CreateFontW(-MulDiv(10, dpi, 96), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH, L"Consolas");
   }
-  for (const unsigned id : {6055U, 6057U}) SendMessageW(p.H(id), WM_SETFONT, reinterpret_cast<WPARAM>(p.gateway_font), FALSE);
+  for (const unsigned id : {6055U, 6057U})
+    if (reinterpret_cast<HFONT>(SendMessageW(p.H(id), WM_GETFONT, 0, 0)) != p.gateway_font)
+      SendMessageW(p.H(id), WM_SETFONT, reinterpret_cast<WPARAM>(p.gateway_font), FALSE);
   auto put = [&](unsigned id, float left, float top, float width,
                  float height) {
     const float scale = static_cast<float>(dpi) / 96;
@@ -528,9 +531,17 @@ void ParitySettings::Layout(ui::SettingsPage page, int subpage,
       const float clipped_top = (std::max)(0.f, body.top - (y + top));
       const float clipped_bottom = (std::min)(height, body.bottom - (y + top));
       if (clipped_bottom <= clipped_top) return;
-      SetWindowRgn(p.H(id), CreateRectRgn(0, static_cast<int>(clipped_top * scale),
-          static_cast<int>(width * scale + 1), static_cast<int>(clipped_bottom * scale + 1)), FALSE);
-    } else SetWindowRgn(p.H(id), nullptr, FALSE);
+      const auto region = CreateRectRgn(0, static_cast<int>(clipped_top * scale),
+          static_cast<int>(width * scale + 1), static_cast<int>(clipped_bottom * scale + 1));
+      const auto old = CreateRectRgn(0, 0, 0, 0);
+      if (GetWindowRgn(p.H(id), old) != ERROR && EqualRgn(old, region)) DeleteObject(region);
+      else if (!SetWindowRgn(p.H(id), region, FALSE)) DeleteObject(region);
+      DeleteObject(old);
+    } else {
+      const auto old = CreateRectRgn(0, 0, 0, 0);
+      if (GetWindowRgn(p.H(id), old) != ERROR) SetWindowRgn(p.H(id), nullptr, FALSE);
+      DeleteObject(old);
+    }
     shown.insert(id);
     if (!(GetWindowLongPtrW(p.H(id), GWL_STYLE) & WS_VISIBLE)) ShowWindow(p.H(id), SW_SHOWNA);
   };
@@ -590,16 +601,15 @@ void ParitySettings::Layout(ui::SettingsPage page, int subpage,
       for (unsigned id = 6051; id <= 6058; ++id) EnableWindow(p.H(id), p.gateway_enabled);
     }
     p.RefreshControls();
-    if (p.scroll_max) {
-      const float scale = static_cast<float>(dpi) / 96;
-      MoveWindow(p.H(6070), static_cast<int>((body.right + 6) * scale), static_cast<int>(body.top * scale),
-          MulDiv(12, dpi, 96), static_cast<int>(body.height() * scale), FALSE);
-      SCROLLINFO info{sizeof(info), SIF_RANGE | SIF_PAGE | SIF_POS, 0, static_cast<int>(height) - 1,
-          static_cast<UINT>(body.height()), p.scroll, 0};
-      SetScrollInfo(p.H(6070), SB_CTL, &info, FALSE);
-      shown.insert(6070);
-      if (!(GetWindowLongPtrW(p.H(6070), GWL_STYLE) & WS_VISIBLE)) ShowWindow(p.H(6070), SW_SHOWNA);
-    }
+    const float scale = static_cast<float>(dpi) / 96;
+    const RECT scrollbar{static_cast<LONG>((body.right + 6) * scale),
+                         static_cast<LONG>(body.top * scale),
+                         static_cast<LONG>((body.right + 6) * scale) + MulDiv(12, static_cast<int>(dpi), 96),
+                         static_cast<LONG>(body.bottom * scale)};
+    ui::LayoutSettingsScrollbar(p.H(6070), scrollbar, static_cast<int>(height),
+                                 static_cast<int>(body.height()), p.scroll);
+    if (p.scroll_max) shown.insert(6070);
+
   } else if (page == ui::SettingsPage::kChord) {
     if (subpage == 0) {
       row(6010, 6111, 0);

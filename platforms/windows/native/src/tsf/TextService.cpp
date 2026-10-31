@@ -18,12 +18,23 @@
 #include "ModuleState.h"
 #include "candidate_layout.hpp"
 #include "../ui/theme.hpp"
+#include "../core/typing_practice.hpp"
 
 namespace rimes::windows::tsf {
 namespace {
 
 constexpr UINT kRefreshFocusedContext = WM_APP + 74;
 constexpr UINT_PTR kBufferFocusRetry = 1;
+
+HWND PracticeEditor(ITfContext* context) noexcept {
+  ITfContextView* view = nullptr;
+  HWND window = nullptr;
+  if (context && SUCCEEDED(context->GetActiveView(&view)) && view) {
+    if (FAILED(view->GetWnd(&window))) window = nullptr;
+    view->Release();
+  }
+  return core::TypingPracticeEditorForView(window);
+}
 
 // Called with a granted edit cookie; never inspect or forward protected text.
 bool AllowedContext(ITfContext* context,
@@ -711,6 +722,7 @@ void TextService::ToggleInputMode() noexcept {
 }
 
 void TextService::SelectCandidate(std::size_t index) noexcept {
+  if (FloatingPracticeCancelled()) { RevokeContext(); return; }
   if (!active_context_ || !broker_client_) return;
   const auto selection = candidate_navigation_.AtVisibleIndex(index);
   if (!selection) return;
@@ -743,6 +755,7 @@ void TextService::SelectCandidate(std::size_t index) noexcept {
 }
 
 void TextService::PageCandidate(int delta) noexcept {
+  if (FloatingPracticeCancelled()) { RevokeContext(); return; }
   if (!active_context_ || !broker_client_ || !candidate_window_.IsCompact()) return;
   auto* context = active_context_;
   const auto valid = edit_valid_;
@@ -1209,6 +1222,8 @@ HRESULT TextService::HandleKey(BrokerKeyPhase phase, ITfContext* context,
     return S_OK;
   }
 
+  if ((phase == BrokerKeyPhase::kKeyDown || phase == BrokerKeyPhase::kKeyUp) &&
+      FloatingPracticeCancelled()) RevokeContext();
   const bool test_up = phase == BrokerKeyPhase::kTestKeyUp;
   const bool up = phase == BrokerKeyPhase::kKeyUp;
   if (virtual_key < candidate_owned_keys_.size() && (test_up || up) &&
@@ -1294,6 +1309,15 @@ HRESULT TextService::ApplyDocumentState(
     return E_INVALIDARG;
   }
   SetCapture(state.buffer_capture);
+  const auto floating_editor = !capture_active_ &&
+      (activation_flags_ & TF_TMAE_UIELEMENTENABLEDONLY) == 0 ? PracticeEditor(context) : nullptr;
+  if (FloatingPracticeCancelled() ||
+      (floating_practice_editor_ && floating_practice_editor_ != floating_editor) ||
+      (floating_editor && composition_)) {
+    RevokeContext();
+    return TF_E_DISCONNECTED;
+  }
+  floating_practice_editor_ = floating_editor;
   if ((!state.composing && !state.pending_chord) || !state.commit_text.empty())
     candidate_anchor_ = {};
   // Capture the insertion point before the first preedit write. It also
@@ -1306,6 +1330,39 @@ HRESULT TextService::ApplyDocumentState(
   ++candidate_epoch_;
   if (state.buffer_capture) {
     last_state_ = state;
+    UpdateCandidateWindow(context, state, cookie);
+    return S_OK;
+  }
+  if (floating_editor) {
+    // This trusted in-process editor owns presentation and cell reformatting.
+    // Keep preedit entirely out of its text store so a partial commit may be
+    // scored and laid out while the next Rime composition is already active.
+    last_state_ = state;
+    if (!state.commit_text.empty()) ++floating_pending_commits_;
+    if (!UpdateFloatingPracticeState()) { RevokeContext(); return E_FAIL; }
+    if (!state.commit_text.empty()) {
+      auto valid = edit_valid_;
+      const auto generation = context_generation_;
+      auto* insert = new (std::nothrow) CommitEditSession(context, state.commit_text, valid,
+          [this, valid](bool accepted) {
+            if (edit_valid_ != valid) return;
+            if (floating_pending_commits_) --floating_pending_commits_;
+            if (!accepted || !UpdateFloatingPracticeState()) RevokeContext();
+          }, static_cast<ITfTextInputProcessorEx*>(this),
+          [this, context, generation, valid, floating_editor](TfEditCookie) {
+            return active_context_ == context && context_generation_ == generation &&
+                edit_valid_ == valid && (!thread_manager_ || IsFocusedContext()) &&
+                PracticeEditor(context) == floating_editor &&
+                !core::HasCancelledPracticeComposition(floating_editor);
+          });
+      if (!insert) { RevokeContext(); return E_OUTOFMEMORY; }
+      const auto result = cookie == TF_INVALID_EDIT_COOKIE
+          ? RequestEdit(context, client_id_, insert) : insert->DoEditSession(cookie);
+      insert->Release();
+      if (FAILED(result)) { RevokeContext(); return result; }
+    }
+    if (active_context_ != context || !edit_valid_ || !edit_valid_->load() ||
+        floating_practice_editor_ != floating_editor) return TF_E_DISCONNECTED;
     UpdateCandidateWindow(context, state, cookie);
     return S_OK;
   }
@@ -1430,6 +1487,7 @@ bool TextService::IsFocusedContext() const noexcept {
 }
 
 HRESULT TextService::CandidateUIAction(CandidateUIElement::Action action, UINT index) {
+  if (FloatingPracticeCancelled()) { RevokeContext(); return TF_E_DISCONNECTED; }
   if (!active_context_ || !candidate_ui_ || !edit_valid_ || !edit_valid_->load())
     return TF_E_DISCONNECTED;
   if (!IsFocusedContext()) return TF_E_DISCONNECTED;
@@ -1517,7 +1575,10 @@ void TextService::PublishCandidateUI(ITfContext* context,
 
 void TextService::UpdateCandidateWindow(
     ITfContext* context, const BrokerInputState& state, TfEditCookie cookie) noexcept {
-  if (!state.candidates_visible || state.candidates.empty() ||
+  const bool floating = floating_practice_editor_ &&
+      core::IsTypingPracticeEditor(floating_practice_editor_);
+  const bool preedit_only = floating && state.composing && !state.composition.empty();
+  if ((!preedit_only && (!state.candidates_visible || state.candidates.empty())) ||
       (activation_flags_ & TF_TMAE_SECUREMODE) != 0) {
     EndCandidateUI();
     return;
@@ -1531,8 +1592,10 @@ void TextService::UpdateCandidateWindow(
     snapshot.has_previous_page = CandidateNavigation::PageId(state) > 0;
     snapshot.has_next_page = !state.last_page;
     snapshot.composition = state.composition;
+    snapshot.floating_composition = floating;
+    snapshot.composition_caret = state.caret_utf16;
     const RECT queried = capture_active_ ? buffer_caret_
-        : composition_ || candidate_anchor_.bottom <= candidate_anchor_.top
+        : floating || composition_ || candidate_anchor_.bottom <= candidate_anchor_.top
             ? QueryCaretRect(context, cookie, true) : candidate_anchor_;
     // A host mid-composition can refuse every caret source, which yields an
     // all-zero rectangle. That is unknown geometry, not a caret at the screen
@@ -1707,7 +1770,44 @@ bool TextService::BindContext(ITfContext* context) noexcept {
   return true;
 }
 
+bool TextService::FloatingPracticeCancelled() const noexcept {
+  return floating_practice_editor_ &&
+      (!core::IsTypingPracticeEditor(floating_practice_editor_) ||
+       core::HasCancelledPracticeComposition(floating_practice_editor_));
+}
+bool TextService::UpdateFloatingPracticeState() noexcept {
+  if (!floating_practice_editor_) return true;
+  if (!core::IsTypingPracticeEditor(floating_practice_editor_)) return false;
+  if (notification_window_ && !SetPropW(floating_practice_editor_, core::kTypingPracticeServiceWindowProperty,
+                                       reinterpret_cast<HANDLE>(notification_window_))) return false;
+  if (last_state_.composing || last_state_.pending_chord || floating_pending_commits_)
+    return SetPropW(floating_practice_editor_, core::kTypingPracticeCompositionProperty,
+                    reinterpret_cast<HANDLE>(floating_practice_editor_)) != FALSE;
+  RemovePropW(floating_practice_editor_, core::kTypingPracticeCompositionProperty);
+  return true;
+}
+void TextService::ClearFloatingPractice() noexcept {
+  const auto editor = std::exchange(floating_practice_editor_, nullptr);
+  floating_pending_commits_ = 0;
+  // A destroyed/recycled HWND must not clear a capability owned by another
+  // control. None of these flags contains document text or crosses processes.
+  DWORD process = 0;
+  if (editor && GetWindowThreadProcessId(editor, &process) == GetCurrentThreadId() &&
+      process == GetCurrentProcessId() &&
+      (GetPropW(editor, core::kTypingPracticeEditorProperty) == reinterpret_cast<HANDLE>(editor) ||
+       core::HasFloatingPracticeComposition(editor) || core::HasCancelledPracticeComposition(editor))) {
+    if (core::HasFloatingPracticeComposition(editor))
+      RemovePropW(editor, core::kTypingPracticeCompositionProperty);
+    if (core::HasCancelledPracticeComposition(editor))
+      RemovePropW(editor, core::kTypingPracticeCancelCompositionProperty);
+    if (GetPropW(editor, core::kTypingPracticeServiceWindowProperty) == reinterpret_cast<HANDLE>(notification_window_))
+      RemovePropW(editor, core::kTypingPracticeServiceWindowProperty);
+    if (GetPropW(editor, core::kTypingPracticeLayoutPendingProperty) == reinterpret_cast<HANDLE>(editor))
+      RemovePropW(editor, core::kTypingPracticeLayoutPendingProperty);
+  }
+}
 void TextService::RevokeContext() noexcept {
+  ClearFloatingPractice();
   candidate_anchor_ = {};
   CancelBufferFocusRequest();
   if (edit_valid_) edit_valid_->store(false);
@@ -1805,13 +1905,18 @@ HRESULT STDMETHODCALLTYPE TextService::OnEndEdit(ITfContext* context,
                                                  TfEditCookie,
                                                  ITfEditRecord* record) {
   if (context != active_context_ || !record) return S_OK;
+  if (FloatingPracticeCancelled()) {
+    RevokeContext();
+    if (notification_window_) PostMessageW(notification_window_, kRefreshFocusedContext, 0, 0);
+    return S_OK;
+  }
   // A host may accept an insertion without moving selection. Consume the
   // origin marker on that edit too, so a later user click is never mistaken
   // for our own insertion and allowed to retarget a Buffer delivery.
   const bool own_edit = std::exchange(own_buffer_edit_, false);
   BOOL changed = FALSE;
   if (SUCCEEDED(record->GetSelectionStatus(&changed)) && changed &&
-      (broker_client_->Capturing() || buffer_focus_follow_) && !own_edit) {
+      ((broker_client_ && broker_client_->Capturing()) || buffer_focus_follow_) && !own_edit) {
     RevokeContext();
     // Chromium can move between fields using the same TSF context and only
     // report a selection change. Retire the capture immediately, then publish
@@ -1832,6 +1937,26 @@ LRESULT CALLBACK TextService::NotificationProcedure(HWND window, UINT message,
     self = static_cast<TextService*>(
         reinterpret_cast<CREATESTRUCTW*>(lparam)->lpCreateParams);
     SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+  }
+  if (self && message == core::kTypingPracticeCancelMessage) {
+    if (self->floating_practice_editor_ == reinterpret_cast<HWND>(wparam) &&
+        self->FloatingPracticeCancelled()) {
+      self->RevokeContext();
+      PostMessageW(window, kRefreshFocusedContext, 0, 0);
+    }
+    return 0;
+  }
+  if (self && message == core::kTypingPracticeLayoutMessage) {
+    const auto editor = reinterpret_cast<HWND>(wparam);
+    if (!editor || editor != self->floating_practice_editor_ ||
+        GetPropW(editor, core::kTypingPracticeLayoutPendingProperty) != reinterpret_cast<HANDLE>(editor)) return 0;
+    RemovePropW(editor, core::kTypingPracticeLayoutPendingProperty);
+    if (editor == self->floating_practice_editor_ && core::IsTypingPracticeEditor(editor) &&
+        core::HasFloatingPracticeComposition(editor) && !self->FloatingPracticeCancelled() &&
+        self->active_context_ && self->edit_valid_ && self->edit_valid_->load() &&
+        (!self->thread_manager_ || self->IsFocusedContext()))
+      self->UpdateCandidateWindow(self->active_context_, self->last_state_);
+    return 0;
   }
   if (message == kBrokerNotification && self) {
     try {
@@ -1865,6 +1990,7 @@ LRESULT CALLBACK TextService::NotificationProcedure(HWND window, UINT message,
 }
 void TextService::SetCapture(bool enabled) {
   if (enabled == capture_active_) return;
+  ClearFloatingPractice();
   candidate_anchor_ = {};
   capture_active_ = enabled;
   buffer_caret_ = {};

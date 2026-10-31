@@ -13,6 +13,7 @@
 #include <fstream>
 
 #include "settings_ui.hpp"
+#include "../core/typing_practice.hpp"
 
 using namespace rimes::windows;
 namespace {
@@ -186,7 +187,7 @@ std::vector<workbench::PluginView> Plugins() {
 }
 struct PageProbe {
   unsigned paints = 0, writes = 0, hides = 0, fonts = 0, combo_resets = 0,
-           formats = 0;
+           formats = 0, redraw_suspensions = 0;
   std::vector<HWND> windows;
   static LRESULT CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l,
                               UINT_PTR id, DWORD_PTR data) {
@@ -194,6 +195,7 @@ struct PageProbe {
     if (m == WM_PAINT && IsWindowVisible(h)) ++p.paints;
     if (m == WM_SETTEXT) ++p.writes;
     if (m == WM_SETFONT) ++p.fonts;
+    if (m == WM_SETREDRAW && !w) ++p.redraw_suspensions;
     if (m == CB_RESETCONTENT) ++p.combo_resets;
     if (m == EM_SETCHARFORMAT || m == EM_SETPARAFORMAT) ++p.formats;
     if (m == WM_SHOWWINDOW && !w) ++p.hides;
@@ -220,7 +222,12 @@ RECT InParent(HWND child, HWND parent) {
 }
 std::wstring EditorText(HWND editor) {
   std::wstring text(static_cast<std::size_t>(GetWindowTextLengthW(editor)) + 1, L'\0');
-  text.resize(static_cast<std::size_t>(GetWindowTextW(editor, text.data(), static_cast<int>(text.size()))));
+  if (GetDlgCtrlID(editor) == 7004) {
+    GETTEXTEX request{static_cast<DWORD>(text.size() * sizeof(wchar_t)), GT_RAWTEXT, 1200, nullptr, nullptr};
+    text.resize(static_cast<std::size_t>(SendMessageW(editor, EM_GETTEXTEX, reinterpret_cast<WPARAM>(&request), reinterpret_cast<LPARAM>(text.data()))));
+  } else {
+    text.resize(static_cast<std::size_t>(GetWindowTextW(editor, text.data(), static_cast<int>(text.size()))));
+  }
   return text;
 }
 void PracticeButton(HWND panel, int id) {
@@ -327,21 +334,11 @@ void CheckCompositionDisplayGuards(workbench::SettingsUiHost& host,
   CHARRANGE end{static_cast<LONG>(committed_text.size()), static_cast<LONG>(committed_text.size())};
   SendMessageW(editor, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&end));
   SendMessageW(editor, WM_IME_STARTCOMPOSITION, 0, 0);
-  CHARFORMAT2W insertion{}; insertion.cbSize = sizeof(insertion);
-  SendMessageW(editor, EM_GETCHARFORMAT, SCF_SELECTION, reinterpret_cast<LPARAM>(&insertion));
-  std::cout << "Preedit format: " << workbench::Utf8(insertion.szFaceName) << " spacing=" << insertion.sSpacing
-            << " height=" << insertion.yHeight << " mask=" << insertion.dwMask << '\n';
   const auto marked_text = committed_text + L"im";
   SendMessageW(editor, EM_REPLACESEL, FALSE, reinterpret_cast<LPARAM>(L"im"));
-  POINTL first{}, middle{}, last{};
-  SendMessageW(editor, EM_POSFROMCHAR, reinterpret_cast<WPARAM>(&first), end.cpMax);
-  SendMessageW(editor, EM_POSFROMCHAR, reinterpret_cast<WPARAM>(&middle), end.cpMax + 1);
-  SendMessageW(editor, EM_POSFROMCHAR, reinterpret_cast<WPARAM>(&last), end.cpMax + 2);
-  const auto cell = MulDiv(28, GetDpiForWindow(editor), 96);
-  std::cout << "Preedit positions: " << first.x << ',' << first.y << " / " << middle.x << ',' << middle.y
-            << " / " << last.x << ',' << last.y << " cell=" << cell << '\n';
-  Check(std::abs(middle.x - first.x - cell) <= 1 && std::abs(last.x - middle.x - cell) <= 1,
-        "narrow and wide ASCII preedit code both retain one track cell");
+  // Other IMEs may still supply inline marked text. Its glyph geometry is
+  // owned by that IME, while XSIME's floating practice composition is covered
+  // by the TSF tests; this fixture asserts only the shared safety boundary.
   SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7004, EN_CHANGE),
                reinterpret_cast<LPARAM>(editor));
   SendMessageW(panel, WM_APP + 72, 0, 0);
@@ -390,6 +387,281 @@ void CheckPracticeCaretNavigation(workbench::SettingsUiHost& host,
   Pump(host);
   Check(InParent(editor, panel).top < top.top,
         "selection navigation scrolls the page to keep the active input row visible");
+}
+struct ExpectedTrackCell {
+  int row = 0, column = 0;
+};
+// This oracle uses the public layout contract, not the production TrackRows
+// helper: natural paragraphs restart the Chinese two-cell indent; every
+// committed grapheme occupies one 28-DIP cell on the lower track.
+std::vector<ExpectedTrackCell> ExpectedTrackCells(const metrics::Article& article,
+                                                 int columns) {
+  const auto display = workbench::Wide(article.display_text.empty() ? article.text : article.display_text);
+  std::vector<ExpectedTrackCell> result;
+  std::size_t begin = 0;
+  int row = 0;
+  while (begin < display.size()) {
+    auto end = display.find_first_of(L"\r\n", begin);
+    if (end == std::wstring::npos) end = display.size();
+    const auto characters = metrics::Characters(workbench::Utf8(display.substr(begin, end - begin)));
+    int column = article.language == "chinese" ? 2 : 0;
+    for (const auto& character : characters) {
+      (void)character;
+      if (column == columns) { ++row; column = 0; }
+      result.push_back({row, column++});
+    }
+    if (!characters.empty()) ++row;
+    begin = end;
+    while (begin < display.size() && (display[begin] == L'\r' || display[begin] == L'\n')) ++begin;
+  }
+  return result;
+}
+LONG NativeOffsetForGrapheme(const std::wstring& text, std::size_t index) {
+  std::size_t seen = 0;
+  for (std::size_t i = 0; i < text.size(); ++i) {
+    if (text[i] == L'\r' || text[i] == L'\n') continue;
+    if (seen++ == index) return static_cast<LONG>(i);
+    // Fixtures use BMP Chinese and ASCII. Keep a surrogate pair indivisible
+    // so this diagnostic helper cannot accidentally select half a character.
+    if (text[i] >= 0xd800 && text[i] <= 0xdbff && i + 1 < text.size() &&
+        text[i + 1] >= 0xdc00 && text[i + 1] <= 0xdfff) ++i;
+  }
+  return static_cast<LONG>(text.size());
+}
+LONG NativeOffsetForGrapheme(HWND editor, std::size_t index) {
+  return NativeOffsetForGrapheme(EditorText(editor), index);
+}
+void CheckNativeTrackPositions(HWND editor, const metrics::Article& article,
+                               const std::vector<std::wstring>& expected,
+                               const char* phase) {
+  RECT client{}; GetClientRect(editor, &client);
+  const auto dpi = GetDpiForWindow(editor);
+  const auto px = [dpi](int dip) { return MulDiv(dip, static_cast<int>(dpi), 96); };
+  const auto columns = std::max(6, (static_cast<int>(client.right) - px(24)) / std::max(1, px(28)));
+  const auto left = (static_cast<int>(client.right) - columns * px(28)) / 2;
+  const auto cells = ExpectedTrackCells(article, columns);
+  const auto raw = EditorText(editor);
+  const auto actual = metrics::Characters(workbench::Utf8(raw));
+  Check(actual == expected, "geometry operations preserve exactly the expected committed text");
+  Check(expected.size() <= cells.size(), "geometry fixture stays inside its source track");
+  POINT scroll{}; SendMessageW(editor, EM_GETSCROLLPOS, 0, reinterpret_cast<LPARAM>(&scroll));
+  unsigned mismatches = 0;
+  for (std::size_t i = 0; i < std::min(expected.size(), cells.size()); ++i) {
+    POINTL actual_position{};
+    SendMessageW(editor, EM_POSFROMCHAR, reinterpret_cast<WPARAM>(&actual_position), NativeOffsetForGrapheme(raw, i));
+    const auto expected_x = left + px(3) + px(cells[i].column * 28);
+    const auto expected_y = px(42 + cells[i].row * 76);
+    if (std::abs(actual_position.x + scroll.x - expected_x) > 1 ||
+        std::abs(actual_position.y + scroll.y - expected_y) > 1) {
+      if (mismatches++ < 6)
+        std::cerr << "Track geometry " << phase << ' ' << article.language << " character=" << i
+                  << " row=" << cells[i].row << " column=" << cells[i].column
+                  << " actual=" << actual_position.x + scroll.x << ',' << actual_position.y + scroll.y
+                  << " expected=" << expected_x << ',' << expected_y << '\n';
+    }
+  }
+  Check(mismatches == 0, "every committed glyph agrees with its lower-track cell without cumulative drift");
+  CHARRANGE selection{}; SendMessageW(editor, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
+  POINTL caret{}; SendMessageW(editor, EM_POSFROMCHAR, reinterpret_cast<WPARAM>(&caret), selection.cpMax);
+  const auto caret_index = metrics::Characters(workbench::Utf8(raw.substr(0, static_cast<std::size_t>(selection.cpMax)))).size();
+  Check(caret_index < cells.size(), "geometry fixture retains a next cell for its native caret");
+  if (caret_index < cells.size()) {
+    const auto x = left + px(3) + px(cells[caret_index].column * 28);
+    const auto y = px(42 + cells[caret_index].row * 76);
+    if (std::abs(caret.x + scroll.x - x) > 1 || std::abs(caret.y + scroll.y - y) > 1)
+      std::cerr << "Track caret " << phase << ' ' << article.language << " at=" << caret_index
+                << " actual=" << caret.x + scroll.x << ',' << caret.y + scroll.y
+                << " expected=" << x << ',' << y << '\n';
+    Check(std::abs(caret.x + scroll.x - x) <= 1 && std::abs(caret.y + scroll.y - y) <= 1,
+          "native caret agrees with the next input cell on both axes");
+  }
+}
+metrics::Json WaitForPracticeScore(workbench::SettingsUiHost& host,
+                                  const std::shared_ptr<metrics::Service>& service,
+                                  std::size_t committed, std::size_t attempts,
+                                  unsigned deleted, unsigned corrections,
+                                  const char* phase) {
+  const auto deadline = GetTickCount64() + 250;
+  metrics::Json scored;
+  do {
+    // EN_CHANGE publishes asynchronously. Wait for that exact edit, including
+    // equal-length replacements whose committed-character count never changes.
+    Pump(host, 2);
+    scored = service->Practice().value("metrics", metrics::Json::object());
+    if (scored.value("committed", -1) == static_cast<int>(committed) &&
+        scored.value("attempts", -1) == static_cast<int>(attempts) &&
+        scored.value("deleted", -1) == static_cast<int>(deleted) &&
+        scored.value("corrections", -1) == static_cast<int>(corrections)) return scored;
+  } while (GetTickCount64() < deadline);
+  std::cerr << "Track score timeout " << phase
+            << " committed=" << scored.value("committed", -1) << '/' << committed
+            << " attempts=" << scored.value("attempts", -1) << '/' << attempts
+            << " correct=" << scored.value("correct", -1)
+            << " deleted=" << scored.value("deleted", -1) << '/' << deleted
+            << " corrections=" << scored.value("corrections", -1) << '/' << corrections
+            << " armed=" << service->Armed() << '\n';
+  return scored;
+}
+void CheckPracticeTrackGeometry(workbench::SettingsUiHost& host,
+                                 const std::shared_ptr<metrics::Service>& service,
+                                 HWND panel, HWND editor) {
+  const auto& articles = metrics::Articles();
+  for (const auto language : {"chinese", "english"}) {
+    const auto found = std::find_if(articles.begin(), articles.end(), [&](const auto& a) { return a.language == language; });
+    if (found == articles.end()) { Check(false, "geometry fixture includes both languages"); continue; }
+    const auto article_index = static_cast<int>(std::distance(articles.begin(), found));
+    SendMessageW(GetDlgItem(panel, 7000), CB_SETCURSEL, article_index, 0);
+    SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7000, CBN_SELCHANGE), 0);
+    PracticeButton(panel, 7001);
+    Pump(host);
+    RECT client{}; GetClientRect(editor, &client);
+    const auto dpi = GetDpiForWindow(editor);
+    const auto columns = std::max(6, (static_cast<int>(client.right) - MulDiv(24, dpi, 96)) / std::max(1, MulDiv(28, dpi, 96)));
+    const auto all = metrics::Characters(found->text);
+    auto limit = std::min<std::size_t>(all.size() - 1, static_cast<std::size_t>(columns * 3 + 3));
+    if (found->language == "chinese") {
+      const auto boundary = found->display_text.find('\n');
+      Check(boundary != std::string::npos, "Chinese geometry fixture crosses a natural paragraph");
+      if (boundary != std::string::npos)
+        limit = std::min(all.size() - 1, metrics::Characters(found->display_text.substr(0, boundary)).size() + static_cast<std::size_t>(columns + 3));
+    }
+    std::vector<std::wstring> typed;
+    for (std::size_t i = 0; i < limit; ++i) {
+      for (const auto unit : all[i]) SendMessageW(editor, WM_CHAR, unit, 0);
+      typed.push_back(all[i]);
+      const auto scored = WaitForPracticeScore(host, service, typed.size(), typed.size(), 0, 0, "typing");
+      CheckNativeTrackPositions(editor, *found, typed, "typing");
+      const bool scored_once = scored["committed"] == typed.size() && scored["correct"] == typed.size() &&
+                               scored["attempts"] == typed.size();
+      if (!scored_once)
+        std::cerr << "Track score typing " << language << " character=" << i
+                  << " committed=" << scored.value("committed", -1)
+                  << " correct=" << scored.value("correct", -1)
+                  << " attempts=" << scored.value("attempts", -1)
+                  << " expected=" << typed.size() << '\n';
+      Check(scored_once,
+            "each native committed character is scored exactly once while track paragraphs stay unscored");
+    }
+    const auto cells = ExpectedTrackCells(*found, columns);
+    const auto crossing = std::find_if(cells.begin(), cells.begin() + limit, [](const auto& cell) { return cell.row == 1; });
+    Check(crossing != cells.begin() + limit, "fixture reaches a complete second input row");
+    if (crossing != cells.begin() + limit) {
+      const auto next_row = static_cast<std::size_t>(std::distance(cells.begin(), crossing));
+      const auto physical = NativeOffsetForGrapheme(editor, next_row);
+      CHARRANGE caret{physical, physical};
+      SendMessageW(editor, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&caret));
+      SendMessageW(editor, WM_CHAR, L'\b', 0);
+      typed.erase(typed.begin() + next_row - 1);
+      const auto scored = WaitForPracticeScore(host, service, typed.size(), limit, 1, 1, "cross-row backspace");
+      CheckNativeTrackPositions(editor, *found, typed, "cross-row backspace");
+      Check(scored["deleted"] == 1 && scored["corrections"] == 1 &&
+                scored["attempts"] == limit,
+            "cross-row backspace deletes one real character without counting its layout separator");
+    }
+    const std::size_t middle = typed.size() / 2;
+    CHARRANGE replace{NativeOffsetForGrapheme(editor, middle), NativeOffsetForGrapheme(editor, middle + 1)};
+    SendMessageW(editor, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&replace));
+    const std::wstring replacement = found->language == "chinese" ? L"测" : L"!";
+    SendMessageW(editor, WM_CHAR, replacement.front(), 0);
+    typed[middle] = replacement;
+    const auto scored = WaitForPracticeScore(host, service, typed.size(), limit + 1, 2, 2, "middle correction");
+    CheckNativeTrackPositions(editor, *found, typed, "middle correction");
+    Check(scored["deleted"] == 2 && scored["corrections"] == 2 &&
+              scored["attempts"] == limit + 1,
+          "middle replacement preserves prior attempts and adds exactly one correction");
+    service->Finish("interrupted");
+    Pump(host);
+  }
+}
+void CheckFloatingPracticeComposition(workbench::SettingsUiHost& host,
+                                       const std::shared_ptr<metrics::Service>& service,
+                                       HWND panel, HWND editor) {
+  SendMessageW(GetDlgItem(panel, 7000), CB_SETCURSEL, 0, 0);
+  SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7000, CBN_SELCHANGE), 0);
+  PracticeButton(panel, 7001);
+  Pump(host);
+  Check(service->Armed() && GetFocus() == editor,
+        "floating-composition contract starts in its own active practice editor");
+  Check(GetPropW(editor, core::kTypingPracticeEditorProperty) == reinterpret_cast<HANDLE>(editor),
+        "the practice editor exposes its explicit local TSF capability");
+  // Model the TSF-owned floating state, deliberately without a native marked
+  // range or a service callback HWND. This isolates the workbench contract;
+  // actual TSF candidate presentation has its own in-process tests.
+  struct FloatingFixture {
+    HWND editor;
+    HANDLE previous_service;
+    explicit FloatingFixture(HWND value) : editor(value),
+        previous_service(RemovePropW(value, core::kTypingPracticeServiceWindowProperty)) {}
+    void Clear() const {
+      const auto captured = GetCapture();
+      if (captured == editor || (captured && IsChild(editor, captured))) ReleaseCapture();
+      RemovePropW(editor, core::kTypingPracticeCompositionProperty);
+      RemovePropW(editor, core::kTypingPracticeCancelCompositionProperty);
+      RemovePropW(editor, core::kTypingPracticeLayoutPendingProperty);
+    }
+    ~FloatingFixture() {
+      Clear();
+      if (previous_service && IsWindow(editor))
+        SetPropW(editor, core::kTypingPracticeServiceWindowProperty, previous_service);
+    }
+  } fixture(editor);
+  Check(SetPropW(editor, core::kTypingPracticeCompositionProperty, reinterpret_cast<HANDLE>(editor)) != FALSE,
+        "the UI fixture can model a TSF floating composition");
+  const auto& article = metrics::Articles().front();
+  const auto characters = metrics::Characters(article.text);
+  std::vector<std::wstring> typed;
+  PageProbe probe(editor);
+  for (std::size_t i = 0; i < 2; ++i) {
+    for (const auto unit : characters[i]) SendMessageW(editor, WM_CHAR, unit, 0);
+    typed.push_back(characters[i]);
+    const auto scored = WaitForPracticeScore(host, service, typed.size(), typed.size(), 0, 0, "floating commit");
+    Check(scored["committed"] == typed.size() && scored["correct"] == typed.size() &&
+              scored["attempts"] == typed.size(),
+          "floating composition does not block real committed text from publishing and scoring");
+    CheckNativeTrackPositions(editor, article, typed, "floating commit");
+    Check(core::HasFloatingPracticeComposition(editor) &&
+              !core::HasCancelledPracticeComposition(editor),
+          "publishing and relaying out committed text retain an active floating composition");
+  }
+  for (const int id : {7015, 7016, 7006, 7006, 7016, 7015}) {
+    PracticeButton(panel, id);
+    Pump(host);
+    Check(service->Armed() && GetFocus() == editor && IsWindowVisible(editor),
+          "floating composition survives display toggles in the same visible editor");
+    Check(core::HasFloatingPracticeComposition(editor) &&
+              !core::HasCancelledPracticeComposition(editor),
+          "programmatic track formatting and display toggles do not request TSF cancellation");
+  }
+  CHARRANGE start{0, 0};
+  SendMessageW(editor, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&start));
+  host.OpenPage(nullptr, ui::SettingsPage::kTyping, 0, true);
+  Pump(host);
+  Check(!core::HasCancelledPracticeComposition(editor) &&
+            core::HasFloatingPracticeComposition(editor),
+        "programmatic selection and same-page layout preserve the floating composition lease");
+  Check(probe.redraw_suspensions == 0 && probe.hides == 0 && IsWindowVisible(editor),
+        "floating practice layout never suspends redraw or temporarily hides its TSF editor");
+  PracticeButton(panel, 7002);
+  Pump(host);
+  Check(service->Armed() && core::HasFloatingPracticeComposition(editor) &&
+            !core::HasCancelledPracticeComposition(editor),
+        "Finish waits for floating composition settlement before ending practice");
+  SendMessageW(editor, WM_KEYDOWN, VK_HOME, 1);
+  SendMessageW(editor, WM_KEYUP, VK_HOME, 1);
+  Check(core::HasCancelledPracticeComposition(editor),
+        "real caret navigation requests cancellation of pending floating composition");
+  RemovePropW(editor, core::kTypingPracticeCancelCompositionProperty);
+  SendMessageW(editor, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(12, 42));
+  Check(core::HasCancelledPracticeComposition(editor),
+        "a real editor mouse-down requests cancellation before moving the insertion point");
+  SendMessageW(editor, WM_LBUTTONUP, 0, MAKELPARAM(12, 42));
+  fixture.Clear();
+  PracticeButton(panel, 7002);
+  Pump(host);
+  Check(!service->Armed() && !core::HasFloatingPracticeComposition(editor),
+        "settled floating state permits Finish and leaves no test composition or mouse capture");
+  Check(GetCapture() != editor,
+        "the floating-composition fixture releases its editor mouse capture before host teardown");
 }
 int CheckHistoryRefresh(const std::filesystem::path& output) {
   std::filesystem::create_directories(output);
@@ -531,7 +803,8 @@ int AuditPages(const std::filesystem::path& output) {
   host.Close();
   return failures ? 1 : 0;
 }
-int Run(const std::filesystem::path& output, bool typing_only = false) {
+int Run(const std::filesystem::path& output, bool typing_only = false,
+        bool geometry_only = false, unsigned expected_dpi = 0) {
   std::filesystem::create_directories(output);
   // The render directory may be reached through an ASCII workspace junction.
   // Keep the data fixture outside that alias: production storage deliberately
@@ -586,6 +859,18 @@ int Run(const std::filesystem::path& output, bool typing_only = false) {
       FindWindowExW(host.hwnd(), nullptr, L"Rimes.ExtensionPages", nullptr);
   auto editor = GetDlgItem(panel, 7004);
   Check(panel && editor, "real native practice controls");
+  if (geometry_only) {
+    if (expected_dpi)
+      Check(GetDpiForWindow(editor) == expected_dpi,
+            "the isolated geometry process creates a native window at its requested DPI");
+    std::cout << "Track geometry DPI: " << GetDpiForWindow(editor) << '\n';
+    CheckPracticeTrackGeometry(host, service, panel, editor);
+    CheckFloatingPracticeComposition(host, service, panel, editor);
+    host.Close();
+    Check(!IsWindow(editor), "geometry fixture closes its native practice host before returning");
+    service->Save();
+    return failures ? 1 : 0;
+  }
   CheckIdleRefresh(host, panel);
   CheckPracticeLayout(host, service, panel, editor);
   SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7001, BN_CLICKED),
@@ -684,6 +969,8 @@ int Run(const std::filesystem::path& output, bool typing_only = false) {
   for (const int id : {7006, 7015, 7016}) PracticeButton(panel, id);
   Pump(host);
   CheckPracticeCaretNavigation(host, panel, GetDlgItem(panel, 7004));
+  CheckPracticeTrackGeometry(host, service, panel, GetDlgItem(panel, 7004));
+  CheckFloatingPracticeComposition(host, service, panel, GetDlgItem(panel, 7004));
   if (typing_only) {
     // Keep the focused CI path independent of connector, gallery and other
     // settings pages. These renders contain only built-in text and fixture data.
@@ -831,11 +1118,18 @@ int wmain(int argc, wchar_t** argv) {
     }
     std::abort();
   });
-  SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+  const bool geometry_96 = argc > 1 && std::wstring(argv[1]) == L"--typing-geometry-96";
+  SetProcessDpiAwarenessContext(geometry_96 ? DPI_AWARENESS_CONTEXT_UNAWARE
+                                         : DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   int result = 1;
   try {
-    result = argc > 1 && std::wstring(argv[1]) == L"--typing-parity"
+    result = argc > 1 && (std::wstring(argv[1]) == L"--typing-geometry" || geometry_96)
+        ? Run(argc > 2 ? std::filesystem::path(argv[2])
+                      : std::filesystem::temp_directory_path() /
+                            (L"rimes-typing-geometry-" + std::to_wstring(GetCurrentProcessId())),
+              false, true, geometry_96 ? 96U : 0U)
+        : argc > 1 && std::wstring(argv[1]) == L"--typing-parity"
         ? Run(argc > 2 ? std::filesystem::path(argv[2])
                       : std::filesystem::temp_directory_path() /
                             (L"rimes-typing-parity-" + std::to_wstring(GetCurrentProcessId())),

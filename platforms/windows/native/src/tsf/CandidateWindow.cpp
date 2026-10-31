@@ -199,7 +199,8 @@ int CandidateWindow::HitIndex(int x_px, int y_px) const noexcept {
 }
 
 void CandidateWindow::Update(const CandidateSnapshot& snapshot) noexcept {
-  if (!snapshot.visible || snapshot.items.empty()) {
+  if (!snapshot.visible || (snapshot.items.empty() &&
+      (!snapshot.floating_composition || snapshot.composition.empty()))) {
     Hide();
     return;
   }
@@ -237,9 +238,15 @@ void CandidateWindow::LayoutAndShow(
   const int cand_px = ui::ScaleDip(metrics.candidate_font_dip, dpi);
   const int label_px = ui::ScaleDip(metrics.label_font_dip, dpi);
   const int ann_px = ui::ScaleDip(metrics.annotation_font_dip, dpi);
+  const bool preedit = snapshot.floating_composition && !snapshot.composition.empty();
+  const float preedit_height = preedit ? 28.0f : 0.0f;
   HFONT cand_bold = MakeFont(cand_px, FW_SEMIBOLD, false);
   HFONT label_font = MakeFont(label_px, FW_SEMIBOLD, false);
   HFONT ann_font = MakeFont(ann_px, FW_NORMAL, false);
+  HFONT preedit_font = preedit ? MakeFont(cand_px, FW_NORMAL, true) : nullptr;
+  const float preedit_width = preedit && device
+      ? static_cast<float>(MeasureText(device, preedit_font, snapshot.composition) + ui::ScaleDip(20, dpi)) * 96.0f / static_cast<float>(dpi)
+      : 0.0f;
 
   std::vector<ui::CandidateStripItem> items;
   items.reserve(snapshot.items.size());
@@ -291,20 +298,35 @@ void CandidateWindow::LayoutAndShow(
   if (cand_bold) DeleteObject(cand_bold);
   if (label_font) DeleteObject(label_font);
   if (ann_font) DeleteObject(ann_font);
+  if (preedit_font) DeleteObject(preedit_font);
 
   compact_ = {};
   ui::CandidateStripLayout layout;
-  if (!snapshot.matrix_rows.empty()) {
+  if (snapshot.items.empty()) {
+    layout.width_dip = 0;
+    layout.height_dip = 0;
+  } else if (!snapshot.matrix_rows.empty()) {
     layout = ui::LayoutCandidateMatrixMeasured(items, snapshot.matrix_rows, metrics,
         (std::min)(available_dip, 640.f), snapshot.highlighted);
   } else if (vertical_) {
     layout = ui::LayoutCandidateStripMeasured(items, metrics, available_dip, true,
-        static_cast<float>((std::max)(1L, work.bottom -
-            (std::max)(work.top, snapshot.caret_rect.top))) * 96.f / static_cast<float>(dpi));
+        (std::max)(1.0f, static_cast<float>((std::max)(1L, work.bottom -
+            (std::max)(work.top, snapshot.caret_rect.top))) * 96.f / static_cast<float>(dpi) - preedit_height));
   } else {
     compact_ = ui::LayoutCandidateCompactMeasured(items, metrics, available_dip,
         9, snapshot.highlighted, snapshot.has_previous_page || snapshot.has_next_page);
     layout = compact_;
+  }
+  if (preedit) {
+    layout.width_dip = (std::max)(layout.width_dip,
+        (std::min)(preedit_width, (std::min)(available_dip, static_cast<float>(max_width_))));
+    layout.width_dip = (std::max)(layout.width_dip, 40.0f);
+    layout.height_dip += preedit_height;
+    for (auto& pill : layout.pills) { pill.top += preedit_height; pill.bottom += preedit_height; }
+    if (compact_.previous.width() > 0) {
+      compact_.previous.top += preedit_height; compact_.previous.bottom += preedit_height;
+      compact_.next.top += preedit_height; compact_.next.bottom += preedit_height;
+    }
   }
   hit_pills_ = layout.pills;
   snapshot_.visible_indices.clear();
@@ -370,7 +392,7 @@ void CandidateWindow::Paint(HDC) const {
   };
 
   // Strip background covering all rows.
-  if (!snapshot_.items.empty()) {
+  if (!snapshot_.items.empty() || snapshot_.floating_composition) {
     ui::DipRect strip{0, 0, layout_width_dip_, layout_height_dip_};
     RECT strip_px = to_px(strip);
     ui::FillRoundRect(mem, strip_px, ui::ScaleDip(metrics.strip_radius_dip, dpi),
@@ -387,6 +409,22 @@ void CandidateWindow::Paint(HDC) const {
   HFONT cand_font = MakeFont(cand_px, FW_NORMAL, false);
   HFONT cand_bold = MakeFont(cand_px, FW_SEMIBOLD, false);
   HFONT ann_font = MakeFont(ann_px, FW_NORMAL, false);
+  if (snapshot_.floating_composition && !snapshot_.composition.empty()) {
+    const auto preedit_font = MakeFont(cand_px, FW_NORMAL, true);
+    const auto previous = SelectObject(mem, preedit_font);
+    SetBkMode(mem, TRANSPARENT);
+    SetTextColor(mem, ui::ToColorRef(palette.text_primary));
+    RECT text = to_px({10, 0, layout_width_dip_ - 10, 28});
+    DrawTextW(mem, snapshot_.composition.c_str(), static_cast<int>(snapshot_.composition.size()), &text,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+    const auto count = (std::min)(static_cast<std::size_t>(snapshot_.composition_caret), snapshot_.composition.size());
+    const auto prefix = snapshot_.composition.substr(0, count);
+    const auto x = (std::min)(text.right - 1, text.left + MeasureText(mem, preedit_font, prefix));
+    ui::FillRectColor(mem, {x, ui::ScaleDip(6, dpi), x + (std::max)(1, ui::ScaleDip(1, dpi)), ui::ScaleDip(22, dpi)}, ui::ToColorRef(palette.accent));
+    if (!snapshot_.items.empty())
+      ui::FillRectColor(mem, to_px({8, 27, layout_width_dip_ - 8, 28}), ui::ToColorRef(palette.border));
+    SelectObject(mem, previous); DeleteObject(preedit_font);
+  }
 
   for (std::size_t i = 0; i < snapshot_.items.size() && i < hit_pills_.size();
        ++i) {

@@ -92,7 +92,7 @@
     "native/windows/metrics.cpp": "846424a5f0aab6c1b182be664d4b2a44c39383c90d6fa7cf5c8067bf30f6ea21",
     "native/windows/metrics.hpp": "b689f20dd1c323543600828d7fcf9ae879d4354b79fda2c078612150174b036d",
     "native/windows/metrics_articles.cpp": "ffc10eb55e47f0d01dc6f600e29e8fb519061242b78d008326305dd8125037ae",
-    "native/windows/metrics_ui.cpp": "4796a26db7e1045ce5aae53f6166394681701666949eca8a6a121d7f511137b1",
+    "native/windows/metrics_ui.cpp": "265110aa5a6b66a1dfca4e5591b2f45b5c7c4576e9cb15f3af851fc4ed74ed8d",
     "native/windows/metrics_ui.hpp": "6347001fa5333fb55e71443b881cc495b6a92baad73e59f609ecdfdd03d1cd9a",
     "native/windows/my_combo.schema.yaml": "d2937f55ac93fe746bf2e854aa523d8488d426392e0e6d8b63f96966c8ec6bc9",
     "native/windows/official_features.hpp": "6f8dca1211437bfa9d7eb0a22aff5bfbc01cb5e187c297649756990d9de80459",
@@ -123,6 +123,6 @@
     "source-map.json": "55c05b279cf11a7808481faf5cc5f88041981dbc612b0760f08219eee83707a5"
   },
   "repository": "https://github.com/scholay/rimes-plugins",
-  "revision": "ab57a552d8f8b1adfb6e49f5ec0f1d78175c97eb",
+  "revision": "0e29439872fcab4dad9081bf1831254c74300f19",
   "schemaVersion": 1
 }

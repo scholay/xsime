@@ -5,6 +5,7 @@
 #include "TextService.h"
 #include "candidate_layout.hpp"
 #include "fake_tsf.hpp"
+#include "../core/typing_practice.hpp"
 
 namespace rimes::windows::tsf {
 struct CaretRegressionProbe {
@@ -29,6 +30,14 @@ struct CaretRegressionProbe {
   }
   static CandidateSnapshot Snapshot(TextService& service) {
     return service.candidate_window_.snapshot();
+  }
+  static bool Notification(TextService& service) {
+    WNDCLASSW wc{}; wc.lpfnWndProc = TextService::NotificationProcedure;
+    wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"Rimes.CaretRegression.Notify";
+    RegisterClassW(&wc);
+    service.notification_window_ = CreateWindowExW(0, wc.lpszClassName, L"", 0,
+        0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance, &service);
+    return service.notification_window_ != nullptr;
   }
   static CandidateSnapshot Present(TextService& service, ITfContext* context) {
     BrokerInputState state;
@@ -275,6 +284,148 @@ int main() {
          "a direct chord commit replaces the guard without leaking its placeholder");
   idle_service->Release();
   idle_context->Release();
+
+  // The local typing editor is the only opt-in to floating preedit. Exercise
+  // committed-only TSF delivery without adding code/placeholder text to its document.
+  WNDCLASSW practice_class{};
+  practice_class.lpfnWndProc = DefWindowProcW;
+  practice_class.hInstance = GetModuleHandleW(nullptr);
+  practice_class.lpszClassName = L"Rimes.ExtensionPages";
+  RegisterClassW(&practice_class);
+  const auto practice_owner = CreateWindowExW(0, practice_class.lpszClassName, L"",
+      WS_POPUP, 400, 300, 360, 180, nullptr, nullptr, practice_class.hInstance, nullptr);
+  const auto practice_editor = CreateWindowExW(0, L"EDIT", L"",
+      WS_CHILD | WS_VISIBLE, 10, 10, 300, 100, practice_owner, nullptr,
+      practice_class.hInstance, nullptr);
+  ShowWindow(practice_owner, SW_SHOWNOACTIVATE);
+  SetFocus(practice_editor);
+  expect(!core::IsTypingPracticeEditor(practice_editor), "unmarked local editors remain inline");
+  SetPropW(practice_editor, core::kTypingPracticeEditorProperty, reinterpret_cast<HANDLE>(practice_owner));
+  expect(!core::IsTypingPracticeEditor(practice_editor), "mismatched practice capability is rejected");
+  SetPropW(practice_editor, core::kTypingPracticeEditorProperty, reinterpret_cast<HANDLE>(practice_editor));
+  expect(core::IsTypingPracticeEditor(practice_editor), "focused owned practice capability is accepted");
+  const auto unrelated_view = CreateWindowExW(0, L"STATIC", L"", WS_POPUP,
+      0, 0, 1, 1, nullptr, nullptr, practice_class.hInstance, nullptr);
+  expect(!core::TypingPracticeEditorForView(unrelated_view), "unrelated view cannot adopt the practice focus policy");
+  DestroyWindow(unrelated_view);
+  SetFocus(practice_owner);
+  expect(!core::IsTypingPracticeEditor(practice_editor), "a marked editor loses floating policy when unfocused");
+  SetFocus(practice_editor);
+  e2e::FakeDocument practice_document;
+  practice_document.text = L"prefix";
+  practice_document.range_advance = 28;
+  practice_document.selection_acp = 6;
+  practice_document.view_window = practice_editor;
+  auto* practice_context = new e2e::FakeContext(&practice_document);
+  auto* practice_service = new tsf::TextService(nullptr);
+  expect(tsf::CaretRegressionProbe::Notification(*practice_service), "practice cancellation notification fixture exists");
+  tsf::CaretRegressionProbe::Bind(*practice_service, practice_context);
+  tsf::BrokerInputState practice_state;
+  practice_state.has_snapshot = practice_state.composing = practice_state.candidates_visible = true;
+  practice_state.candidates.push_back({0, L"你", L"", L"1"});
+  practice_state.page_size = 5;
+  const auto practice_anchor = practice_document.caret_rect.left + 6 * practice_document.range_advance;
+  for (const auto* code : {L"n", L"nihao", L"ni"}) {
+    practice_state.composition = code;
+    practice_state.caret_utf16 = static_cast<std::uint32_t>(practice_state.composition.size());
+    expect(SUCCEEDED(tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state)),
+           "floating preedit updates succeed through the native edit path");
+    const auto shown = tsf::CaretRegressionProbe::Snapshot(*practice_service);
+    expect(!practice_document.composing && practice_document.composition.empty() &&
+               core::HasFloatingPracticeComposition(practice_editor) &&
+               practice_document.text == L"prefix" && practice_document.selection_acp == 6,
+           "floating code keeps its local lifecycle without moving the cell or changing scored text");
+    expect(shown.visible && shown.floating_composition && shown.composition == code &&
+               shown.caret_rect.left == practice_anchor,
+           "floating candidate preedit stays at the committed insertion cell");
+  }
+  practice_document.caret_rect.left += 40; practice_document.caret_rect.right += 40;
+  practice_document.caret_rect.top += 24; practice_document.caret_rect.bottom += 24;
+  core::NotifyTypingPracticeLayoutChanged(practice_editor);
+  core::NotifyTypingPracticeLayoutChanged(practice_editor);
+  expect(GetPropW(practice_editor, core::kTypingPracticeLayoutPendingProperty) == reinterpret_cast<HANDLE>(practice_editor),
+         "multiple cell-layout notifications share one pending geometry refresh");
+  MSG layout_message{};
+  while (PeekMessageW(&layout_message, nullptr, 0, 0, PM_REMOVE)) {
+    TranslateMessage(&layout_message); DispatchMessageW(&layout_message);
+  }
+  const auto after_layout = tsf::CaretRegressionProbe::Snapshot(*practice_service);
+  expect(after_layout.caret_rect.left == practice_anchor + 40 &&
+             after_layout.caret_rect.top == practice_document.caret_rect.top &&
+             !GetPropW(practice_editor, core::kTypingPracticeLayoutPendingProperty),
+         "cell reformat and page scrolling refresh the current candidate geometry without another key");
+  auto raw_only = practice_state;
+  raw_only.candidates_visible = false; raw_only.candidates.clear();
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, raw_only);
+  expect(tsf::CaretRegressionProbe::Snapshot(*practice_service).visible,
+         "unmatched practice code still has a floating preedit display");
+  practice_state.commit_text = L"你";
+  practice_state.composition = L"hao"; practice_state.caret_utf16 = 3;
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state);
+  expect(practice_document.text == L"prefix你" && practice_document.composition.empty() &&
+             !practice_document.composing && core::HasFloatingPracticeComposition(practice_editor),
+         "partial commit inserts only accepted text while the next floating code remains active");
+  core::NotifyTypingPracticeLayoutChanged(practice_editor);
+  expect(core::CancelFloatingPracticeComposition(practice_editor),
+         "a trusted editor can request immediate floating cancellation");
+  MSG pending_message{};
+  while (PeekMessageW(&pending_message, nullptr, 0, 0, PM_REMOVE)) {
+    TranslateMessage(&pending_message); DispatchMessageW(&pending_message);
+  }
+  expect(!core::HasFloatingPracticeComposition(practice_editor) &&
+             !tsf::CaretRegressionProbe::Snapshot(*practice_service).visible &&
+             practice_document.text == L"prefix你",
+         "explicit practice cancellation hides candidates immediately without needing a selection edit");
+  tsf::CaretRegressionProbe::Bind(*practice_service, practice_context);
+  practice_state.commit_text.clear();
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state);
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, {});
+  expect(practice_document.text == L"prefix你" && !practice_document.composing &&
+             !core::HasFloatingPracticeComposition(practice_editor),
+         "cancelling floating preedit leaves committed text untouched and clears its lifecycle");
+  practice_state.commit_text.clear();
+  RemovePropW(practice_editor, core::kTypingPracticeEditorProperty);
+  expect(FAILED(tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state)) &&
+             !core::HasFloatingPracticeComposition(practice_editor),
+         "removing the editor opt-in retires the previous floating context");
+  tsf::CaretRegressionProbe::Bind(*practice_service, practice_context);
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state);
+  expect(practice_document.composition == L"hao" &&
+             !tsf::CaretRegressionProbe::Snapshot(*practice_service).floating_composition,
+         "the same context returns to inline composition when its opt-in is absent");
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, {});
+  SetPropW(practice_editor, core::kTypingPracticeEditorProperty, reinterpret_cast<HANDLE>(practice_editor));
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state);
+  auto deferred_commit = practice_state;
+  deferred_commit.commit_text = L"错"; deferred_commit.composition.clear(); deferred_commit.composing = false;
+  practice_context->defer_edits = true;
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, deferred_commit);
+  expect(core::HasFloatingPracticeComposition(practice_editor),
+         "an unaccepted asynchronous commit keeps the local lifecycle active");
+  SetPropW(practice_editor, core::kTypingPracticeCancelCompositionProperty, reinterpret_cast<HANDLE>(practice_editor));
+  practice_context->DrainEdits();
+  expect(practice_document.text == L"prefix你" && !practice_document.composing &&
+             !core::HasFloatingPracticeComposition(practice_editor) &&
+             !core::HasCancelledPracticeComposition(practice_editor),
+         "user selection cancellation rejects a deferred stale candidate and clears all local flags");
+  practice_context->defer_edits = false;
+  tsf::CaretRegressionProbe::Bind(*practice_service, practice_context);
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state);
+  practice_context->refuse_write_edits = true;
+  expect(FAILED(tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, deferred_commit)) &&
+             practice_document.text == L"prefix你" && !core::HasFloatingPracticeComposition(practice_editor),
+         "a host refusing a commit cannot leave a stale composing flag");
+  practice_context->refuse_write_edits = false;
+  tsf::CaretRegressionProbe::Bind(*practice_service, practice_context);
+  tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state);
+  SetFocus(practice_owner);
+  practice_service->OnSetFocus(FALSE);
+  expect(!core::HasFloatingPracticeComposition(practice_editor) && practice_document.text == L"prefix你",
+         "focus loss clears local floating composition without changing text");
+  practice_service->Release();
+  practice_context->Release();
+  DestroyWindow(practice_owner);
+
   service->Release();
   context->Release();
   if (SUCCEEDED(com)) CoUninitialize();

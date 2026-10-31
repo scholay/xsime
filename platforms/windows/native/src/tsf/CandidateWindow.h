@@ -31,6 +31,10 @@ struct CandidateSnapshot {
   RECT window_rect{};
   RECT caret_rect{};
   std::wstring composition;
+  // Ordinary hosts own inline preedit. Only the explicitly marked local
+  // practice editor requests this extra presentation row.
+  bool floating_composition = false;
+  std::uint32_t composition_caret = 0;
   std::vector<CandidateItem> items;
   // Indices actually painted in the current viewport, after native measurement.
   // Engine-page items remain intact for TSF accessibility and selection guards.

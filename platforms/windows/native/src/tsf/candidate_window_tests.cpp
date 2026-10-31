@@ -168,6 +168,35 @@ int main() {
   SendMessageW(popup, WM_LBUTTONUP, 0, matrix_click);
   Check(selected == 3, "second matrix row keeps its flattened mouse index");
   Check(GetForegroundWindow() == foreground, "click ownership preserves no-activation");
+  const auto ordinary_snapshot = snapshot;
+  snapshot.matrix_rows.clear();
+  snapshot.items = {{L"1", L"你好", L""}};
+  snapshot.composition = L"nihao"; snapshot.composition_caret = 2;
+  snapshot.floating_composition = true;
+  candidate.Update(snapshot);
+  RECT floating_rect{}; GetWindowRect(popup, &floating_rect);
+  Check(floating_rect.bottom - floating_rect.top == px(62),
+        "practice floating composition adds its own row above candidates");
+  const auto selections = selected;
+  const auto header_click = MAKELPARAM(px(10), px(14));
+  SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, header_click);
+  SendMessageW(popup, WM_LBUTTONUP, 0, header_click);
+  Check(selected == selections, "clicking preedit cannot select a candidate");
+  expected_index = 0;
+  const auto floating_click = MAKELPARAM(px(10), px(45));
+  SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, floating_click);
+  SendMessageW(popup, WM_LBUTTONUP, 0, floating_click);
+  Check(selected == selections + 1, "floating header offsets candidate hit testing");
+  snapshot.items.clear();
+  candidate.Update(snapshot);
+  GetWindowRect(popup, &floating_rect);
+  Check(candidate.IsVisible() && floating_rect.bottom - floating_rect.top == px(28),
+        "practice unmatched code remains visible without candidate items");
+  snapshot.composition.clear();
+  candidate.Update(snapshot);
+  Check(!candidate.IsVisible(), "ending practice composition hides the empty popup");
+  snapshot = ordinary_snapshot;
+  candidate.Update(snapshot);
   DestroyWindow(owner);
   Check(!candidate.IsVisible() && !candidate.snapshot().visible,
         "owner destruction retires the candidate HWND and snapshot");

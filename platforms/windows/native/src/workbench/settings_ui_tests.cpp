@@ -2,6 +2,8 @@
 #include "buffer_hotkey.hpp"
 #include "window.hpp"
 #include "user_lexicon.hpp"
+#include "../ui/settings_scrollbar.hpp"
+#include <commctrl.h>
 
 #include <algorithm>
 #include <atomic>
@@ -1458,6 +1460,115 @@ void TestPageControlBounds() {
   host.Close();
 }
 
+struct ScrollbarPresentationProbe {
+  unsigned direct_redraws = 0, shows = 0, moves = 0, fonts = 0;
+  static LRESULT CALLBACK Procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam,
+                                   UINT_PTR id, DWORD_PTR context) {
+    auto& probe = *reinterpret_cast<ScrollbarPresentationProbe*>(context);
+    if (message == SBM_SETSCROLLINFO && wparam) ++probe.direct_redraws;
+    if (message == WM_SHOWWINDOW) ++probe.shows;
+    if (message == WM_WINDOWPOSCHANGING) ++probe.moves;
+    if (message == WM_SETFONT) ++probe.fonts;
+    if (message == WM_NCDESTROY) RemoveWindowSubclass(window, Procedure, id);
+    return DefSubclassProc(window, message, wparam, lparam);
+  }
+};
+
+void TestScrollbarPresentation() {
+  const auto owner = CreateWindowExW(0, L"STATIC", L"Scrollbar fixture", WS_OVERLAPPEDWINDOW,
+                                      0, 0, 300, 500, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+  const auto bar = CreateWindowExW(0, L"SCROLLBAR", L"Page scrollbar", WS_CHILD | SBS_VERT,
+                                    0, 0, 12, 400, owner, nullptr, GetModuleHandleW(nullptr), nullptr);
+  Check(owner && bar, "native scrollbar presentation fixture creates");
+  ShowWindow(owner, SW_SHOWNOACTIVATE);
+  ScrollbarPresentationProbe probe;
+  SetWindowSubclass(bar, ScrollbarPresentationProbe::Procedure, 81, reinterpret_cast<DWORD_PTR>(&probe));
+  const RECT bounds{20, 10, 32, 410};
+  Check(ui::LayoutSettingsScrollbar(bar, bounds, 1200, 400, 0), "overflow publishes a scrollbar");
+  Check((GetWindowLongPtrW(bar, GWL_STYLE) & WS_VISIBLE) != 0, "overflow scrollbar is visible");
+  Check(probe.direct_redraws == 0, "native state updates never draw an intermediate system scrollbar");
+  SCROLLINFO info{sizeof(info), SIF_ALL};
+  GetScrollInfo(bar, SB_CTL, &info);
+  Check(info.nMax == 1199 && info.nPage == 400 && info.nPos == 0,
+        "native scrollbar retains its accessible range and viewport");
+  ValidateRect(bar, nullptr);
+  probe.shows = probe.moves = 0;
+  for (int i = 0; i < 4; ++i)
+    Check(!ui::LayoutSettingsScrollbar(bar, bounds, 1200, 400, 0), "unchanged scrollbar layout is a no-op");
+  Check(probe.shows == 0 && probe.moves == 0 && !GetUpdateRect(bar, nullptr, FALSE),
+        "unchanged scrollbar does not reappear, move or invalidate itself");
+  ui::LayoutSettingsScrollbar(bar, bounds, 1200, 400, 800);
+  GetScrollInfo(bar, SB_CTL, &info);
+  Check(info.nPos == 800 && GetUpdateRect(bar, nullptr, FALSE), "changed position repaints the themed thumb");
+  ValidateRect(owner, nullptr);
+  ui::LayoutSettingsScrollbar(bar, bounds, 200, 400, 0);
+  Check(!(GetWindowLongPtrW(bar, GWL_STYLE) & WS_VISIBLE) && GetUpdateRect(owner, nullptr, FALSE),
+        "fitting content hides the scrollbar and clears its old parent pixels");
+  probe.shows = probe.moves = 0;
+  ValidateRect(bar, nullptr);
+  for (int i = 0; i < 4; ++i) ui::LayoutSettingsScrollbar(bar, bounds, 200, 400, 0);
+  Check(probe.shows == 0 && probe.moves == 0 && !GetUpdateRect(bar, nullptr, FALSE),
+        "fitting content keeps its scrollbar hidden at rest");
+  DestroyWindow(owner);
+
+  workbench::SettingsUiCallbacks callbacks;
+  callbacks.metrics = std::make_shared<metrics::Service>(std::filesystem::temp_directory_path() /
+      (L"rimes-scrollbar-inventory-" + std::to_wstring(GetCurrentProcessId())));
+  callbacks.load = [] { return workbench::Settings{}; };
+  callbacks.plugins = [] {
+    std::vector<workbench::PluginView> plugins;
+    for (const auto* id : {"builtin.fly-chord-learning", "builtin.typing-speed", "builtin.statistics"}) {
+      workbench::PluginView plugin;
+      plugin.id = id; plugin.name = id; plugin.kind = "extension";
+      plugin.installed = plugin.enabled = plugin.bundled = true;
+      plugins.push_back(plugin);
+    }
+    for (int i = 0; i < 16; ++i) {
+      workbench::PluginView plugin;
+      plugin.id = "fixture.buffer." + std::to_string(i); plugin.name = "Scroll fixture"; plugin.kind = "buffer";
+      plugin.installed = plugin.enabled = plugin.bundled = true;
+      plugins.push_back(plugin);
+    }
+    return plugins;
+  };
+  workbench::SettingsUiHost host(std::move(callbacks));
+  host.Open(nullptr, false);
+  const auto window = host.hwnd();
+  ShowWindow(window, SW_SHOWNOACTIVATE);
+  // Inspect the entire descendant inventory: dropdown lists and bounded
+  // documents may scroll independently, but a page has only one main bar.
+  for (const auto page : ui::kSettingsNavOrder) {
+    for (int sub = 0; sub < ui::SettingsTabCount(page); ++sub) {
+      host.OpenPage(nullptr, page, sub, false);
+      struct Inventory { unsigned main = 0; HWND owner = nullptr; bool root_gutter = false; } inventory;
+      inventory.owner = window;
+      inventory.root_gutter = (GetWindowLongPtrW(window, GWL_STYLE) & (WS_VSCROLL | WS_HSCROLL)) != 0;
+      EnumChildWindows(window, [](HWND child, LPARAM value) -> BOOL {
+        auto& state = *reinterpret_cast<Inventory*>(value);
+        if (!IsVisibleWithinFixture(child, state.owner)) return TRUE;
+        wchar_t kind[64]{}; GetClassNameW(child, kind, 64);
+        if (_wcsicmp(kind, L"ScrollBar") == 0) ++state.main;
+        if (_wcsicmp(kind, L"Rimes.ExtensionPages") == 0 &&
+            (GetWindowLongPtrW(child, GWL_STYLE) & (WS_VSCROLL | WS_HSCROLL))) state.root_gutter = true;
+        return TRUE;
+      }, reinterpret_cast<LPARAM>(&inventory));
+      Check(!inventory.root_gutter && inventory.main <= 1,
+            "every settings page has one main scrollbar owner and no duplicate native gutter");
+      const auto page_bar = GetDlgItem(window, 6070);
+      Check(page_bar != nullptr, "settings retains the native connector scrollbar control");
+      Check(page == ui::SettingsPage::kApi || !(GetWindowLongPtrW(page_bar, GWL_STYLE) & WS_VISIBLE),
+            "connector scrollbar retires when another page owns scrolling");
+      ScrollbarPresentationProbe refresh;
+      SetWindowSubclass(page_bar, ScrollbarPresentationProbe::Procedure, 82, reinterpret_cast<DWORD_PTR>(&refresh));
+      host.OpenPage(nullptr, page, sub, false);
+      Check(refresh.direct_redraws == 0 && refresh.shows == 0,
+            "same-page refresh does not redraw or re-show the connector scrollbar");
+      RemoveWindowSubclass(page_bar, ScrollbarPresentationProbe::Procedure, 82);
+    }
+  }
+  host.Close();
+}
+
 void TestNativeControlBackgrounds() {
   for (const auto theme : {ui::ThemeId::kNight, ui::ThemeId::kDay}) {
     workbench::SettingsUiCallbacks callbacks;
@@ -1877,6 +1988,7 @@ int main(int argc, char** argv) {
   run("peer hosts/plugins", TestPeerHostsAndPluginKinds);
   run("connectors", TestConnectorInteractions);
   run("page control bounds", TestPageControlBounds);
+  run("scrollbar presentation", TestScrollbarPresentation);
   run("native backgrounds", TestNativeControlBackgrounds);
   run("parity drafts", TestParityDraftsAndConnections);
   run("Buffer controls", TestBufferBehaviorControls);

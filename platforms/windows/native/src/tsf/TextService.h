@@ -158,6 +158,11 @@ class TextService final : public ITfTextInputProcessorEx,
   ITfThreadMgr* thread_manager_ = nullptr;
   ITfKeystrokeMgr* keystroke_manager_ = nullptr;
   ITfComposition* composition_ = nullptr;
+  HWND floating_practice_editor_ = nullptr;
+  void ClearFloatingPractice() noexcept;
+  bool FloatingPracticeCancelled() const noexcept;
+  bool UpdateFloatingPracticeState() noexcept;
+  unsigned floating_pending_commits_ = 0;
   TfClientId client_id_ = kNullClientId;
   DWORD activation_flags_ = 0;
   bool key_event_sink_advised_ = false;

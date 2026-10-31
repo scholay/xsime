@@ -15,6 +15,7 @@
 
 #include "../ui/icons.hpp"
 #include "../ui/theme.hpp"
+#include "../ui/settings_scrollbar.hpp"
 #include "buffer_hotkey_config.hpp"
 
 namespace rimes::windows::workbench {
@@ -35,10 +36,18 @@ RECT DipToPx(const ui::DipRect& r, unsigned dpi) {
 
 void Place(HWND hwnd, const ui::DipRect& r, unsigned dpi, bool show) {
   if (!hwnd) return;
+  const bool visible = (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_VISIBLE) != 0;
+  if (!show && !visible) return;
   const RECT px = DipToPx(r, dpi);
   SetWindowPos(hwnd, nullptr, px.left, px.top, px.right - px.left,
                px.bottom - px.top, SWP_NOZORDER | SWP_NOACTIVATE |
-                                       (show ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+                  (show != visible ? show ? SWP_SHOWWINDOW : SWP_HIDEWINDOW : 0));
+}
+
+void SettingsFont(HWND window, HFONT font) {
+  if (!window || reinterpret_cast<HFONT>(SendMessageW(window, WM_GETFONT, 0, 0)) == font) return;
+  SendMessageW(window, WM_SETFONT, reinterpret_cast<WPARAM>(font), FALSE);
+  if (GetWindowLongPtrW(window, GWL_STYLE) & WS_VISIBLE) InvalidateRect(window, nullptr, FALSE);
 }
 
 std::wstring GetText(HWND hwnd) {
@@ -648,40 +657,44 @@ void SettingsUiHost::UpdatePlugins() {
 void SettingsUiHost::ThemeEdits() {
   fonts_.Ensure(dpi_);
   const auto& p = ui::Palette(draft_.preview_theme);
-  // Documented Windows 11 attributes; older systems keep the native fallback.
-  const BOOL dark = p.dark ? TRUE : FALSE;
-  const COLORREF caption = ui::ToColorRef(p.settings_background);
-  const COLORREF text = ui::ToColorRef(p.text_primary);
-  DwmSetWindowAttribute(hwnd_, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-  DwmSetWindowAttribute(hwnd_, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
-  DwmSetWindowAttribute(hwnd_, DWMWA_TEXT_COLOR, &text, sizeof(text));
-  if (edit_brush_) DeleteObject(edit_brush_);
-  edit_brush_ = CreateSolidBrush(ui::ToColorRef(p.surface));
-  HWND edits[] = {edit_font_, edit_candidate_count_, check_vertical_, combo_hotkey_modifiers_, edit_hotkey_,
+  const bool appearance_changed = themed_dpi_ != dpi_ || themed_theme_ != draft_.preview_theme;
+  if (appearance_changed) {
+    // Documented Windows 11 attributes; older systems keep the native fallback.
+    const BOOL dark = p.dark ? TRUE : FALSE;
+    const COLORREF caption = ui::ToColorRef(p.settings_background);
+    const COLORREF text = ui::ToColorRef(p.text_primary);
+    DwmSetWindowAttribute(hwnd_, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    DwmSetWindowAttribute(hwnd_, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
+    DwmSetWindowAttribute(hwnd_, DWMWA_TEXT_COLOR, &text, sizeof(text));
+    if (edit_brush_) DeleteObject(edit_brush_);
+    edit_brush_ = CreateSolidBrush(ui::ToColorRef(p.surface));
+    themed_dpi_ = dpi_; themed_theme_ = draft_.preview_theme;
+  }
+  const auto font = SettingsFont;
+  HWND edits[] = {edit_font_, edit_candidate_count_, combo_hotkey_modifiers_, edit_hotkey_,
                   combo_send_modifiers_, edit_send_, record_hotkey_, record_send_, combo_plugin_modifiers_[0], edit_plugin_[0], record_plugin_[0], combo_plugin_modifiers_[1], edit_plugin_[1], record_plugin_[1], reset_shortcuts_, shortcut_feedback_, edit_base_,
                   edit_model_, edit_key_, edit_lang_, edit_source_lang_, combo_connector_, edit_codex_path_, edit_codex_model_,
                   combo_auto_send_, check_close_after_, combo_translation_};
   for (HWND edit : edits) {
     if (!edit) continue;
-    SendMessageW(edit, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.control),
-                 TRUE);
+    font(edit, fonts_.control);
   }
   for (int i = 0; i < 3; ++i)
     for (const auto control : {edit_global_[i], combo_global_modifiers_[i], record_global_[i]})
-      SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.control), TRUE);
-  for (const auto control : {check_align_, check_reset_app_, move_buffer_}) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
-  for (const auto control : maintenance_actions_) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+      font(control, fonts_.control);
+  for (const auto control : {check_align_, check_reset_app_, move_buffer_}) font(control, fonts_.body);
+  for (const auto control : maintenance_actions_) font(control, fonts_.body);
   for (std::size_t i = 0; i < plugin_labels_.size(); ++i) {
     for (const auto control : {plugin_labels_[i], plugin_install_[i], plugin_enable_[i], plugin_remove_[i]})
-      SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+      font(control, fonts_.body);
   }
-  SendMessageW(plugin_status_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+  font(plugin_status_, fonts_.body);
   for (const auto control : {plugin_filter_, plugin_previous_, plugin_next_, plugin_page_})
-    SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+    font(control, fonts_.body);
   HWND checks[] = {check_ascii_, check_trad_, check_punct_, check_vertical_};
   for (HWND check : checks) {
     if (!check) continue;
-    SendMessageW(check, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+    font(check, fonts_.body);
   }
 }
 
@@ -786,11 +799,11 @@ void SettingsUiHost::Relayout() {
   Place(schemes_button_, {layout_.body.left, schemes_top, layout_.body.left + 225, schemes_top + 34}, dpi_, schemes);
   Place(input_habits_, {layout_.body.left + 240, schemes_top, layout_.body.left + 490, schemes_top + 34}, dpi_, schemes);
   Place(lexicon_button_, {layout_.body.left, schemes_top + 44, layout_.body.left + 300, schemes_top + 78}, dpi_, schemes);
-  SendMessageW(lexicon_button_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
-  SendMessageW(input_habits_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+  SettingsFont(lexicon_button_, fonts_.body);
+  SettingsFont(input_habits_, fonts_.body);
   Place(imported_label_, {layout_.body.left, layout_.body.top, layout_.body.right, layout_.body.top + 100}, dpi_, schemes && !draft_.imported_schema.empty());
-  SendMessageW(schemes_button_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
-  SendMessageW(imported_label_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+  SettingsFont(schemes_button_, fonts_.body);
+  SettingsFont(imported_label_, fonts_.body);
   Place(check_ascii_, layout_.check_ascii, dpi_, input);
   Place(check_trad_, layout_.check_trad, dpi_, input);
   Place(check_punct_, layout_.check_punct, dpi_, input);
@@ -818,17 +831,17 @@ void SettingsUiHost::Relayout() {
     clipboard_recording_enabled_ = callbacks_.load_clipboard_recording();
   Place(clipboard_recording_, {layout_.body.left,layout_.body.top+154,layout_.body.right,layout_.body.top+186}, dpi_, capsule);
   EnableWindow(clipboard_recording_, static_cast<bool>(callbacks_.save_clipboard_recording));
-  SendMessageW(clipboard_recording_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+  SettingsFont(clipboard_recording_, fonts_.body);
   const auto peripheral_y = layout_.body.top + (capsule ? 204 : 150);
   Place(peripheral_open_, {layout_.body.left,peripheral_y,layout_.body.left+220,peripheral_y+34}, dpi_, peripheral);
-  SendMessageW(peripheral_open_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+  SettingsFont(peripheral_open_, fonts_.body);
   const auto* home_link = static_cast<const ui::SettingsHomeLink*>(nullptr);
   const bool show_document = draft_.page == ui::SettingsPage::kHome && draft_.subpage > 0;
   Place(home_document_, layout_.body, dpi_, show_document);
   if (show_document) {
     const auto text = Wide(draft_.subpage == 2 ? rimes::documents::License() : rimes::documents::Readme());
     if (GetWindowTextLengthW(home_document_) != static_cast<int>(text.size())) SetWindowTextW(home_document_, text.c_str());
-    SendMessageW(home_document_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+    SettingsFont(home_document_, fonts_.body);
     SendMessageW(home_document_, EM_SETBKGNDCOLOR, 0, ui::ToColorRef(ui::Palette(draft_.preview_theme).settings_background));
     CHARFORMAT2W format{};format.cbSize=sizeof(format);format.dwMask=CFM_COLOR;
     format.crTextColor=ui::ToColorRef(ui::Palette(draft_.preview_theme).text_primary);
@@ -837,10 +850,10 @@ void SettingsUiHost::Relayout() {
   Place(home_action_, layout_.home_action, dpi_, home_link != nullptr || (draft_.page == ui::SettingsPage::kHome && draft_.subpage == 0));
   if (draft_.page == ui::SettingsPage::kHome && draft_.subpage == 0) SetWindowTextW(home_action_, L"检查更新…");
   if (home_link) SetWindowTextW(home_action_, home_link->action);
-  SendMessageW(home_action_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+  SettingsFont(home_action_, fonts_.body);
   for (std::size_t i = 0; i < home_links_.size(); ++i) {
     Place(home_links_[i], layout_.home_links[i], dpi_, draft_.page == ui::SettingsPage::kHome && draft_.subpage == 0);
-    SendMessageW(home_links_[i], WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+    SettingsFont(home_links_[i], fonts_.body);
   }
   if (parity_) parity_->Layout(draft_.page, draft_.subpage, layout_.body, dpi_, fonts_.body);
   if (extensions_) extensions_->Layout(draft_.page, draft_.subpage, layout_.body, dpi_, draft_.preview_theme);
@@ -892,31 +905,7 @@ LRESULT CALLBACK SettingsUiHost::ConnectorScrollProcedure(HWND h, UINT message, 
   if (message == WM_PAINT || message == WM_PRINT || message == WM_PRINTCLIENT) {
     PAINTSTRUCT paint{};
     const auto dc = message == WM_PAINT ? BeginPaint(h, &paint) : reinterpret_cast<HDC>(w);
-    RECT r{}; GetClientRect(h, &r);
-    const auto& p = ui::Palette(self->draft_.preview_theme);
-    const auto px = [self](int n) { return MulDiv(n, self->dpi_, 96); };
-    ui::FillRectColor(dc, r, ui::ToColorRef(p.settings_background));
-    SCROLLBARINFO info{sizeof(info)};
-    if (GetScrollBarInfo(h, OBJID_CLIENT, &info)) {
-      const bool pressed = (info.rgstate[3] & STATE_SYSTEM_PRESSED) != 0;
-      POINT cursor{}; GetCursorPos(&cursor); ScreenToClient(h, &cursor);
-      const bool hover = PtInRect(&r, cursor) != FALSE;
-      const int width = px(hover || pressed ? 7 : 5);
-      RECT thumb{(r.right-width)/2, info.xyThumbTop, (r.right+width)/2, info.xyThumbBottom};
-      if (thumb.bottom > thumb.top) ui::FillRoundRect(dc, thumb, px(3), ui::ToColorRef(
-          pressed ? p.text_secondary : ui::Blend(p.settings_background,p.text_secondary,hover ? .65f : .45f)));
-      for (bool up : {true,false}) {
-        RECT arrow{0, up ? 0 : r.bottom-info.dxyLineButton, r.right, up ? info.dxyLineButton : r.bottom};
-        const int saved = SaveDC(dc);
-        if (up) {
-          SetGraphicsMode(dc,GM_ADVANCED);
-          XFORM rotate{-1,0,0,-1,static_cast<FLOAT>(arrow.right),static_cast<FLOAT>(arrow.bottom)};
-          ModifyWorldTransform(dc,&rotate,MWT_LEFTMULTIPLY);
-        }
-        ui::DrawFluentIcon(dc,ui::FluentIcon::kChevronDown,arrow,ui::ToColorRef(p.text_muted));
-        RestoreDC(dc,saved);
-      }
-    }
+    ui::PaintSettingsScrollbar(h, dc, ui::Palette(self->draft_.preview_theme), self->dpi_);
     if (message == WM_PAINT) EndPaint(h,&paint);
     return 0;
   }
@@ -1605,6 +1594,7 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
       return 0;
     case WM_DESTROY:
       self->ready_ = false;
+      self->themed_dpi_ = 0;
       KillTimer(hwnd, 12);
       self->extensions_.reset();
       self->parity_.reset();
