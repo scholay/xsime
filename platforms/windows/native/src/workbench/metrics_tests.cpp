@@ -47,6 +47,8 @@ void Core() {
   s.Key(1, false, false, false);
   s.Chord(1.1);
   Check(s.Reconcile("甲丙丁", 2), "missing middle reconciliation");
+  Check(s.Snapshot()["typedCorrectness"] == Json::array({true, true, true}),
+        "live input track exposes correctness aligned to committed graphemes");
   auto m = s.Snapshot()["metrics"];
   Check(m["correct"] == 3 && m["omissions"] == 1 && m["substitutions"] == 0,
         "alignment recovers after missing character");
@@ -56,11 +58,14 @@ void Core() {
             (*result)["metrics"]["finalAccuracy"] == 0.75,
         "elapsed and final accuracy");
   Check(result && (*result)["metrics"]["chords"] == 1 &&
-            !result->contains("text") && !result->contains("states"),
+            !result->contains("text") && !result->contains("states") &&
+            !result->contains("typedCorrectness"),
         "aggregate-only history");
   Session correction(Article("ab"), Context(false));
   correction.Key(0, false, false, false);
   correction.Reconcile("x", 1);
+  Check(correction.Snapshot()["typedCorrectness"] == Json::array({false}),
+        "wrong committed graphemes are marked only in the transient snapshot");
   correction.Key(2, false, true, false);
   correction.Reconcile("", 2);
   correction.Reconcile("ab", 3);
@@ -117,6 +122,100 @@ void Core() {
           !TypingKey(VK_SHIFT, 0) &&
           !TypingKey('V', static_cast<unsigned>(core::KeyModifiers::kControl)),
       "physical typing filter");
+  Session clock(Article("abc"), Context());
+  clock.Key(-0.5, false, false, false);
+  Check(!clock.Reconcile("a", -0.5) && !clock.Started() &&
+            clock.Snapshot()["metrics"]["keys"] == 0,
+        "negative observations cannot start or mutate a live session");
+  clock.Start(10);
+  clock.Chord(9);
+  clock.Chord(std::numeric_limits<double>::quiet_NaN());
+  Check(clock.Snapshot()["metrics"]["chords"] == 0,
+        "stale and invalid chord observations are ignored like macOS");
+  clock.Key(11, false, true, false);
+  clock.Chord(12);
+  clock.Reconcile("a", 13);
+  auto clockResult = clock.Finish(14, 100);
+  Check(clockResult && (*clockResult)["metrics"]["elapsed"] == 4 &&
+            (*clockResult)["metrics"]["chords"] == 1,
+        "marked-text start and accepted chords share the monotonic clock");
+  const auto frozen = clock.Snapshot();
+  clock.UpgradeBackspace();
+  clock.Key(15, false, false, false);
+  clock.Chord(15);
+  clock.Tick(15);
+  Check(clock.Snapshot() == frozen,
+        "finished telemetry cannot be reclassified by late input callbacks");
+}
+void PracticeViewPreferences(const std::filesystem::path& root) {
+  using namespace metrics;
+  std::filesystem::create_directories(root);
+  Json old;
+  {
+    Service original(root);
+    old = original.Data();
+    Check(original.PracticePreferences() ==
+              Json{{"materialsCollapsed", false}, {"gridHidden", false},
+                   {"cellsHidden", false}, {"lastArticleID", ""}},
+          "new and legacy profiles inherit macOS practice view defaults");
+  }
+  Check(!old.contains("practicePreferences"),
+        "reading defaults does not migrate or dirty an old statistics file");
+  std::ofstream(root / L"metrics.json", std::ios::trunc) << old.dump();
+  {
+    Service legacy(root);
+    Check(legacy.Issue().empty() && legacy.Data() == old &&
+              legacy.PracticePreferences()["materialsCollapsed"] == false,
+          "unmodified six-field statistics files load without migration");
+  }
+  old["futureVersionMetadata"] = {{"offset", -2}, {"enabled", true}};
+  old["practicePreferences"] = {{"futureView", {"width", -1}},
+                                {"gridHidden", true}};
+  std::ofstream(root / L"metrics.json", std::ios::trunc) << old.dump();
+  {
+    Service migrated(root);
+    Check(migrated.Issue().empty(), "optional view settings and unknown fields are compatible");
+    Check(migrated.PracticePreferences()["gridHidden"] == true &&
+              migrated.PracticePreferences()["cellsHidden"] == false,
+          "partial stored preferences inherit missing keys");
+    Check(migrated.SetPracticePreferences({{"materialsCollapsed", true},
+                                          {"lastArticleID", "practice-article"}}),
+          "practice view changes persist immediately");
+    const auto before = migrated.Data();
+    Check(!migrated.SetPracticePreferences({{"gridHidden", "yes"}}) &&
+              !migrated.SetPracticePreferences({{"lastArticleID", std::string(257, 'a')}}) &&
+              !migrated.SetPracticePreferences({{"lastArticleID", std::string("a\0b", 3)}}) &&
+              !migrated.SetPracticePreferences({{"lastArticleID", std::string(1, static_cast<char>(0xff))}}) &&
+              !migrated.SetPracticePreferences({{"unknownUIWrite", true}}) &&
+              migrated.Data() == before,
+          "invalid preference patches are rejected atomically");
+    migrated.Clear("results");
+    Check(migrated.Data()["futureVersionMetadata"] == old["futureVersionMetadata"] &&
+              migrated.PracticePreferences()["futureView"] == old["practicePreferences"]["futureView"],
+          "preference updates and history clearing preserve opaque fields");
+  }
+  {
+    Service restarted(root);
+    Check(restarted.Issue().empty() &&
+              restarted.PracticePreferences()["materialsCollapsed"] == true &&
+              restarted.PracticePreferences()["gridHidden"] == true &&
+              restarted.PracticePreferences()["lastArticleID"] == "practice-article",
+          "practice view state survives a service restart");
+  }
+  auto malformed = old;
+  malformed["practicePreferences"]["cellsHidden"] = 1;
+  const auto bytes = malformed.dump();
+  std::ofstream(root / L"metrics.json", std::ios::trunc) << bytes;
+  {
+    Service invalid(root);
+    Check(!invalid.Issue().empty() &&
+              !invalid.SetPracticePreferences({{"cellsHidden", false}}),
+          "invalid known preference fields retain the read-only recovery boundary");
+    invalid.Save();
+    std::ifstream stream(root / L"metrics.json", std::ios::binary);
+    const std::string retained{std::istreambuf_iterator<char>(stream), {}};
+    Check(retained == bytes, "invalid preference storage remains byte-for-byte preserved");
+  }
 }
 void Storage(const std::filesystem::path& root) {
   using namespace metrics;
@@ -201,6 +300,7 @@ int main() {
   try {
     Core();
     Storage(root);
+    PracticeViewPreferences(root / L"practice-view");
   } catch (const std::exception& e) {
     std::cerr << e.what() << "\n";
     ++failures;

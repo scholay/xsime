@@ -224,7 +224,11 @@ struct SettingsLayout {
                     layout.content.right,
                     layout.subpage_bar.bottom +
                         static_cast<float>(m.heading_band_height_dip)};
-  const float body_w = SettingsBodyWidth(width_dip, m);
+  // Practice is a document plus a fixed material column; let a wider window
+  // provide more typing cells instead of leaving the article capped at 650 DIP.
+  const float body_w = draft.page == SettingsPage::kTyping
+      ? (std::max)(320.0f, width_dip - static_cast<float>(m.body_origin_x_dip) - 24.0f)
+      : SettingsBodyWidth(width_dip, m);
   layout.body = {static_cast<float>(m.body_origin_x_dip),
                  static_cast<float>(m.body_origin_y_dip),
                  static_cast<float>(m.body_origin_x_dip) + body_w,

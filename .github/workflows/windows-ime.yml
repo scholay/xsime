@@ -152,6 +152,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload typing practice parity fixtures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: RIMES-Windows-typing-practice-${{ matrix.architecture }}-${{ github.sha }}
+          path: platforms/windows/native/out/build/windows-${{ matrix.architecture }}/typing-practice-renders/*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Verify local Chinese and English translation
         if: matrix.architecture == 'x64'
         shell: pwsh

@@ -182,7 +182,8 @@ std::vector<workbench::PluginView> Plugins() {
   return items;
 }
 struct PageProbe {
-  unsigned paints = 0, writes = 0, hides = 0, fonts = 0, combo_resets = 0;
+  unsigned paints = 0, writes = 0, hides = 0, fonts = 0, combo_resets = 0,
+           formats = 0;
   std::vector<HWND> windows;
   static LRESULT CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l,
                               UINT_PTR id, DWORD_PTR data) {
@@ -191,6 +192,7 @@ struct PageProbe {
     if (m == WM_SETTEXT) ++p.writes;
     if (m == WM_SETFONT) ++p.fonts;
     if (m == CB_RESETCONTENT) ++p.combo_resets;
+    if (m == EM_SETCHARFORMAT || m == EM_SETPARAFORMAT) ++p.formats;
     if (m == WM_SHOWWINDOW && !w) ++p.hides;
     if (m == WM_NCDESTROY) RemoveWindowSubclass(h, Proc, id);
     return DefSubclassProc(h, m, w, l);
@@ -207,6 +209,147 @@ struct PageProbe {
   }
   ~PageProbe() { for (auto h : windows) if (IsWindow(h)) RemoveWindowSubclass(h, Proc, 91); }
 };
+RECT InParent(HWND child, HWND parent) {
+  RECT rect{};
+  GetWindowRect(child, &rect);
+  MapWindowPoints(nullptr, parent, reinterpret_cast<POINT*>(&rect), 2);
+  return rect;
+}
+std::wstring EditorText(HWND editor) {
+  std::wstring text(static_cast<std::size_t>(GetWindowTextLengthW(editor)) + 1, L'\0');
+  text.resize(static_cast<std::size_t>(GetWindowTextW(editor, text.data(), static_cast<int>(text.size()))));
+  return text;
+}
+void PracticeButton(HWND panel, int id) {
+  SendMessageW(panel, WM_COMMAND, MAKEWPARAM(id, BN_CLICKED),
+               reinterpret_cast<LPARAM>(GetDlgItem(panel, id)));
+}
+void CheckPracticeLayout(workbench::SettingsUiHost& host,
+                         const std::shared_ptr<metrics::Service>& service,
+                         HWND panel, HWND editor) {
+  const auto materials = GetDlgItem(panel, 7014);
+  const auto collapse = GetDlgItem(panel, 7006);
+  const auto grid = GetDlgItem(panel, 7015);
+  const auto readings = GetDlgItem(panel, 7016);
+  Check(materials && collapse && grid && readings,
+        "practice has native material, grid and live-reading controls");
+  Check(!(GetWindowLongPtrW(editor, GWL_STYLE) & WS_VSCROLL),
+        "the double track has no independent vertical scrollbar");
+  const auto source = GetDlgItem(panel, 7003);
+  Check(!source || !IsWindowVisible(source),
+        "the old separate source box is replaced by the single double track");
+  RECT viewport{};
+  GetClientRect(panel, &viewport);
+  const auto full = InParent(editor, panel);
+  const auto fixed = InParent(materials, panel);
+  const auto collapse_rect = InParent(collapse, panel);
+  Check(full.bottom - full.top > viewport.bottom && full.right <= fixed.left,
+        "the entire article grows vertically beside the material sidebar");
+  Check(collapse_rect.left >= fixed.left && collapse_rect.right <= viewport.right,
+        "the expanded material sidebar owns its collapse action");
+  for (const int id : {7009, 7012, 7007})
+    Check(IsWindowVisible(GetDlgItem(panel, id)),
+          "the sidebar exposes article and book tabs and EPUB import");
+  SendMessageW(panel, WM_VSCROLL, SB_BOTTOM,
+               reinterpret_cast<LPARAM>(GetDlgItem(panel, 7200)));
+  Pump(host);
+  const auto bottom = InParent(editor, panel);
+  const auto still_fixed = InParent(materials, panel);
+  Check(bottom.top < full.top && bottom.bottom <= viewport.bottom,
+        "page scrolling reaches the final double-track row");
+  Check(EqualRect(&fixed, &still_fixed) != FALSE,
+        "page scrolling leaves the material sidebar fixed in the viewport");
+  SendMessageW(panel, WM_VSCROLL, SB_TOP, 0);
+  Pump(host);
+  PracticeButton(panel, 7006);
+  Pump(host);
+  const auto expanded_text = InParent(editor, panel);
+  Check(!IsWindowVisible(materials) &&
+            expanded_text.right > full.right &&
+            service->PracticePreferences().value("materialsCollapsed", false),
+        "collapsing materials frees its width and immediately saves the preference");
+  const auto reopen = InParent(collapse, panel);
+  Check(IsWindowVisible(collapse) && reopen.top < expanded_text.top,
+        "the page header offers the way to restore hidden materials");
+  PracticeButton(panel, 7006);
+  PracticeButton(panel, 7015);
+  PracticeButton(panel, 7016);
+  Pump(host);
+  const auto compact = InParent(editor, panel);
+  const auto prefs = service->PracticePreferences();
+  Check(prefs.value("gridHidden", false) && prefs.value("cellsHidden", false) &&
+            !prefs.value("materialsCollapsed", true),
+        "grid and live readings are independently persisted from the sidebar");
+  Check(compact.top < full.top,
+        "hiding the live readings returns their height to the article");
+  PracticeButton(panel, 7015);
+  PracticeButton(panel, 7016);
+  Pump(host);
+  Check(!service->PracticePreferences().value("gridHidden", true) &&
+            !service->PracticePreferences().value("cellsHidden", true),
+        "grid and live readings can be restored immediately");
+}
+void CheckLivePracticeToggles(workbench::SettingsUiHost& host,
+                              const std::shared_ptr<metrics::Service>& service,
+                              HWND panel, HWND editor) {
+  const auto text = metrics::Characters(workbench::Utf8(EditorText(editor)));
+  const auto metrics_before = service->Practice()["metrics"];
+  CHARRANGE selection_before{};
+  SendMessageW(editor, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection_before));
+  for (const int id : {7015, 7016, 7006, 7006, 7016, 7015}) {
+    PracticeButton(panel, id);
+    Pump(host);
+    Check(service->Armed() && GetFocus() == editor,
+          "practice display toggles retain the active editor and its focus");
+    Check(metrics::Characters(workbench::Utf8(EditorText(editor))) == text &&
+              service->Practice()["metrics"]["committed"] == metrics_before["committed"] &&
+              service->Practice()["metrics"]["attempts"] == metrics_before["attempts"],
+          "practice display toggles preserve text and do not invent scored attempts");
+  }
+  CHARRANGE selection_after{};
+  SendMessageW(editor, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection_after));
+  Check(selection_before.cpMin == selection_after.cpMin &&
+            selection_before.cpMax == selection_after.cpMax,
+        "restoring the same track width preserves editor selection");
+}
+void CheckCompositionDisplayGuards(workbench::SettingsUiHost& host,
+                                   const std::shared_ptr<metrics::Service>& service,
+                                   HWND panel, HWND editor) {
+  // This exercises the IME message boundary without claiming to drive a real
+  // candidate window. The text between START/END stands in for uncommitted code.
+  const auto committed_text = EditorText(editor);
+  const auto scored = service->Practice()["metrics"];
+  SendMessageW(editor, WM_IME_STARTCOMPOSITION, 0, 0);
+  const auto marked_text = committed_text + L"ni";
+  SetWindowTextW(editor, marked_text.c_str());
+  SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7004, EN_CHANGE),
+               reinterpret_cast<LPARAM>(editor));
+  SendMessageW(panel, WM_APP + 72, 0, 0);
+  Pump(host);
+  Check(service->Practice()["metrics"]["committed"] == scored["committed"] &&
+            service->Practice()["metrics"]["attempts"] == scored["attempts"],
+        "uncommitted composition never enters scoring");
+  PracticeButton(panel, 7002);
+  Pump(host);
+  Check(service->Armed() && GetFocus() == editor,
+        "finishing while composing asks to settle composition and keeps the editor active");
+  {
+    PageProbe probe(editor);
+    for (const int id : {7015, 7016, 7016, 7015}) {
+      PracticeButton(panel, id);
+      Pump(host);
+    }
+    Check(probe.writes == 0 && probe.formats == 0 &&
+              EditorText(editor) == marked_text,
+          "display toggles do not replace or reformat live IME composition");
+  }
+  SetWindowTextW(editor, committed_text.c_str());
+  SendMessageW(editor, WM_IME_ENDCOMPOSITION, 0, 0);
+  Pump(host);
+  Check(service->Practice()["metrics"]["committed"] == scored["committed"] &&
+            service->Practice()["metrics"]["attempts"] == scored["attempts"],
+        "cancelled composition does not create a committed attempt");
+}
 int CheckHistoryRefresh(const std::filesystem::path& output) {
   std::filesystem::create_directories(output);
   auto service = std::make_shared<metrics::Service>(output / L"history-data");
@@ -347,10 +490,15 @@ int AuditPages(const std::filesystem::path& output) {
   host.Close();
   return failures ? 1 : 0;
 }
-int Run(const std::filesystem::path& output) {
+int Run(const std::filesystem::path& output, bool typing_only = false) {
   std::filesystem::create_directories(output);
   const auto storage = output / L"fixture-data";
   auto service = std::make_shared<metrics::Service>(storage);
+  Check(service->SetPracticePreferences({{"materialsCollapsed", false},
+                                         {"gridHidden", false},
+                                         {"cellsHidden", false},
+                                         {"lastArticleID", metrics::Articles().front().id}}),
+        "practice fixture starts with deterministic display preferences");
   auto plugins = Plugins();
   workbench::Settings config;
   ui::ThemeId theme = ui::ThemeId::kNight;
@@ -394,6 +542,7 @@ int Run(const std::filesystem::path& output) {
   auto editor = GetDlgItem(panel, 7004);
   Check(panel && editor, "real native practice controls");
   CheckIdleRefresh(host, panel);
+  CheckPracticeLayout(host, service, panel, editor);
   SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7001, BN_CLICKED),
                reinterpret_cast<LPARAM>(GetDlgItem(panel, 7001)));
   Pump(host);
@@ -431,10 +580,17 @@ int Run(const std::filesystem::path& output) {
   HRGN dirty = CreateRectRgn(0, 0, 0, 0);
   const auto region = GetUpdateRgn(panel, dirty, FALSE);
   if (region != NULLREGION && region != ERROR) {
-    const auto px = [&](int dip) { return MulDiv(dip, GetDpiForWindow(panel), 96); };
-    Check(PtInRegion(dirty, px(20), px(100)), "live metrics still invalidate their display");
-    Check(!PtInRegion(dirty, px(20), px(10)) && !PtInRegion(dirty, px(20), px(205)) &&
-          !PtInRegion(dirty, px(20), px(395)), "timer leaves picker, article and input untouched");
+    const auto input = InParent(editor, panel);
+    const auto readings = InParent(GetDlgItem(panel, 7016), panel);
+    const auto materials = InParent(GetDlgItem(panel, 7014), panel);
+    const int sample_x = input.left + (input.right - input.left) / 4;
+    Check(PtInRegion(dirty, sample_x,
+                      readings.bottom + (input.top - readings.bottom) / 2),
+          "live metrics still invalidate their display");
+    Check(!RectInRegion(dirty, &input) &&
+              !PtInRegion(dirty, materials.left + 2, materials.top + 2) &&
+              !PtInRegion(dirty, readings.left + 1, readings.top + 1),
+          "timer leaves the header, fixed materials and complete double track untouched");
   }
   DeleteObject(dirty);
   CHARRANGE replace{0, 1};
@@ -444,6 +600,8 @@ int Run(const std::filesystem::path& output) {
   Check(service->Practice()["metrics"]["attempts"] == 2 &&
             service->Practice()["metrics"]["corrections"] == 1,
         "native identical replacement is a new attempt");
+  CheckCompositionDisplayGuards(host, service, panel, editor);
+  CheckLivePracticeToggles(host, service, panel, editor);
   const auto textLength = GetWindowTextLengthW(editor);
   SendMessageW(editor, WM_PASTE, 0, 0);
   Pump(host);
@@ -457,7 +615,62 @@ int Run(const std::filesystem::path& output) {
   Pump(host);
   Check(service->Practice().empty() && GetWindowTextLengthW(editor) == 0,
         "changing article clears previous practice");
+  const auto remembered_article = service->PracticePreferences().value("lastArticleID", "");
+  Check(!remembered_article.empty() && remembered_article != metrics::Articles().front().id,
+        "choosing another article remembers its stable identity");
   CheckIdleRefresh(host, panel);
+  for (const int id : {7006, 7015, 7016}) PracticeButton(panel, id);
+  Pump(host);
+  const auto remembered_preferences = service->PracticePreferences();
+  service->Save();
+  {
+    metrics::Service restored(storage);
+    Check(restored.Issue().empty() &&
+              restored.PracticePreferences() == remembered_preferences,
+          "material, grid, readings and article choices survive a validated disk reload");
+  }
+  host.Close();
+  host.OpenPage(nullptr, ui::SettingsPage::kTyping, 0, true);
+  Pump(host);
+  panel = FindWindowExW(host.hwnd(), nullptr, L"Rimes.ExtensionPages", nullptr);
+  Check(!IsWindowVisible(GetDlgItem(panel, 7014)) &&
+            service->PracticePreferences().value("lastArticleID", "") == remembered_article,
+        "reopening practice restores its collapsed materials and last article");
+  for (const int id : {7006, 7015, 7016}) PracticeButton(panel, id);
+  Pump(host);
+  if (typing_only) {
+    // Keep the focused CI path independent of connector, gallery and other
+    // settings pages. These renders contain only built-in text and fixture data.
+    for (int t = 0; t < 4; ++t) {
+      host.Close();
+      service->ResetPractice();
+      theme = static_cast<ui::ThemeId>(t);
+      config.theme = ui::ThemeIdString(theme);
+      host.OpenPage(nullptr, ui::SettingsPage::kTyping, 0, true);
+      Pump(host);
+      panel = FindWindowExW(host.hwnd(), nullptr, L"Rimes.ExtensionPages", nullptr);
+      editor = GetDlgItem(panel, 7004);
+      const auto prefix = workbench::Wide(config.theme) + L"-typing-";
+      Export(host.hwnd(), output / (prefix + L"ready.png"));
+      PracticeButton(panel, 7001);
+      Pump(host);
+      Check(service->Armed() && GetFocus() == editor,
+            "every skin starts practice in its native editor");
+      service->LocalKey('T', 0, false, GetTickCount(), false);
+      SendMessageW(editor, WM_CHAR, L'天', 0);
+      Pump(host, 120);
+      service->LocalKey('D', 0, false, GetTickCount(), false);
+      SendMessageW(editor, WM_CHAR, L'地', 0);
+      Pump(host);
+      Check(service->Practice()["metrics"]["committed"] == 2,
+            "every skin retains real native committed input");
+      Export(host.hwnd(), output / (prefix + L"live.png"));
+      service->Finish("interrupted");
+    }
+    host.Close();
+    service->Save();
+    return failures ? 1 : 0;
+  }
   for (int t = 0; t < 4; ++t) {
     theme = static_cast<ui::ThemeId>(t);
     host.Close();
@@ -556,7 +769,12 @@ int wmain(int argc, wchar_t** argv) {
   CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   int result = 1;
   try {
-    result = argc > 1 && std::wstring(argv[1]) == L"--history-refresh"
+    result = argc > 1 && std::wstring(argv[1]) == L"--typing-parity"
+        ? Run(argc > 2 ? std::filesystem::path(argv[2])
+                      : std::filesystem::temp_directory_path() /
+                            (L"rimes-typing-parity-" + std::to_wstring(GetCurrentProcessId())),
+              true)
+        : argc > 1 && std::wstring(argv[1]) == L"--history-refresh"
         ? CheckHistoryRefresh(std::filesystem::temp_directory_path() /
                               (L"rimes-history-refresh-" + std::to_wstring(GetCurrentProcessId())))
         : argc > 2 && std::wstring(argv[2]) == L"--repaint-audit"

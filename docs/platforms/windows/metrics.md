@@ -10,6 +10,26 @@ Windows 设置沿用 macOS 的宿主划分：Buffer、Capsule、Mailbox 是三�
 - 统计：每日、历史、测速成绩三个分页；7/30 天成文字数与日常速度、键位热图、全部记录年份的按键日历、日期选择和输入会话。统计与测速页共用成绩库。
 - 四套现有主题、统一的间距、圆角、开关、选项框、键盘焦点、垂直滚动与 DPI 缩放。插件页的卡片名称和宿主分类沿用 macOS。
 
+## 文章跟打界面
+
+Windows 以 `OfficialPlugins/native/macos/TypingSpeedSettingsViewController.swift`、
+`TypingTestTrackView.swift` 和 `TypingTestMaterialColumn.swift` 为行为基准。
+原文和输入显示在同一张全文卡片中，每行原文紧贴对应输入行，28 DIP 字格、22 DIP 字号，
+中文自然段首缩进两格；视图插入的换行不参与计分。页面滚动查看全文并跟随当前输入行，
+编辑器不另设内部滚动条。正确、错误和漏字分别着色，当前待输入位置保留强调框。
+
+有效速度、击键、回退和正确率组成两行读数，右侧同排显示实时速度曲线；
+可以收起整条监控带，也可以单独隐藏格线。右侧 224 DIP 素材栏固定在窗口内，
+提供文章卡片、书架与书内编号段落，支持 EPUB 导入及本机移除。
+素材栏收起后释放全部宽度，页面标题处提供重新展开入口。
+这些显示选择和最后选用的文章 ID 保存在统计文件的可选 `practicePreferences` 中，
+立即生效并在重启后恢复，旧格式和未知扩展字段保留。
+
+输入仍由原生 RichEdit/TSF 文本存储承载。组字尚未确认时，不把编码送入判分，
+不因切换格线、监控或素材栏而重写或重新格式化 marked text；
+结束按钮要求先确认或取消组字。仅绘制层负责双轨和网格，避免出现第二份可编辑文本状态。
+双轨和原生文本在同一帧呈现，静止时不通过轮询反复刷新全文。
+
 ## 计数边界
 
 Broker 只在实际按键通过隐私检查后发送汇总事件，`OnTestKey*` 不计数。成文字数来自引擎实际提交，并击次数来自一次真实并击结算。没有全局键盘钩子，没有读取外部输入框文本，也不保存按键时间线或输入内容。
@@ -29,5 +49,10 @@ Broker 只在实际按键通过隐私检查后发送汇总事件，`OnTestKey*` 
 先在官方插件仓库修改原生实现，运行 `scripts/generate_windows_articles.py --check`，提交依赖源码后运行主仓库 `scripts/prepare-official-plugins.py --update-lock`。不得用未提交的依赖内容伪造锁文件。
 
 Windows 的 `RimesMetrics`、`RimesOfficialPlugins`、`RimesSettingsUi`、`RimesRuntime`、`RimesFirstKey` 和 `RimesChordProfile` 覆盖计数、持久化、插件授权、导航及输入通路。`RimesMetricsUiTests <目录>` 使用隔离的本机数据和自己的原生窗口，验证真实控件、同文替换、练习排除、启停、文章切换，并导出四主题的页面 PNG；不会向用户应用输入内容。
+
+`RimesTypingPracticeUI` 专门回归全文可达、素材栏固定与收起、监控和格线切换、
+正文与选区保留、未提交组字隔离、结束边界，以及偏好和文章选择的重启恢复。
+自动检查由远端 Windows CI 分别覆盖 x64/x86；构建通过后仍需单独确认真实中文候选选择、
+并击组字与回退、跨行回改、不同 DPI 和四主题的实际显示，模拟 IME 消息不能替代真实宿主验收。
 
 安装采用并列版本目录，保留词库、配置、插件状态与统计。Broker 重启后设置界面生效；已经加载旧 TSF DLL 的应用需要完全退出并重新打开。Codex 中的实际并击首字仍需要在新宿主进程中进行人工复测。
