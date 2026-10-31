@@ -33,6 +33,8 @@ Windows 以 `OfficialPlugins/native/macos/TypingSpeedSettingsViewController.swif
 
 排版和选区均使用 RichEdit 原始 UTF-16／单 CR 索引，避免 `WM_GETTEXT` 的 CRLF 展开造成跨行偏移。
 每格字距以真实文本存储坐标校准，包含字体替代、上下文排版及行尾空格。
+换行只插入或移除必要的段落分隔符，保留前文格式；字距校准只检查受影响的行。
+跨行退格合并段落后，先恢复该行缩进再测量坐标，避免把段落偏移误算为字距。
 测速候选定位通过受信任编辑器的同线程查询使用真实字格坐标，
 不使用会把段后留白计入高度的 RichEdit `GetTextExt` 范围；普通应用仍走原有 TSF 几何路径。
 排版期间保持编辑器可见，避免 `WM_SETREDRAW(FALSE)` 暂时移除 `WS_VISIBLE` 导致焦点与 TSF 目标失效。
@@ -69,6 +71,8 @@ Windows 的 `RimesMetrics`、`RimesOfficialPlugins`、`RimesSettingsUi`、`Rimes
 并对每个字符和光标读取真实 `EM_POSFROMCHAR` 坐标。
 `RimesTypingGeometry96` 仅在测试进程中使用 DPI unaware 验证 96 DPI，不修改桌面设置；
 普通几何入口使用所在显示器的真实 DPI，不把模拟 `WM_DPICHANGED` 当作真实高 DPI 验收。
+换行性能回归覆盖中英文首行、较深行和跨行退格，断言不重写全文，
+格式化与坐标查询工作量受行宽限制；耗时只记录比较，不使用易波动的毫秒阈值判定通过。
 自动检查由远端 Windows CI 分别覆盖 x64/x86；构建通过后仍需单独确认真实中文候选选择、
 并击组字与回退、跨行回改、不同 DPI 和四主题的实际显示，模拟 IME 消息不能替代真实宿主验收。
 

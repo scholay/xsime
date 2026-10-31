@@ -187,7 +187,7 @@ std::vector<workbench::PluginView> Plugins() {
 }
 struct PageProbe {
   unsigned paints = 0, writes = 0, hides = 0, fonts = 0, combo_resets = 0,
-           formats = 0, redraw_suspensions = 0;
+           formats = 0, redraw_suspensions = 0, position_queries = 0;
   std::vector<HWND> windows;
   static LRESULT CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l,
                               UINT_PTR id, DWORD_PTR data) {
@@ -198,6 +198,7 @@ struct PageProbe {
     if (m == WM_SETREDRAW && !w) ++p.redraw_suspensions;
     if (m == CB_RESETCONTENT) ++p.combo_resets;
     if (m == EM_SETCHARFORMAT || m == EM_SETPARAFORMAT) ++p.formats;
+    if (m == EM_POSFROMCHAR) ++p.position_queries;
     if (m == WM_SHOWWINDOW && !w) ++p.hides;
     if (m == WM_NCDESTROY) RemoveWindowSubclass(h, Proc, id);
     return DefSubclassProc(h, m, w, l);
@@ -581,6 +582,101 @@ void CheckPracticeTrackGeometry(workbench::SettingsUiHost& host,
     Pump(host);
   }
 }
+void CheckPracticeWrapPerformance(workbench::SettingsUiHost& host,
+                                  const std::shared_ptr<metrics::Service>& service,
+                                  HWND panel, HWND editor,
+                                  const std::filesystem::path& output) {
+  metrics::Json samples = metrics::Json::array();
+  const auto& articles = metrics::Articles();
+  for (const auto language : {"chinese", "english"}) {
+    const auto found = std::find_if(articles.begin(), articles.end(), [&](const auto& a) { return a.language == language; });
+    Check(found != articles.end(), "wrap performance fixture includes both languages");
+    if (found == articles.end()) continue;
+    SendMessageW(GetDlgItem(panel, 7000), CB_SETCURSEL, std::distance(articles.begin(), found), 0);
+    SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7000, CBN_SELCHANGE), 0);
+    PracticeButton(panel, 7001);
+    Pump(host);
+    RECT client{}; GetClientRect(editor, &client);
+    const auto dpi = GetDpiForWindow(editor);
+    const auto columns = std::max(6, (static_cast<int>(client.right) - MulDiv(24, dpi, 96)) / std::max(1, MulDiv(28, dpi, 96)));
+    const auto cells = ExpectedTrackCells(*found, columns);
+    const auto all = metrics::Characters(found->text);
+    std::vector<std::wstring> typed;
+    std::size_t attempts = 0;
+    unsigned deleted = 0, corrections = 0;
+    auto commit = [&](const std::wstring& text) {
+      for (const auto unit : text) SendMessageW(editor, WM_CHAR, unit, 0);
+    };
+    auto measure = [&](const char* operation, int target_row, const auto& action) {
+      metrics::Json scored;
+      LARGE_INTEGER frequency{}, start{}, finish{};
+      QueryPerformanceFrequency(&frequency);
+      unsigned writes = 0, formats = 0, queries = 0;
+      {
+        PageProbe probe(editor);
+        QueryPerformanceCounter(&start);
+        action();
+        scored = WaitForPracticeScore(host, service, typed.size(), attempts, deleted, corrections, operation);
+        QueryPerformanceCounter(&finish);
+        writes = probe.writes; formats = probe.formats; queries = probe.position_queries;
+      }
+      // Probe only the real edit and asynchronous publication above. The
+      // independent full-document geometry oracle below must not inflate the
+      // production operation's position-query count.
+      const double milliseconds = (finish.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart;
+      std::cout << "Practice wrap work " << language << ' ' << operation
+                << " row=" << target_row << " committed=" << typed.size()
+                << " columns=" << columns << " writes=" << writes
+                << " formats=" << formats << " queries=" << queries
+                << " elapsed-ms=" << milliseconds << std::endl;
+      samples.push_back({{"language", language}, {"operation", operation}, {"row", target_row},
+                         {"committed", typed.size()}, {"columns", columns}, {"dpi", dpi},
+                         {"wholeTextWrites", writes}, {"formatMessages", formats},
+                         {"positionQueries", queries}, {"elapsedMilliseconds", milliseconds}});
+      Check(writes == 0, "an active wrap or cross-row backspace never replaces the entire editor text");
+      Check(formats <= static_cast<unsigned>(columns * 4 + 16),
+            "wrap formatting work is bounded by the affected rows, not all previously typed rows");
+      Check(queries <= static_cast<unsigned>(columns * 6 + 24),
+            "wrap geometry calibration is bounded by the affected rows, not document length");
+      Check(scored.value("committed", -1) == static_cast<int>(typed.size()) &&
+                scored.value("attempts", -1) == static_cast<int>(attempts) &&
+                scored.value("deleted", -1) == static_cast<int>(deleted) &&
+                scored.value("corrections", -1) == static_cast<int>(corrections) &&
+                scored.value("correct", -1) == static_cast<int>(typed.size()),
+            "measured wrap and backspace preserve exact scoring without counting layout separators");
+      CheckNativeTrackPositions(editor, *found, typed, operation);
+    };
+    for (const int target_row : {1, 8}) {
+      const auto crossing = std::find_if(cells.begin(), cells.end(), [&](const auto& cell) { return cell.row == target_row; });
+      Check(crossing != cells.end(), "performance fixture reaches both an early and a deep row boundary");
+      if (crossing == cells.end()) continue;
+      const auto boundary = static_cast<std::size_t>(std::distance(cells.begin(), crossing));
+      Check(boundary > 0 && boundary < all.size(), "measured row boundary retains real source characters");
+      if (!boundary || boundary >= all.size()) continue;
+      while (typed.size() + 1 < boundary) {
+        const auto next = all[typed.size()];
+        commit(next); typed.push_back(next); ++attempts;
+        WaitForPracticeScore(host, service, typed.size(), attempts, deleted, corrections, "wrap setup");
+      }
+      measure("wrap", target_row, [&] {
+        const auto next = all[typed.size()];
+        commit(next); typed.push_back(next); ++attempts;
+      });
+      const auto raw = EditorText(editor);
+      Check(!raw.empty() && raw.back() == L'\r',
+            "the measured final cell creates the next explicit input paragraph");
+      CHARRANGE caret{static_cast<LONG>(raw.size()), static_cast<LONG>(raw.size())};
+      SendMessageW(editor, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&caret));
+      measure("cross-row-backspace", target_row, [&] {
+        SendMessageW(editor, WM_CHAR, L'\b', 0);
+        typed.pop_back(); ++deleted; ++corrections;
+      });
+    }
+    service->Finish("interrupted");
+    Pump(host);
+  }
+  std::ofstream(output / L"typing-wrap-performance.json") << samples.dump(2) << '\n';
+}
 void CheckFloatingPracticeComposition(workbench::SettingsUiHost& host,
                                        const std::shared_ptr<metrics::Service>& service,
                                        HWND panel, HWND editor) {
@@ -590,6 +686,13 @@ void CheckFloatingPracticeComposition(workbench::SettingsUiHost& host,
   Pump(host);
   Check(service->Armed() && GetFocus() == editor,
         "floating-composition contract starts in its own active practice editor");
+  if (!service->Armed() || GetFocus() != editor) {
+    const auto practice = service->Practice();
+    std::cerr << "Floating fixture start armed=" << service->Armed()
+              << " focus-control=" << GetDlgCtrlID(GetFocus())
+              << " reasons=" << practice.value("reasons", metrics::Json::array()).dump() << std::endl;
+    return;
+  }
   Check(GetPropW(editor, core::kTypingPracticeEditorProperty) == reinterpret_cast<HANDLE>(editor),
         "the practice editor exposes its explicit local TSF capability");
   // Model the TSF-owned floating state, deliberately without a native marked
@@ -812,7 +915,7 @@ int AuditPages(const std::filesystem::path& output) {
   return failures ? 1 : 0;
 }
 int Run(const std::filesystem::path& output, bool typing_only = false,
-        bool geometry_only = false, unsigned expected_dpi = 0) {
+        bool geometry_only = false, unsigned expected_dpi = 0, bool wrap_only = false) {
   std::filesystem::create_directories(output);
   // The render directory may be reached through an ASCII workspace junction.
   // Keep the data fixture outside that alias: production storage deliberately
@@ -867,12 +970,20 @@ int Run(const std::filesystem::path& output, bool typing_only = false,
       FindWindowExW(host.hwnd(), nullptr, L"Rimes.ExtensionPages", nullptr);
   auto editor = GetDlgItem(panel, 7004);
   Check(panel && editor, "real native practice controls");
+  if (wrap_only) {
+    CheckPracticeWrapPerformance(host, service, panel, editor, output);
+    host.Close();
+    Check(!IsWindow(editor), "wrap performance fixture closes its own native host");
+    service->Save();
+    return failures ? 1 : 0;
+  }
   if (geometry_only) {
     if (expected_dpi)
       Check(GetDpiForWindow(editor) == expected_dpi,
             "the isolated geometry process creates a native window at its requested DPI");
     std::cout << "Track geometry DPI: " << GetDpiForWindow(editor) << '\n';
     CheckPracticeTrackGeometry(host, service, panel, editor);
+    CheckPracticeWrapPerformance(host, service, panel, editor, output);
     CheckFloatingPracticeComposition(host, service, panel, editor);
     host.Close();
     Check(!IsWindow(editor), "geometry fixture closes its native practice host before returning");
@@ -978,6 +1089,7 @@ int Run(const std::filesystem::path& output, bool typing_only = false,
   Pump(host);
   CheckPracticeCaretNavigation(host, panel, GetDlgItem(panel, 7004));
   CheckPracticeTrackGeometry(host, service, panel, GetDlgItem(panel, 7004));
+  CheckPracticeWrapPerformance(host, service, panel, GetDlgItem(panel, 7004), output);
   CheckFloatingPracticeComposition(host, service, panel, GetDlgItem(panel, 7004));
   if (typing_only) {
     // Keep the focused CI path independent of connector, gallery and other
@@ -1132,7 +1244,12 @@ int wmain(int argc, wchar_t** argv) {
   CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   int result = 1;
   try {
-    result = argc > 1 && (std::wstring(argv[1]) == L"--typing-geometry" || geometry_96)
+    result = argc > 1 && std::wstring(argv[1]) == L"--typing-wrap-performance"
+        ? Run(argc > 2 ? std::filesystem::path(argv[2])
+                      : std::filesystem::temp_directory_path() /
+                            (L"rimes-typing-wrap-" + std::to_wstring(GetCurrentProcessId())),
+              false, false, 0, true)
+        : argc > 1 && (std::wstring(argv[1]) == L"--typing-geometry" || geometry_96)
         ? Run(argc > 2 ? std::filesystem::path(argv[2])
                       : std::filesystem::temp_directory_path() /
                             (L"rimes-typing-geometry-" + std::to_wstring(GetCurrentProcessId())),
