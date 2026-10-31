@@ -130,6 +130,29 @@ int main() {
   d = t.Send(false);
   t.LostAcknowledgement();
   Check(t.uncertain && !t.Send(false), "lost ack never retries");
+  t.Open();
+  auto resend = t.Send(false);
+  Check(resend && resend->request != d->request && resend->block.id == d->block.id &&
+            resend->block.text == "Second sentence." && !t.uncertain,
+        "explicit Send after a lost ack resends the retained block");
+  Check(!t.OwnsDelivery(d->request, a), "resend retires the unconfirmed request's guard");
+  t.Acknowledge(d->request, a, true);
+  Check(t.Pending() && t.result.size() == 1, "late ack for the retired request consumes nothing");
+  t.Acknowledge(resend->request, a, true);
+  Check(t.result.empty() && t.SourceText().empty(), "resent block consumes its source once");
+  Model closed;
+  closed.translate = true; closed.Focus(a); closed.Open(); closed.Append("第一句。");
+  job = closed.Generate(1, true);
+  closed.Stream(job, 1, "First sentence."); closed.Finish(job, 1, true);
+  d = closed.Send(false);
+  closed.AbandonDelivery(b.session);
+  Check(closed.Pending(), "another session's close keeps the delivery");
+  closed.AbandonDelivery(a.session);
+  Check(!closed.Pending() && closed.uncertain && closed.result.size() == 1,
+        "closed session releases the lock and retains the block");
+  Check(closed.Append("第二句。"), "typing resumes after a closed-session release");
+  resend = closed.Send(false);
+  Check(resend && resend->block.text == "First sentence.", "explicit Send resends after a closed session");
   t.Protect();
   Check(!t.visible && !t.capture && !t.live, "protection revokes authority");
   Check(Sentences("a.\nb。c").size() == 3,

@@ -367,9 +367,17 @@ void Model::RestoreResults(Results state) {
   }
 }
 std::optional<Delivery> Model::Send(bool all) {
-  if (!visible || !capture || !bound || bound != live || pending_ ||
-      uncertain || (busy && result.empty()))
-    return {};
+  if (!visible || !capture || !bound || bound != live) return {};
+  if (uncertain) {
+    // Only an explicit user Send reaches here while uncertain: auto-send and
+    // the send-all continuation both refuse it. Retire the unconfirmed
+    // request so its delivery guard reports stale (a late edit cannot insert
+    // it) and its late ack no longer matches, then resend the retained block.
+    pending_.reset();
+    uncertain = false;
+    send_all_ = false;
+  }
+  if (pending_ || (busy && result.empty())) return {};
   const bool output = !result.empty();
   if (!output && (translate || generated_mode)) return {};
   const auto& blocks = output ? result : source;
@@ -453,5 +461,12 @@ void Model::LostAcknowledgement() {
     status =
         "Delivery unconfirmed. Check the target; automatic retry disabled.";
   }
+}
+void Model::AbandonDelivery(std::uint64_t session) {
+  if (!pending_ || pending_->target.session != session) return;
+  pending_.reset();
+  uncertain = true;
+  send_all_ = false;
+  status = "Delivery unconfirmed. Check the target; automatic retry disabled.";
 }
 }  // namespace rimes::windows::workbench

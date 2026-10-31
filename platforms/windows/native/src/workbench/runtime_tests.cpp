@@ -210,6 +210,45 @@ void TestFullBufferBlocksShiftWithoutChangingDraft() {
   CheckPausedShiftDoesNotProcessOrChangeDraft(runtime, target);
   runtime.Stop();
 }
+void TestClosedSessionReleasesPendingTranslationForResend() {
+  workbench::Runtime runtime([&](const workbench::Settings&, const workbench::Generation&,
+      const std::function<bool(const std::string&)>& chunk,
+      const std::function<bool()>&, std::string*) { return chunk("Translated output."); });
+  const auto peer = GetCurrentProcessId() + 1;
+  const auto wait_delivery = [&](std::uint64_t session) {
+    auto event = runtime.Control({{"op", "wait"}, {"session", session}}, peer);
+    if (event.value("kind", "") == "capture")
+      event = runtime.Control({{"op", "wait"}, {"session", session}}, peer);
+    return event;
+  };
+  const auto first = runtime.Register(peer, 29, 29);
+  runtime.Focus(first); runtime.Bind(peer); runtime.Paste("原文。");
+  runtime.Generate(true);
+  Wait([&] { return runtime.Snapshot()["result"] == "Translated output."; },
+       "the closed-session fixture receives a completed translation");
+  runtime.Send(false);
+  const auto lost = wait_delivery(29);
+  Check(lost["kind"] == "deliver" && runtime.Snapshot()["pending"] == true,
+        "the translation delivery is in flight");
+  // Changing the host field closes this TSF session before it can ack.
+  runtime.Remove(first);
+  auto state = runtime.Snapshot();
+  Check(state["pending"] == false && state["uncertain"] == true &&
+            state["result"] == "Translated output." && state["source"] == "原文。",
+        "a closed session releases the Buffer lock without consuming the block");
+  const auto second = runtime.Register(peer, 30, 30);
+  runtime.Focus(second); runtime.Bind(peer); runtime.Send(false);
+  const auto resent = wait_delivery(30);
+  Check(resent["kind"] == "deliver" && resent["text"] == "Translated output." &&
+            resent["request"] != lost["request"],
+        "an explicit Send resends the retained block with a new request");
+  runtime.Control({{"op", "ack"}, {"session", 30}, {"request", resent["request"]},
+                   {"accepted", true}}, peer);
+  state = runtime.Snapshot();
+  Check(state["source"] == "" && state["result"] == "" && state["uncertain"] == false,
+        "the resent block drains the translation once");
+  runtime.Stop();
+}
 void TestPendingResultBlocksShiftAndRetainsOriginalAcknowledgement() {
   std::atomic<unsigned> calls{0};
   workbench::Runtime runtime([&](const workbench::Settings&, const workbench::Generation&,
@@ -1643,6 +1682,7 @@ int main() {
   run(TestUnhandledModifierCommitIsCapturedWithoutChangingKeyOwnership);
   run(TestFullBufferBlocksShiftWithoutChangingDraft);
   run(TestPendingResultBlocksShiftAndRetainsOriginalAcknowledgement);
+  run(TestClosedSessionReleasesPendingTranslationForResend);
   run(TestOwnedSendKeepsItsLifecycleAcrossModifierChanges);
   run(TestAltShiftReturnTapHoldAndComposition);
   run(TestConfiguredSendAndCancellation);

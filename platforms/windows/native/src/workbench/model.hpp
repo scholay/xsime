@@ -102,6 +102,9 @@ class Model {
   std::optional<Delivery> Acknowledge(std::uint64_t request, Target target,
                                       bool accepted);
   void LostAcknowledgement();
+  // The delivery's TSF session closed, so no ack can arrive. Release the
+  // request without consuming its block; the next explicit Send resends it.
+  void AbandonDelivery(std::uint64_t session);
   bool Pending() const { return pending_.has_value(); }
   bool OwnsDelivery(std::uint64_t request, Target target) const {
     return pending_ && pending_->request == request && pending_->target == target;

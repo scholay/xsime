@@ -265,7 +265,7 @@ ui::BufferPaintState Window::MakePaintState(const core::Json& state) const {
       {"Delivery state changed. Check the target before retrying.",
        L"发送状态已变化，请先检查输入框"},
       {"Delivery unconfirmed. Check the target; automatic retry disabled.",
-       L"发送未确认，请先检查输入框"},
+       L"发送未确认，请先检查输入框；再次发送将重发"},
       {"Paste exceeds Buffer capacity or delivery is pending.",
        L"粘贴内容过长，或正在发送"}};
   const auto message = messages.find(status);
@@ -279,8 +279,8 @@ ui::BufferPaintState Window::MakePaintState(const core::Json& state) const {
   paint.copy_enabled = !paint.busy && !state.value("pending", false) &&
       !state.value("uncertain", false) && state.value("preedit", std::string()).empty() &&
       (has_result ? state.value("complete_result", false) : (has_source && (paint.selected || !paint.bound)));
+  // An unconfirmed delivery stays sendable: an explicit Send resends it.
   paint.send_enabled = paint.capturing && paint.bound &&
-                       !state.value("uncertain", false) &&
                        (has_result || has_source) &&
                        (!paint.busy || has_result) && status != "Sending...";
   if (paint.mode != ui::BufferMode::kInput && !has_result)

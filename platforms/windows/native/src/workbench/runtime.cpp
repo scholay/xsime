@@ -113,6 +113,12 @@ void Runtime::Remove(Target target) {
   const bool affects_capture = model_.live == target ||
       (model_.capture && model_.bound == target) || peripheral_target_ == target;
   if (peripheral_target_ == target) RevokePeripheral();
+  // A delivery to a closed session can never be acknowledged. Release it so
+  // Buffer is not locked; its block stays until the user sends again.
+  if (model_.Pending()) {
+    model_.AbandonDelivery(target.session);
+    if (!model_.Pending()) pending_since_ = 0;
+  }
   model_.Revoke(target);
   sessions_.erase(target.session);
   // A retiring background session does not own the current host's held keys
@@ -399,7 +405,7 @@ bool Runtime::BeforeKey(Target target, const core::KeyEvent& key,
         return_sent_ = true;
         if (!model_.busy) StartGeneration(model_.translate);
       }
-      return_progress_ = !return_sent_ && !model_.Pending() && !model_.uncertain &&
+      return_progress_ = !return_sent_ && !model_.Pending() &&
           (!model_.source.empty() || !model_.result.empty());
       Changed();
     }
