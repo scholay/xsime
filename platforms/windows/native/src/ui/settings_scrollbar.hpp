@@ -2,6 +2,7 @@
 #pragma once
 
 #include <Windows.h>
+#include <commctrl.h>
 #include <algorithm>
 
 #include "icons.hpp"
@@ -62,11 +63,12 @@ inline void PaintSettingsScrollbar(HWND bar, HDC destination,
     const bool pressed = (info.rgstate[3] & STATE_SYSTEM_PRESSED) != 0;
     POINT cursor{}; GetCursorPos(&cursor); ScreenToClient(bar, &cursor);
     const bool hover = PtInRect(&r, cursor) != FALSE;
-    const int width = px(hover || pressed ? 7 : 5);
+    const bool focused = GetFocus() == bar && IsWindowEnabled(bar);
+    const int width = px(hover || pressed || focused ? 7 : 5);
     RECT thumb{(r.right - width) / 2, info.xyThumbTop,
                (r.right + width) / 2, info.xyThumbBottom};
     if (thumb.bottom > thumb.top)
-      FillRoundRect(dc, thumb, px(3), ToColorRef(pressed ? palette.text_secondary :
+      FillRoundRect(dc, thumb, px(3), ToColorRef(focused ? palette.accent : pressed ? palette.text_secondary :
           Blend(palette.settings_background, palette.text_secondary, hover ? .65f : .45f)));
     for (bool up : {true, false}) {
       RECT arrow{0, up ? 0 : r.bottom - info.dxyLineButton,
@@ -92,6 +94,57 @@ inline void PaintSettingsScrollbar(HWND bar, HDC destination,
   paint(frame);
   BitBlt(destination, 0, 0, r.right, r.bottom, frame, 0, 0, SRCCOPY);
   SelectObject(frame, old); DeleteObject(bitmap); DeleteDC(frame);
+}
+
+// The standard control creates a blinking, XOR checkerboard caret on focus.
+// It is independent of WM_PAINT and stays at the previous thumb location when
+// SetScrollInfo deliberately avoids default drawing. Keep actual HWND focus,
+// native keyboard/mouse tracking and accessibility; paint its focus indicator
+// with the themed thumb instead of creating that system caret.
+inline LRESULT SettingsScrollbarProcedure(HWND bar, UINT message, WPARAM wparam,
+                                         LPARAM lparam, const ThemePalette& palette,
+                                         unsigned dpi) {
+  if (message == WM_ERASEBKGND) return 1;
+  if (message == WM_SETFOCUS || message == WM_KILLFOCUS) {
+    RedrawWindow(bar, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
+    return 0;
+  }
+  if (message == WM_PAINT || message == WM_PRINT || message == WM_PRINTCLIENT) {
+    PAINTSTRUCT paint{};
+    const auto dc = message == WM_PAINT ? BeginPaint(bar, &paint) : reinterpret_cast<HDC>(wparam);
+    PaintSettingsScrollbar(bar, dc, palette, dpi);
+    if (message == WM_PAINT) EndPaint(bar, &paint);
+    return 0;
+  }
+  if (message == WM_MOUSEMOVE) {
+    TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, bar, 0};
+    TrackMouseEvent(&track);
+  }
+  if ((message == WM_MOUSEMOVE || message == WM_MOUSELEAVE) && GetCapture() != bar) {
+    // Native idle hover drawing also bypasses WM_PAINT. There is no native
+    // tracking state to update until the button is pressed.
+    InvalidateRect(bar, nullptr, FALSE);
+    return 0;
+  }
+  const bool redraw_info = message == SBM_SETSCROLLINFO && wparam;
+  const bool redraw_pos = message == SBM_SETPOS && lparam;
+  const bool redraw_range = message == SBM_SETRANGEREDRAW;
+  const auto result = DefSubclassProc(bar, redraw_range ? SBM_SETRANGE : message,
+      redraw_info ? FALSE : wparam, redraw_pos ? FALSE : lparam);
+  const bool native_draw = message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK ||
+      message == WM_LBUTTONUP || message == WM_CAPTURECHANGED || message == WM_KEYDOWN ||
+      message == WM_KEYUP || message == WM_ENABLE || message == SBM_ENABLE_ARROWS;
+  if (IsWindow(bar) && IsWindowVisible(bar)) {
+    // Mouse-down owns a native modal tracking loop. Its final direct drawing
+    // happens after the parent's scroll callback, so restore the themed frame
+    // when that loop returns, before presenting another idle frame.
+    if (native_draw)
+      RedrawWindow(bar, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
+    else if (redraw_info || redraw_pos || redraw_range ||
+             message == WM_MOUSEMOVE || message == WM_MOUSELEAVE)
+      InvalidateRect(bar, nullptr, FALSE);
+  }
+  return result;
 }
 
 }  // namespace rimes::windows::ui

@@ -901,19 +901,8 @@ LRESULT CALLBACK SettingsUiHost::ConnectorScrollProcedure(HWND h, UINT message, 
                                                           UINT_PTR id, DWORD_PTR data) {
   auto* self = reinterpret_cast<SettingsUiHost*>(data);
   if (message == WM_NCDESTROY) RemoveWindowSubclass(h, ConnectorScrollProcedure, id);
-  if (message == WM_ERASEBKGND) return 1;
-  if (message == WM_PAINT || message == WM_PRINT || message == WM_PRINTCLIENT) {
-    PAINTSTRUCT paint{};
-    const auto dc = message == WM_PAINT ? BeginPaint(h, &paint) : reinterpret_cast<HDC>(w);
-    ui::PaintSettingsScrollbar(h, dc, ui::Palette(self->draft_.preview_theme), self->dpi_);
-    if (message == WM_PAINT) EndPaint(h,&paint);
-    return 0;
-  }
-  if (message == WM_MOUSEMOVE) { TRACKMOUSEEVENT track{sizeof(track),TME_LEAVE,h,0}; TrackMouseEvent(&track); }
-  const auto result = DefSubclassProc(h,message,w,l);
-  if (message == WM_MOUSEMOVE || message == WM_MOUSELEAVE || message == WM_LBUTTONUP || message == WM_ENABLE)
-    InvalidateRect(h,nullptr,FALSE);
-  return result;
+  return ui::SettingsScrollbarProcedure(h, message, w, l,
+      ui::Palette(self->draft_.preview_theme), self->dpi_);
 }
 void SettingsUiHost::ApplyControlTheme() { ThemeEdits(); }
 
@@ -1416,6 +1405,10 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
     case WM_VSCROLL:
     case WM_MOUSEWHEEL:
       if (self->parity_ && self->parity_->Scroll(message, wparam)) { self->Relayout(); return 0; }
+      if (message == WM_MOUSEWHEEL && self->extensions_ && IsWindowVisible(self->extensions_->window())) {
+        SendMessageW(self->extensions_->window(), message, wparam, lparam);
+        return 0;
+      }
       break;
     case WM_DPICHANGED: {
       auto* rect = reinterpret_cast<RECT*>(lparam);

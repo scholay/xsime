@@ -1474,15 +1474,50 @@ struct ScrollbarPresentationProbe {
   }
 };
 
+struct ScrollbarInteractionFixture {
+  HWND bar = nullptr;
+  RECT bounds{20, 10, 32, 410};
+  int position = 0;
+  unsigned page_down = 0, end_scroll = 0;
+  static LRESULT CALLBACK Owner(HWND window, UINT message, WPARAM wparam, LPARAM lparam,
+                               UINT_PTR id, DWORD_PTR context) {
+    auto& fixture = *reinterpret_cast<ScrollbarInteractionFixture*>(context);
+    if (message == WM_NCDESTROY) RemoveWindowSubclass(window, Owner, id);
+    if (message == WM_VSCROLL && reinterpret_cast<HWND>(lparam) == fixture.bar) {
+      switch (LOWORD(wparam)) {
+        case SB_PAGEUP: fixture.position -= 400; break;
+        case SB_PAGEDOWN: fixture.position += 400; ++fixture.page_down; break;
+        case SB_LINEUP: fixture.position -= 32; break;
+        case SB_LINEDOWN: fixture.position += 32; break;
+        case SB_ENDSCROLL: ++fixture.end_scroll; break;
+      }
+      fixture.position = (std::clamp)(fixture.position, 0, 800);
+      ui::LayoutSettingsScrollbar(fixture.bar, fixture.bounds, 1200, 400, fixture.position);
+      return 0;
+    }
+    return DefSubclassProc(window, message, wparam, lparam);
+  }
+  static LRESULT CALLBACK Scrollbar(HWND window, UINT message, WPARAM wparam, LPARAM lparam,
+                                   UINT_PTR id, DWORD_PTR) {
+    if (message == WM_NCDESTROY) RemoveWindowSubclass(window, Scrollbar, id);
+    return ui::SettingsScrollbarProcedure(window, message, wparam, lparam,
+                                         ui::Palette(ui::ThemeId::kNight), 96);
+  }
+};
+
 void TestScrollbarPresentation() {
   const auto owner = CreateWindowExW(0, L"STATIC", L"Scrollbar fixture", WS_OVERLAPPEDWINDOW,
                                       0, 0, 300, 500, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
-  const auto bar = CreateWindowExW(0, L"SCROLLBAR", L"Page scrollbar", WS_CHILD | SBS_VERT,
+  const auto bar = CreateWindowExW(0, L"SCROLLBAR", L"Page scrollbar", WS_CHILD | WS_TABSTOP | SBS_VERT,
                                     0, 0, 12, 400, owner, nullptr, GetModuleHandleW(nullptr), nullptr);
   Check(owner && bar, "native scrollbar presentation fixture creates");
   ShowWindow(owner, SW_SHOWNOACTIVATE);
   ScrollbarPresentationProbe probe;
   SetWindowSubclass(bar, ScrollbarPresentationProbe::Procedure, 81, reinterpret_cast<DWORD_PTR>(&probe));
+  ScrollbarInteractionFixture interaction;
+  interaction.bar = bar;
+  SetWindowSubclass(owner, ScrollbarInteractionFixture::Owner, 83, reinterpret_cast<DWORD_PTR>(&interaction));
+  SetWindowSubclass(bar, ScrollbarInteractionFixture::Scrollbar, 84, 0);
   const RECT bounds{20, 10, 32, 410};
   Check(ui::LayoutSettingsScrollbar(bar, bounds, 1200, 400, 0), "overflow publishes a scrollbar");
   Check((GetWindowLongPtrW(bar, GWL_STYLE) & WS_VISIBLE) != 0, "overflow scrollbar is visible");
@@ -1497,6 +1532,44 @@ void TestScrollbarPresentation() {
     Check(!ui::LayoutSettingsScrollbar(bar, bounds, 1200, 400, 0), "unchanged scrollbar layout is a no-op");
   Check(probe.shows == 0 && probe.moves == 0 && !GetUpdateRect(bar, nullptr, FALSE),
         "unchanged scrollbar does not reappear, move or invalidate itself");
+  SetFocus(bar);
+  GUITHREADINFO gui{sizeof(gui)};
+  Check(GetFocus() == bar && GetGUIThreadInfo(GetCurrentThreadId(), &gui) && gui.hwndCaret != bar,
+        "the native scrollbar keeps keyboard focus without creating a blinking XOR caret");
+  SendMessageW(bar, WM_KEYDOWN, VK_NEXT, 1);
+  SendMessageW(bar, WM_KEYUP, VK_NEXT, 1);
+  GetScrollInfo(bar, SB_CTL, &info);
+  Check(info.nPos == 400 && interaction.page_down == 1,
+        "focused scrollbar preserves the native PageDown keyboard request");
+  interaction.position = 0;
+  ui::LayoutSettingsScrollbar(bar, bounds, 1200, 400, 0);
+  SCROLLBARINFO geometry{sizeof(geometry)};
+  GetScrollBarInfo(bar, OBJID_CLIENT, &geometry);
+  const auto page_point = MAKELPARAM(6, (geometry.xyThumbBottom + 400 - geometry.dxyLineButton) / 2);
+  // Enter the standard control's real mouse-tracking path, including its modal
+  // loop and direct painting. Queue release so this does not require a person.
+  PostMessageW(bar, WM_LBUTTONUP, 0, page_point);
+  SendMessageW(bar, WM_LBUTTONDOWN, MK_LBUTTON, page_point);
+  MSG release{};
+  while (PeekMessageW(&release, bar, WM_LBUTTONUP, WM_LBUTTONUP, PM_REMOVE))
+    DispatchMessageW(&release);
+  GetScrollInfo(bar, SB_CTL, &info);
+  gui.cbSize = sizeof(gui);
+  Check(info.nPos == 400 && interaction.page_down == 2 && interaction.end_scroll != 0,
+        "native track click pages once and completes its mouse interaction");
+  Check(GetFocus() == bar && GetGUIThreadInfo(GetCurrentThreadId(), &gui) && gui.hwndCaret != bar,
+        "native mouse paging retains focus without leaving a checkerboard caret at the old thumb");
+  HDC capture = CreateCompatibleDC(nullptr);
+  HBITMAP bitmap = CreateBitmap(12, 400, 1, 32, nullptr);
+  const auto previous_bitmap = SelectObject(capture, bitmap);
+  SendMessageW(bar, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(capture), PRF_CLIENT);
+  GetScrollBarInfo(bar, OBJID_CLIENT, &geometry);
+  const auto& palette = ui::Palette(ui::ThemeId::kNight);
+  Check(GetPixel(capture, 6, (geometry.xyThumbTop + geometry.xyThumbBottom) / 2) == ui::ToColorRef(palette.accent) &&
+        GetPixel(capture, 0, 200) == ui::ToColorRef(palette.settings_background),
+        "focused scrollbar prints a themed focus thumb and clean track after native paging");
+  SelectObject(capture, previous_bitmap); DeleteObject(bitmap); DeleteDC(capture);
+  SetFocus(owner);
   ui::LayoutSettingsScrollbar(bar, bounds, 1200, 400, 800);
   GetScrollInfo(bar, SB_CTL, &info);
   Check(info.nPos == 800 && GetUpdateRect(bar, nullptr, FALSE), "changed position repaints the themed thumb");
@@ -1535,6 +1608,19 @@ void TestScrollbarPresentation() {
   host.Open(nullptr, false);
   const auto window = host.hwnd();
   ShowWindow(window, SW_SHOWNOACTIVATE);
+  host.OpenPage(nullptr, ui::SettingsPage::kPlugins, 0, false);
+  const auto extensions = FindWindowExW(window, nullptr, L"Rimes.ExtensionPages", nullptr);
+  const auto gallery_bar = extensions ? GetDlgItem(extensions, 7200) : nullptr;
+  Check(extensions && IsWindowVisible(extensions) && gallery_bar && IsWindowVisible(gallery_bar),
+        "gallery fixture exposes its own overflowing native scrollbar");
+  if (gallery_bar) {
+    SetFocus(window);
+    SCROLLINFO before{sizeof(before), SIF_POS}; GetScrollInfo(gallery_bar, SB_CTL, &before);
+    SendMessageW(window, WM_MOUSEWHEEL, MAKEWPARAM(0, static_cast<WORD>(-WHEEL_DELTA)), 0);
+    SCROLLINFO after{sizeof(after), SIF_POS}; GetScrollInfo(gallery_bar, SB_CTL, &after);
+    Check(after.nPos > before.nPos && GetFocus() == window,
+          "root-focused mouse wheel reaches the visible gallery without taking keyboard focus");
+  }
   // Inspect the entire descendant inventory: dropdown lists and bounded
   // documents may scroll independently, but a page has only one main bar.
   for (const auto page : ui::kSettingsNavOrder) {
