@@ -463,6 +463,14 @@ void CheckNativeTrackPositions(HWND editor, const metrics::Article& article,
   Check(mismatches == 0, "every committed glyph agrees with its lower-track cell without cumulative drift");
   CHARRANGE selection{}; SendMessageW(editor, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
   POINTL caret{}; SendMessageW(editor, EM_POSFROMCHAR, reinterpret_cast<WPARAM>(&caret), selection.cpMax);
+  RECT candidate_caret{};
+  Check(core::QueryTypingPracticeCaret(editor, &candidate_caret),
+        "the trusted practice editor publishes its visible candidate cell");
+  POINT candidate_position{caret.x, caret.y};
+  ClientToScreen(editor, &candidate_position);
+  Check(candidate_caret.left == candidate_position.x && candidate_caret.top == candidate_position.y &&
+            candidate_caret.bottom - candidate_caret.top == px(28),
+        "candidate geometry uses the real 28 DIP cell and excludes paragraph-after spacing");
   const auto caret_index = metrics::Characters(workbench::Utf8(raw.substr(0, static_cast<std::size_t>(selection.cpMax)))).size();
   Check(caret_index < cells.size(), "geometry fixture retains a next cell for its native caret");
   if (caret_index < cells.size()) {

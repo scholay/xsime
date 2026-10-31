@@ -13,6 +13,7 @@ inline constexpr wchar_t kTypingPracticeServiceWindowProperty[] = L"Rimes.Typing
 inline constexpr UINT kTypingPracticeCancelMessage = WM_APP + 92;
 inline constexpr wchar_t kTypingPracticeLayoutPendingProperty[] = L"Rimes.TypingPractice.LayoutPending.v1";
 inline constexpr UINT kTypingPracticeLayoutMessage = WM_APP + 93;
+inline constexpr UINT kTypingPracticeCaretMessage = WM_APP + 94;
 inline bool HasFloatingPracticeComposition(HWND editor) noexcept {
   return editor && GetPropW(editor, kTypingPracticeCompositionProperty) == reinterpret_cast<HANDLE>(editor);
 }
@@ -56,6 +57,20 @@ inline bool IsTypingPracticeEditor(HWND editor) noexcept {
   wchar_t owner_class[64]{};
   return GetClassNameW(GetParent(editor), owner_class, 64) > 0 &&
          std::wcscmp(owner_class, L"Rimes.ExtensionPages") == 0;
+}
+inline bool QueryTypingPracticeCaret(HWND editor, RECT* caret) noexcept {
+  if (!caret) return false;
+  *caret = {};
+  if (!IsTypingPracticeEditor(editor)) return false;
+  RECT queried{};
+  // Only the trusted same-thread editor may receive this local pointer. Its
+  // cell geometry excludes RichEdit paragraph spacing included by GetTextExt.
+  if (!SendMessageW(editor, kTypingPracticeCaretMessage, 0,
+                    reinterpret_cast<LPARAM>(&queried)) ||
+      !IsTypingPracticeEditor(editor) || queried.right <= queried.left ||
+      queried.bottom <= queried.top) return false;
+  *caret = queried;
+  return true;
 }
 inline HWND TypingPracticeEditorForView(HWND view) noexcept {
   const auto editor = GetFocus();

@@ -33,6 +33,8 @@ Windows 以 `OfficialPlugins/native/macos/TypingSpeedSettingsViewController.swif
 
 排版和选区均使用 RichEdit 原始 UTF-16／单 CR 索引，避免 `WM_GETTEXT` 的 CRLF 展开造成跨行偏移。
 每格字距以真实文本存储坐标校准，包含字体替代、上下文排版及行尾空格。
+测速候选定位通过受信任编辑器的同线程查询使用真实字格坐标，
+不使用会把段后留白计入高度的 RichEdit `GetTextExt` 范围；普通应用仍走原有 TSF 几何路径。
 排版期间保持编辑器可见，避免 `WM_SETREDRAW(FALSE)` 暂时移除 `WS_VISIBLE` 导致焦点与 TSF 目标失效。
 双轨和原生文字整帧呈现，静止时不通过轮询反复刷新全文。
 

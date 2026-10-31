@@ -1655,6 +1655,15 @@ RECT TextService::QueryCaretRect(ITfContext* context, TfEditCookie cookie,
   if (context == nullptr) {
     return caret;
   }
+  if (const auto editor = PracticeEditor(context)) {
+    // This editor deliberately adds large paragraph gaps between track rows.
+    // Its collapsed TSF range can include those gaps rather than the actual
+    // insertion cell. Keep unavailable cell geometry unknown, never replace
+    // it with a padded GetTextExt rectangle.
+    core::QueryTypingPracticeCaret(editor, &caret);
+    return caret;
+  }
+  if (floating_practice_editor_) return caret;
   auto* read = new (std::nothrow) ScopeRead(context,
       composition_start ? composition_ : nullptr, composition_start);
   if (read) {

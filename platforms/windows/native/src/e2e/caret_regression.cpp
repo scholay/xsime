@@ -54,6 +54,37 @@ struct CaretRegressionProbe {
 };
 }  // namespace rimes::windows::tsf
 
+namespace {
+struct PracticeCaretFixture {
+  static constexpr wchar_t property[] = L"Rimes.CaretRegression.PracticeCaret";
+  HWND editor;
+  WNDPROC original;
+  RECT cell{500, 360, 501, 388};
+  bool available = true;
+  explicit PracticeCaretFixture(HWND window) : editor(window),
+      original(reinterpret_cast<WNDPROC>(GetWindowLongPtrW(window, GWLP_WNDPROC))) {
+    SetPropW(editor, property, reinterpret_cast<HANDLE>(this));
+    SetWindowLongPtrW(editor, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(Procedure));
+  }
+  ~PracticeCaretFixture() {
+    if (IsWindow(editor)) {
+      SetWindowLongPtrW(editor, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(original));
+      RemovePropW(editor, property);
+    }
+  }
+  static LRESULT CALLBACK Procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
+    const auto* self = reinterpret_cast<PracticeCaretFixture*>(GetPropW(window, property));
+    if (self && message == rimes::windows::core::kTypingPracticeCaretMessage) {
+      if (!self->available || !lparam) return FALSE;
+      *reinterpret_cast<RECT*>(lparam) = self->cell;
+      return TRUE;
+    }
+    return self ? CallWindowProcW(self->original, window, message, wparam, lparam)
+                : DefWindowProcW(window, message, wparam, lparam);
+  }
+};
+}  // namespace
+
 int main() {
   using namespace rimes::windows;
   const auto com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -304,16 +335,26 @@ int main() {
   expect(!core::IsTypingPracticeEditor(practice_editor), "mismatched practice capability is rejected");
   SetPropW(practice_editor, core::kTypingPracticeEditorProperty, reinterpret_cast<HANDLE>(practice_editor));
   expect(core::IsTypingPracticeEditor(practice_editor), "focused owned practice capability is accepted");
+  RECT local_caret{1, 2, 3, 4};
+  expect(!core::QueryTypingPracticeCaret(practice_editor, &local_caret) && IsRectEmpty(&local_caret),
+         "a trusted editor without a cell-geometry handler returns unknown geometry");
+  PracticeCaretFixture practice_geometry(practice_editor);
+  expect(core::QueryTypingPracticeCaret(practice_editor, &local_caret) &&
+             EqualRect(&local_caret, &practice_geometry.cell),
+         "the trusted focused editor supplies its exact insertion-cell rectangle");
   const auto unrelated_view = CreateWindowExW(0, L"STATIC", L"", WS_POPUP,
       0, 0, 1, 1, nullptr, nullptr, practice_class.hInstance, nullptr);
   expect(!core::TypingPracticeEditorForView(unrelated_view), "unrelated view cannot adopt the practice focus policy");
   DestroyWindow(unrelated_view);
   SetFocus(practice_owner);
   expect(!core::IsTypingPracticeEditor(practice_editor), "a marked editor loses floating policy when unfocused");
+  expect(!core::QueryTypingPracticeCaret(practice_editor, &local_caret) && IsRectEmpty(&local_caret),
+         "focus loss invalidates the local geometry capability and clears stale output");
   SetFocus(practice_editor);
   e2e::FakeDocument practice_document;
   practice_document.text = L"prefix";
   practice_document.range_advance = 28;
+  practice_document.caret_rect = {300, 600, 302, 676};
   practice_document.selection_acp = 6;
   practice_document.view_window = practice_editor;
   auto* practice_context = new e2e::FakeContext(&practice_document);
@@ -324,7 +365,15 @@ int main() {
   practice_state.has_snapshot = practice_state.composing = practice_state.candidates_visible = true;
   practice_state.candidates.push_back({0, L"你", L"", L"1"});
   practice_state.page_size = 5;
-  const auto practice_anchor = practice_document.caret_rect.left + 6 * practice_document.range_advance;
+  const auto practice_anchor = practice_geometry.cell.left;
+  const auto native_cell = tsf::CaretRegressionProbe::Query(*practice_service, practice_context);
+  expect(EqualRect(&native_cell, &practice_geometry.cell),
+         "practice cell geometry overrides the inflated collapsed TSF paragraph extent");
+  practice_geometry.available = false;
+  const auto unavailable_cell = tsf::CaretRegressionProbe::Query(*practice_service, practice_context);
+  expect(IsRectEmpty(&unavailable_cell),
+         "missing practice geometry cannot fall back to a padded TSF text extent");
+  practice_geometry.available = true;
   for (const auto* code : {L"n", L"nihao", L"ni"}) {
     practice_state.composition = code;
     practice_state.caret_utf16 = static_cast<std::uint32_t>(practice_state.composition.size());
@@ -336,11 +385,10 @@ int main() {
                practice_document.text == L"prefix" && practice_document.selection_acp == 6,
            "floating code keeps its local lifecycle without moving the cell or changing scored text");
     expect(shown.visible && shown.floating_composition && shown.composition == code &&
-               shown.caret_rect.left == practice_anchor,
+               EqualRect(&shown.caret_rect, &practice_geometry.cell),
            "floating candidate preedit stays at the committed insertion cell");
   }
-  practice_document.caret_rect.left += 40; practice_document.caret_rect.right += 40;
-  practice_document.caret_rect.top += 24; practice_document.caret_rect.bottom += 24;
+  OffsetRect(&practice_geometry.cell, 40, 24);
   core::NotifyTypingPracticeLayoutChanged(practice_editor);
   core::NotifyTypingPracticeLayoutChanged(practice_editor);
   expect(GetPropW(practice_editor, core::kTypingPracticeLayoutPendingProperty) == reinterpret_cast<HANDLE>(practice_editor),
@@ -351,7 +399,7 @@ int main() {
   }
   const auto after_layout = tsf::CaretRegressionProbe::Snapshot(*practice_service);
   expect(after_layout.caret_rect.left == practice_anchor + 40 &&
-             after_layout.caret_rect.top == practice_document.caret_rect.top &&
+             EqualRect(&after_layout.caret_rect, &practice_geometry.cell) &&
              !GetPropW(practice_editor, core::kTypingPracticeLayoutPendingProperty),
          "cell reformat and page scrolling refresh the current candidate geometry without another key");
   auto raw_only = practice_state;
@@ -361,10 +409,14 @@ int main() {
          "unmatched practice code still has a floating preedit display");
   practice_state.commit_text = L"你";
   practice_state.composition = L"hao"; practice_state.caret_utf16 = 3;
+  OffsetRect(&practice_geometry.cell, 28, 0);
   tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state);
   expect(practice_document.text == L"prefix你" && practice_document.composition.empty() &&
              !practice_document.composing && core::HasFloatingPracticeComposition(practice_editor),
          "partial commit inserts only accepted text while the next floating code remains active");
+  const auto after_commit = tsf::CaretRegressionProbe::Snapshot(*practice_service);
+  expect(EqualRect(&after_commit.caret_rect, &practice_geometry.cell),
+         "the next preedit follows the committed cell without including paragraph space-after");
   core::NotifyTypingPracticeLayoutChanged(practice_editor);
   expect(core::CancelFloatingPracticeComposition(practice_editor),
          "a trusted editor can request immediate floating cancellation");
@@ -419,6 +471,9 @@ int main() {
   tsf::CaretRegressionProbe::Bind(*practice_service, practice_context);
   tsf::CaretRegressionProbe::Apply(*practice_service, practice_context, practice_state);
   SetFocus(practice_owner);
+  const auto unfocused_cell = tsf::CaretRegressionProbe::Query(*practice_service, practice_context);
+  expect(IsRectEmpty(&unfocused_cell),
+         "a floating practice context cannot query or reuse geometry after focus moves away");
   practice_service->OnSetFocus(FALSE);
   expect(!core::HasFloatingPracticeComposition(practice_editor) && practice_document.text == L"prefix你",
          "focus loss clears local floating composition without changing text");
