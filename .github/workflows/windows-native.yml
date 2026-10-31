@@ -63,6 +63,7 @@ jobs:
             platforms/windows/native/out/build/windows-${{ matrix.architecture }}/Release/RimesSandboxProbe.exe
             platforms/windows/native/out/build/windows-${{ matrix.architecture }}/Release/RimesAppContainerLauncher.exe
             platforms/windows/native/out/build/windows-${{ matrix.architecture }}/Release/RimesTsfTestHost.exe
+            platforms/windows/native/out/build/windows-${{ matrix.architecture }}/Release/RimesUserLexiconTests.exe
             platforms/windows/native/out/build/windows-${{ matrix.architecture }}/Release/rimes-windows-registration.json
           if-no-files-found: error
           retention-days: 14
