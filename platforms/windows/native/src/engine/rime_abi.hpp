@@ -183,7 +183,23 @@ struct ApiPrefix {
   void (*unused_config_set_string)();
   Bool (*config_get_item)(Config*, const char*, Config*);
   Bool (*config_set_item)(Config*, const char*, Config*);
+  void (*unused_config_clear)();
+  void (*unused_config_create_list)();
+  void (*unused_config_create_map)();
+  void (*unused_config_list_size)();
+  void (*unused_config_begin_list)();
+  const char* (*get_input)(SessionId);
+  std::size_t (*get_caret_pos)(SessionId);
 };
+
+// These optional slots follow config_begin_list in the pinned librime 1.17.0
+// header. Older DLLs retain ordinary input, but cannot authorize chord rewrites.
+inline bool HasRawInputApi(const ApiPrefix* api) noexcept {
+  constexpr auto required = offsetof(ApiPrefix, get_caret_pos) +
+      sizeof(ApiPrefix::get_caret_pos) - sizeof(ApiPrefix::data_size);
+  return api && api->data_size >= static_cast<int>(required) &&
+      api->data_size <= 64 * 1024 && api->get_input && api->get_caret_pos;
+}
 
 using GetApiFunction = ApiPrefix* (*)();
 

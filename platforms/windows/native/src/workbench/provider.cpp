@@ -223,7 +223,7 @@ bool LoadSettings(Settings* value, std::string* error) {
     // Only a new profile starts with the extension disabled.
     candidate.chord_enabled = j.value("chord_enabled", true);
     candidate.chord_interval_ms = j.value("chord_interval_ms", 50U);
-    candidate.chord_profile = j.value("chord_profile", Json());
+    candidate.chord_profile = EffectiveChordProfile(j.value("chord_profile", Json()));
     candidate.target_language = j.value("target_language", "English");
     candidate.source_language = j.value("source_language", OppositeTranslationLanguage(candidate.target_language));
     candidate.translation_speech = j.value("translation_speech", false);
@@ -375,7 +375,7 @@ bool SaveSettings(const Settings& value, std::string* error) {
     j["candidate_width"] = value.candidate_width; j["candidate_height"] = value.candidate_height;
     j["candidate_label_size"] = value.candidate_label_size;
     j["chord_enabled"] = value.chord_enabled; j["chord_interval_ms"] = value.chord_interval_ms;
-    j["chord_profile"] = value.chord_profile;
+    j["chord_profile"] = EffectiveChordProfile(value.chord_profile);
     j["translation_provider"] = value.translation_provider;
     j["source_language"] = value.source_language;
     j["translation_speech"] = value.translation_speech;

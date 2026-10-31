@@ -256,7 +256,7 @@ void SettingsUiHost::Open(HWND owner, bool visible) {
   if (callbacks_.metrics) extensions_ = std::make_unique<ExtensionPages>(hwnd_, ExtensionCallbacks{
       callbacks_.metrics, callbacks_.load, callbacks_.plugins, callbacks_.manage_plugin,
       [this](ui::SettingsPage page) { OpenPage(owner_, page); }});
-  for (const auto id : {5112, 6000, 6007, 6011, 6023, 6032})
+  for (const auto id : {5112, 6000, 6007, 6011, 6023, 6028, 6032})
     SetWindowSubclass(GetDlgItem(hwnd_, id), ComboProcedure, 1, reinterpret_cast<DWORD_PTR>(this));
   SetWindowSubclass(GetDlgItem(hwnd_, 6070), ConnectorScrollProcedure, 1, reinterpret_cast<DWORD_PTR>(this));
   ready_ = true;
@@ -363,7 +363,7 @@ bool SettingsUiHost::HandleDialogMessage(MSG* message) {
     const auto key = message->wParam;
     const int control_id = GetDlgCtrlID(GetParent(message->hwnd) == hwnd_ ? message->hwnd : GetParent(message->hwnd));
     if ((message->hwnd == combo_hotkey_modifiers_ || message->hwnd == combo_send_modifiers_ || message->hwnd == combo_plugin_modifiers_[0] || message->hwnd == combo_plugin_modifiers_[1] || message->hwnd == combo_connector_ ||
-         (control_id >= 433 && control_id <= 435) || control_id == 5112 || control_id == 6000 || control_id == 6005 || control_id == 6007 || control_id == 6011 || control_id == 6023 || control_id == 6032 || control_id == 6050 ||
+         (control_id >= 433 && control_id <= 435) || control_id == 5112 || control_id == 6000 || control_id == 6005 || control_id == 6007 || control_id == 6011 || control_id == 6023 || control_id == 6028 || control_id == 6032 || control_id == 6050 ||
          message->hwnd == combo_auto_send_ || message->hwnd == combo_translation_) &&
         (key == VK_RETURN || key == VK_ESCAPE) &&
         SendMessageW(GetParent(message->hwnd) == hwnd_ ? message->hwnd : GetParent(message->hwnd), CB_GETDROPPEDSTATE, 0, 0))
@@ -1264,7 +1264,7 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
       if (HIWORD(wparam) == EN_CHANGE || HIWORD(wparam) == CBN_EDITCHANGE ||
           HIWORD(wparam) == EN_KILLFOCUS || HIWORD(wparam) == CBN_SELCHANGE) {
         const auto id = LOWORD(wparam);
-        if (id < 5100 || (id >= 6004 && id <= 6015) || (id >= 6030 && id <= 6035) || id == 6063) {
+        if (id < 5100 || (id >= 6004 && id <= 6015) || (id >= 6030 && id <= 6035) || id == 6028 || id == 6063) {
           if (HIWORD(wparam) == EN_KILLFOCUS) {
             if (self->pending_save_) self->CommitSave();
           } else self->QueueSave(HIWORD(wparam) == CBN_SELCHANGE);

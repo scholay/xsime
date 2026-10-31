@@ -11,6 +11,11 @@ struct ChordMapping {
 struct ChordProfile {
   std::string id, name, left, right, boundary;
   std::vector<ChordMapping> mappings;
+  std::string encoding = "fullPinyin";
+  std::string EngineOutput(const ChordMapping& mapping) const;
+  std::string EngineSchema() const {
+    return encoding == "ziranma" ? "rimes_windows_chord_ziranma" : "rime_ice";
+  }
   std::string Canonical(const std::string &keys) const {
     std::string result;
     for (char c : left + right)
@@ -37,17 +42,17 @@ struct ChordProfile {
                    value.at("leftKeys"),
                    value.at("rightKeys"),
                    value.value("boundaryPolicy", "explicitSyllables"),
-                   {}};
+                   {}, value.value("outputEncoding", "fullPinyin")};
     if (p.id.empty() || p.id.size() > 160 ||
         p.id.find('\0') != std::string::npos || p.name.empty() ||
         p.name.size() > 240 || p.name.find('\0') != std::string::npos ||
         p.left.empty() || p.right.empty() ||
-        value.value("outputEncoding", "fullPinyin") != "fullPinyin" ||
+        (p.encoding != "fullPinyin" && p.encoding != "ziranma") ||
         (value.contains("nativeSchemeID") &&
          !value.at("nativeSchemeID").is_null()) ||
         (p.boundary != "explicitSyllables" && p.boundary != "legacyBatches"))
       throw std::runtime_error(
-          "请使用全拼输出的并击键位配置；名称和左右键区不能为空。");
+          "请选择全拼或自然码双拼输出；名称和左右键区不能为空。");
     const auto alphabet = p.left + p.right;
     std::set<char> keys(alphabet.begin(), alphabet.end());
     if (keys.size() != alphabet.size() ||
@@ -73,12 +78,22 @@ struct ChordProfile {
       m.keys = p.Canonical(m.keys);
       if (!seen.insert(m.keys).second)
         throw std::runtime_error("并击组合重复（按键顺序不影响组合）。");
+      if (p.encoding == "ziranma") {
+        try { (void)p.EngineOutput(m); }
+        catch (...) {
+          throw std::runtime_error("第 " + std::to_string(p.mappings.size() + 1) +
+              " 条映射（" + m.output + "）不能转为自然码，请检查完整音节或片段类型。");
+        }
+      }
       p.mappings.push_back(std::move(m));
     }
     return p;
   }
 };
 core::Json BuiltinChordProfile();
+core::Json LegacyBuiltinChordProfile();
+core::Json EffectiveChordProfile(const core::Json& value);
+std::string NaturalChordSchema();
 
 // A physical batch never outlives its TSF session. The interval separates
 // non-simultaneous key downs; the final release settles the current batch.
@@ -140,7 +155,7 @@ private:
     std::string text = keys;
     if (keys.size() > 1) {
       if (const auto *m = p.Find(keys))
-        text = m->output +
+        text = p.EngineOutput(*m) +
                ((m->kind == "syllable" || p.boundary == "legacyBatches") ? "'"
                                                                          : "");
       else {
@@ -157,7 +172,7 @@ private:
         keys.find_first_not_of(p.right) == std::string::npos) {
       if (const auto *combined = p.Find(previous_ + keys);
           combined && combined->kind == "syllable") {
-        text = combined->output + "'";
+        text = p.EngineOutput(*combined) + "'";
         raw_ = previous_prefix_;
         replace = true;
       }

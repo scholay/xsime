@@ -19,6 +19,20 @@ option(RIMES_TSF_DIAGNOSTICS
 include(CTest)
 enable_language(RC)
 configure_file(src/product_version.hpp.in generated/rimes_version.hpp @ONLY)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(rimes_chord_generator "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/generate-chord-encoding.py")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${rimes_chord_generator}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../linux/chord/resources/native-chord.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../OfficialPlugins/native/macos/ChordOutputEncoding.swift"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../OfficialPlugins/native/macos/ChordKeymap.swift"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../OfficialPlugins/native/macos/ChordController.swift")
+execute_process(COMMAND "${Python3_EXECUTABLE}" -X utf8 "${rimes_chord_generator}"
+    --output "${CMAKE_CURRENT_BINARY_DIR}/generated/chord_encoding.generated.hpp"
+    RESULT_VARIABLE rimes_chord_result)
+if(NOT rimes_chord_result EQUAL 0)
+    message(FATAL_ERROR "Regenerate and review the macOS chord encoding contract")
+endif()
 
 # Keep every runnable artifact together so architecture checks, registration,
 # and later packaging never need to guess target-specific subdirectories.

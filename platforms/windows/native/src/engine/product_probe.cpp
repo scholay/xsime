@@ -1,6 +1,11 @@
 #include <atomic>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
+#include <map>
+#include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include "rime_engine.hpp"
@@ -9,6 +14,86 @@
 using namespace rimes::windows::engine;
 
 namespace {
+std::string ReadProbeFile(const std::filesystem::path& path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) throw std::runtime_error("cannot read isolated probe file");
+  return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+bool TestChordSchemaDeployment(RimeEngine& engine, const std::filesystem::path& user) {
+  using namespace rimes::windows;
+  const auto yaml = workbench::NaturalChordSchema();
+  const auto source = user / L"rimes_windows_chord_ziranma.schema.yaml";
+  std::string error;
+  if (!engine.EnsureChordSchema(yaml, &error)) {
+    std::cerr << "Natural chord schema deployment failed: " << error << '\n'; return false;
+  }
+  const auto previous_source = ReadProbeFile(source);
+  const std::string external = "# external user-owned schema\nschema:\n  schema_id: rimes_windows_chord_ziranma\n";
+  { std::ofstream output(source, std::ios::binary | std::ios::trunc); output << external; }
+  const bool protected_source = !engine.EnsureChordSchema(yaml, &error) &&
+      ReadProbeFile(source) == external;
+  { std::ofstream output(source, std::ios::binary | std::ios::trunc); output << previous_source; }
+  if (!protected_source) { std::cerr << "Chord deployment overwrote a user-owned schema\n"; return false; }
+  if (!engine.EnsureChordSchema(yaml, &error)) return false;
+  std::map<std::filesystem::path, std::string> compiled;
+  for (const auto& item : std::filesystem::directory_iterator(user / L"build"))
+    if (item.path().filename().wstring().starts_with(L"rimes_windows_chord_ziranma."))
+      compiled[item.path()] = ReadProbeFile(item.path());
+  const std::string invalid = "# XSIME Windows generated chord engine schema; do not edit.\n"
+      "schema:\n  schema_id: rimes_windows_chord_ziranma\ninvalid: [\n";
+  if (engine.EnsureChordSchema(invalid, &error) || ReadProbeFile(source) != previous_source) {
+    std::cerr << "Failed chord deployment did not retain its previous source\n"; return false;
+  }
+  for (const auto& [path, bytes] : compiled)
+    if (ReadProbeFile(path) != bytes) {
+      std::cerr << "Failed chord deployment changed previous compiled data\n"; return false;
+    }
+  const auto fallback = engine.CreateSession(&error);
+  if (!fallback || engine.Configure(fallback, "rimes_windows_chord_ziranma", false, false, false, &error) ||
+      !engine.Configure(fallback, "rime_ice", false, false, false, &error)) {
+    std::cerr << "Failed chord deployment did not isolate its unavailable adapter\n"; return false;
+  }
+  engine.DestroySession(fallback);
+  if (!engine.EnsureChordSchema(yaml, &error)) return false;
+  const auto session = engine.CreateSession(&error);
+  if (!session || engine.EnsureChordSchema(yaml, &error) ||
+      !engine.Configure(session, "rimes_windows_chord_ziranma", false, false, false, &error)) {
+    std::cerr << "Chord deployment did not preserve idle-session isolation\n"; return false;
+  }
+  EngineSnapshot snapshot; bool replaced = false;
+  if (!engine.ProcessChordText(session, "hk'", "", {}, &snapshot, &replaced, &error) ||
+      !snapshot.raw_input_available || snapshot.raw_input != "hk'" ||
+      snapshot.raw_caret != 3 || snapshot.composition.find("hao") == std::string::npos ||
+      snapshot.composition.find("hk") != std::string::npos || snapshot.candidates.empty() ||
+      snapshot.candidates.front().text != "好") {
+    std::cerr << "Natural chord codes did not display full pinyin with normal candidates\n"; return false;
+  }
+  auto stale = snapshot;
+  stale.raw_input = "other";
+  if (!engine.ProcessChordText(session, "", "ni'", stale, &snapshot, &replaced, &error) || replaced ||
+      snapshot.raw_input != "hk'") {
+    std::cerr << "Chord rewrite accepted different owned raw input\n"; return false;
+  }
+  stale = snapshot; stale.raw_caret = 0;
+  if (!engine.ProcessChordText(session, "", "ni'", stale, &snapshot, &replaced, &error) || replaced ||
+      snapshot.raw_input != "hk'") {
+    std::cerr << "Chord rewrite accepted a different raw caret\n"; return false;
+  }
+  stale = snapshot; stale.raw_input_available = false;
+  if (!engine.ProcessChordText(session, "", "ni'", stale, &snapshot, &replaced, &error) || replaced ||
+      snapshot.raw_input != "hk'") {
+    std::cerr << "Chord rewrite did not require exact raw authority\n"; return false;
+  }
+  const auto authority = snapshot;
+  if (!engine.ProcessChordText(session, "", "ni'", authority, &snapshot, &replaced, &error) || !replaced)
+    return false;
+  if (!engine.ProcessKey(session, ' ', 0, &snapshot, &error) || snapshot.commit_text != "你") return false;
+  engine.DestroySession(session);
+  std::cout << "Natural chord deployment, source protection, rollback and raw/preedit authority passed\n";
+  return true;
+}
+
 // The Runtime owns production preferences/plugin state, so keep this probe's
 // state separate from both the caller's settings and its isolated Rime userdb.
 class RuntimePreferences {
@@ -56,6 +141,7 @@ bool TestNativeIsaac2026(RimeEngine& engine, const std::filesystem::path& log_di
   workbench::Runtime runtime;
   if (runtime.Configuration().schema != "my_combo") return false;
   broker::BrokerConnection connection(0, &engine, &runtime);
+  auto* active_connection = &connection;
   const auto peer = GetCurrentProcessId() + 1;
   std::uint32_t request_id = 1;
   std::uint64_t sequence = 1;
@@ -64,14 +150,18 @@ bool TestNativeIsaac2026(RimeEngine& engine, const std::filesystem::path& log_di
   auto exchange = [&](core::MessageType type, std::vector<std::byte> bytes) {
     core::Frame request; request.header.message_type=type; request.header.request_id=request_id++;
     request.payload=std::move(bytes);
-    return connection.Handle(request,peer,&response)==broker::ClientAction::kContinue;
+    return active_connection->Handle(request,peer,&response)==broker::ClientAction::kContinue;
   };
   core::InputSessionOpened opened;
-  if (!core::EncodeClientHello({peer,0,core::kModifierSnapshotsCapability | core::kPendingChordCapability,"IsaacProbe"},&payload) ||
-      !exchange(core::MessageType::kClientHello,std::move(payload)) ||
-      !core::EncodeOpenInputSession({1,{}},&payload) ||
-      !exchange(core::MessageType::kOpenInputSession,std::move(payload)) ||
-      !core::DecodeInputSessionOpened(response.payload,&opened)) return false;
+  auto open = [&](std::uint64_t capabilities) {
+    request_id = 1; sequence = 1;
+    return core::EncodeClientHello({peer,0,capabilities,"IsaacProbe"},&payload) &&
+        exchange(core::MessageType::kClientHello,std::move(payload)) &&
+        core::EncodeOpenInputSession({1,{}},&payload) &&
+        exchange(core::MessageType::kOpenInputSession,std::move(payload)) &&
+        core::DecodeInputSessionOpened(response.payload,&opened);
+  };
+  if (!open(core::kModifierSnapshotsCapability | core::kPendingChordCapability)) return false;
   core::InputState state;
   auto key = [&](unsigned vk,bool down) {
     core::KeyEvent e; e.session_id=opened.session_id; e.sequence_id=sequence++; e.virtual_key=vk;
@@ -93,6 +183,29 @@ bool TestNativeIsaac2026(RimeEngine& engine, const std::filesystem::path& log_di
   if(!batch("dv") || !key('I',true) || !key(VK_SPACE,true) || state.commit_text!="你" ||
       !key('I',false) || !key(VK_SPACE,false)) {
     std::cerr<<"Adjacent chord must settle before a command while a key remains held\n"; return false;
+  }
+  auto full_pinyin = runtime.Configuration();
+  full_pinyin.chord_profile = workbench::BuiltinChordProfile();
+  full_pinyin.chord_profile["id"] = "4619d746-744e-4a50-9bf4-fde4f126bf48";
+  full_pinyin.chord_profile["name"] = "Explicit full-pinyin probe";
+  full_pinyin.chord_profile["outputEncoding"] = "fullPinyin";
+  for (auto& mapping : full_pinyin.chord_profile["mappings"])
+    if (mapping["keys"] == "dvi") mapping["output"] = "hao";
+  // A preference edit cannot reinterpret a held batch, or the composition
+  // it subsequently opens. The new profile/schema starts after that commit.
+  if (!key('D', true) || !key('V', true) ||
+      !runtime.Configure(full_pinyin, {}, false, nullptr) ||
+      !key('D', false) || !key('V', false) || !batch("i") ||
+      state.composition.find("ni") == std::string::npos ||
+      !key(VK_SPACE, true) || state.commit_text != "你" || !key(VK_SPACE, false) ||
+      !batch("dvi") || state.composition.find("hao") == std::string::npos ||
+      !key(VK_SPACE, true) || state.commit_text != "好" || !key(VK_SPACE, false)) {
+    std::cerr << "Chord profile/schema changed before the pending composition ended\n"; return false;
+  }
+  auto natural = runtime.Configuration(); natural.chord_profile = workbench::BuiltinChordProfile();
+  if (!runtime.Configure(natural, {}, false, nullptr) || !batch("dvi") ||
+      !key(VK_SPACE, true) || state.commit_text != "你" || !key(VK_SPACE, false)) {
+    std::cerr << "Idle chord profile/schema did not switch back to natural encoding\n"; return false;
   }
   if(!key('D',true) || !(state.state_flags & static_cast<unsigned>(core::InputStateFlags::kPendingChord)) ||
       !state.composition.empty() || !key(VK_ESCAPE,true) ||
@@ -120,6 +233,67 @@ bool TestNativeIsaac2026(RimeEngine& engine, const std::filesystem::path& log_di
       !exchange(core::MessageType::kOpenInputSession,std::move(payload)) ||
       !core::DecodeInputSessionOpened(response.payload,&opened) || !batch("i") ||
       state.composition.find('n')!=std::string::npos || state.composition.find("hao")!=std::string::npos) return false;
+  if (!core::EncodeCloseInputSession({opened.session_id}, &payload) ||
+      !exchange(core::MessageType::kCloseInputSession, std::move(payload))) return false;
+
+  // Reuse the physical-key fixture across the three production routing gates.
+  // The customized natural profile would yield 好 through the adapter. Legacy
+  // and imported my_combo must instead retain the bundled native chord mapping.
+  for (const auto gate : {"disabled", "legacy", "private"}) {
+    auto settings = runtime.Configuration();
+    settings.schema = "my_combo";
+    settings.chord_enabled = std::string_view(gate) != "disabled";
+    settings.chord_profile = workbench::BuiltinChordProfile();
+    settings.chord_profile["id"] = "662b0cb5-c65c-4c61-a932-8394e4b82e86";
+    settings.chord_profile["name"] = "Routing gate natural-code probe";
+    settings.chord_profile["outputEncoding"] = "ziranma";
+    for (auto& mapping : settings.chord_profile["mappings"])
+      if (mapping["keys"] == "dvi") mapping["output"] = "hao";
+    if (!workbench::SaveSettings(settings, nullptr)) return false;
+    workbench::Runtime fixture;
+    if (std::string_view(gate) == "private")
+      fixture.SetImportedSchema("my_combo", "fixture-private");
+    const auto configuration = fixture.Configuration();
+    if (configuration.schema != "my_combo" ||
+        configuration.imported_scheme != (std::string_view(gate) == "private")) return false;
+    // The collision is runtime identity only. This fixture keeps all Rime
+    // input in its isolated product userdb and never deploys to a private tree.
+    broker::BrokerConnection gated(0, &engine, &fixture);
+    active_connection = &gated;
+    const auto capabilities = core::kModifierSnapshotsCapability |
+        (std::string_view(gate) == "legacy" ? 0ULL : core::kPendingChordCapability);
+    if (!open(capabilities)) return false;
+    auto direct_key = [&](unsigned vk, bool down) {
+      return key(vk, down) &&
+          !(state.state_flags & static_cast<unsigned>(core::InputStateFlags::kPendingChord));
+    };
+    if (std::string_view(gate) == "disabled") {
+      // Without native chording, each press immediately reaches full pinyin.
+      for (const char c : std::string("nihao")) {
+        if (!direct_key(static_cast<unsigned>(c - 'a' + 'A'), true) ||
+            (c == 'n' && state.composition != "n") ||
+            !direct_key(static_cast<unsigned>(c - 'a' + 'A'), false)) return false;
+      }
+      if (!direct_key(VK_SPACE, true) || state.commit_text != "你好" ||
+          !direct_key(VK_SPACE, false)) {
+        std::cerr << "Disabled native chord did not retain ordinary full pinyin\n"; return false;
+      }
+    } else {
+      for (const char c : std::string("dvi"))
+        if (!direct_key(static_cast<unsigned>(c - 'a' + 'A'), true)) return false;
+      for (const char c : std::string("dvi"))
+        if (!direct_key(static_cast<unsigned>(c - 'a' + 'A'), false)) return false;
+      if (!direct_key(VK_SPACE, true) || state.commit_text != "你" ||
+          !direct_key(VK_SPACE, false)) {
+        std::cerr << "Native chord routing gate used the customized adapter: " << gate << '\n';
+        return false;
+      }
+    }
+    if (!core::EncodeCloseInputSession({opened.session_id}, &payload) ||
+        !exchange(core::MessageType::kCloseInputSession, std::move(payload))) return false;
+  }
+  active_connection = &connection;
+  std::cout << "Broker disabled/legacy/private-schema chord routing gates passed\n";
   std::cout<<"Native isaac2026 real-Rime batches, applied keymap, Buffer and session isolation passed\n";
   return true;
 }
@@ -274,6 +448,7 @@ int wmain(int argc, wchar_t** argv) {
     std::cerr << error;
     return 1;
   }
+  if (!TestChordSchemaDeployment(engine, options.user_data_dir)) return 1;
   auto session = engine.CreateSession(&error);
   if (!session) return 1;
   for (const auto* schema : {"rime_ice", "double_pinyin", "double_pinyin_flypy",

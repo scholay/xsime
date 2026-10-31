@@ -3,6 +3,7 @@
 #include "local_translation.hpp"
 #include "translation_languages.hpp"
 #include "official_features.hpp"
+#include "chord_profile.hpp"
 #include "connector_ui.hpp"
 #include "codex_cli.hpp"
 #include "../core/buffer_keys.hpp"
@@ -693,6 +694,7 @@ void Runtime::AppearanceChanged() { std::lock_guard lock(mutex_); CaptureChanged
 Settings Runtime::Configuration() {
   std::lock_guard lock(mutex_);
   auto effective = settings_;
+  effective.chord_profile = EffectiveChordProfile(effective.chord_profile);
   if (effective.schema == official::kChordSchema && plugins_.Grant(official::kChord).empty()) effective.schema = "rime_ice";
   if (!imported_schema_.empty()) { effective.schema = imported_schema_; effective.imported_scheme = true; effective.input_scope = imported_package_; }
   return effective;
@@ -711,6 +713,7 @@ bool Runtime::Configure(Settings value, const std::wstring& key,
     return false;
   }
   if (!imported_schema_.empty()) value.schema = settings_.schema;
+  value.chord_profile = EffectiveChordProfile(value.chord_profile);
   MigrateConnections(&value);
   if (!SelectConnection(&value, value.active_connection)) {
     if (error) *error = "连接器配置无效。";

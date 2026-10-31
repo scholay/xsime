@@ -1,5 +1,6 @@
 ﻿#include "settings_ui.hpp"
 #include "buffer_hotkey.hpp"
+#include "chord_profile.hpp"
 #include "window.hpp"
 #include "user_lexicon.hpp"
 #include "../ui/settings_scrollbar.hpp"
@@ -1470,6 +1471,92 @@ void TestParityDraftsAndConnections() {
   host.Close();
 }
 
+void TestChordOutputEncoding() {
+  workbench::Settings current;
+  int saves = 0;
+  workbench::SettingsUiCallbacks callbacks;
+  callbacks.load = [&] { return current; };
+  callbacks.save = [&](auto value, const auto&, bool, std::string*) {
+    current = std::move(value); ++saves; return true;
+  };
+  workbench::SettingsUiHost host(callbacks);
+  auto open = [&] {
+    host.OpenPage(nullptr, ui::SettingsPage::kChord, 0, false);
+    return host.hwnd();
+  };
+  auto window = open();
+  auto choose = [&](int value) {
+    const auto picker = GetDlgItem(window, 6028);
+    SendMessageW(picker, CB_SETCURSEL, value, 0);
+    SendMessageW(window, WM_COMMAND, MAKEWPARAM(6028, CBN_SELCHANGE), reinterpret_cast<LPARAM>(picker));
+  };
+  auto text = [&](int id) {
+    wchar_t value[512]{}; GetWindowTextW(GetDlgItem(window, id), value, 512);
+    return std::wstring(value);
+  };
+  Check(GetDlgItem(window, 6028) && (GetWindowLongPtrW(GetDlgItem(window, 6028), GWL_STYLE) & WS_VISIBLE) &&
+            SendMessageW(GetDlgItem(window, 6028), CB_GETCOUNT, 0, 0) == 2 &&
+            SendMessageW(GetDlgItem(window, 6028), CB_GETCURSEL, 0, 0) == 0 && saves == 0,
+        "the real encoding control starts on natural-code double pinyin without saving on open");
+  const auto builtin_mappings = workbench::BuiltinChordProfile().at("mappings");
+  choose(1);
+  Check(saves == 1 && current.chord_profile["outputEncoding"] == "fullPinyin" &&
+            current.chord_profile["id"] == workbench::BuiltinChordProfile().at("id") &&
+            current.chord_profile["mappings"] == builtin_mappings,
+        "an explicit full-pinyin choice saves immediately as a user profile and retains pinyin mapping data");
+  host.Close(); window = open();
+  Check(SendMessageW(GetDlgItem(window, 6028), CB_GETCURSEL, 0, 0) == 1 && saves == 1,
+        "reopening retains the explicit full-pinyin choice instead of migrating it to the new default");
+  choose(0);
+  Check(saves == 2 && current.chord_profile["outputEncoding"] == "ziranma" &&
+            current.chord_profile["mappings"] == builtin_mappings,
+        "switching to natural-code double pinyin retains the full-pinyin mappings");
+  host.OpenPage(nullptr, ui::SettingsPage::kChord, 1, false);
+  SetWindowTextW(GetDlgItem(window, 6026), L"hv");
+  SendMessageW(GetDlgItem(window, 6027), BM_CLICK, 0, 0);
+  Check(text(6099).find(L"zhang") != std::wstring::npos && text(6099).find(L"自然码 vh") != std::wstring::npos,
+        "actual chord preview shows full-pinyin syllable alongside its short engine code");
+  SetWindowTextW(GetDlgItem(window, 6026), L"km");
+  SendMessageW(GetDlgItem(window, 6027), BM_CLICK, 0, 0);
+  Check(text(6099).find(L"ong") != std::wstring::npos && text(6099).find(L"自然码 s") != std::wstring::npos && saves == 2,
+        "fragment preview uses one natural-code key without saving or rewriting the pinyin mapping");
+  host.Close(); window = open();
+  Check(SendMessageW(GetDlgItem(window, 6028), CB_GETCURSEL, 0, 0) == 0 && saves == 2,
+        "reopening retains the saved natural-code encoding");
+  host.Close();
+  auto legacy = workbench::BuiltinChordProfile();
+  legacy["id"] = "48ab2958-9d16-4473-9c22-1183006e41f6";
+  legacy["name"] = "Legacy fragments";
+  legacy.erase("outputEncoding");
+  legacy["mappings"] = {{{"keys", "dv"}, {"output", "abc"}, {"kind", "fragment"}}};
+  legacy["privateMetadata"] = {{"keep", true}};
+  current.chord_profile = legacy;
+  window = open();
+  Check(SendMessageW(GetDlgItem(window, 6028), CB_GETCURSEL, 0, 0) == 1 && current.chord_profile == legacy && saves == 2,
+        "legacy custom profiles missing an encoding keep full-pinyin semantics and their original fields");
+  choose(0);
+  const auto error = text(6099);
+  Check(saves == 2 && current.chord_profile == legacy &&
+            SendMessageW(GetDlgItem(window, 6028), CB_GETCURSEL, 0, 0) == 1 &&
+            GetPropW(GetDlgItem(window, 6099), L"RimesError") &&
+            error.find(L"abc") != std::wstring::npos && error.find(L"1") != std::wstring::npos,
+        "unconvertible fragments identify the row and output, restore the encoding choice and cannot save");
+  host.Close(); window = open();
+  Check(current.chord_profile == legacy && SendMessageW(GetDlgItem(window, 6028), CB_GETCURSEL, 0, 0) == 1,
+        "a rejected encoding change leaves the original custom profile intact after reopening");
+  host.Close();
+  current.chord_profile = workbench::LegacyBuiltinChordProfile();
+  window = open();
+  Check(SendMessageW(GetDlgItem(window, 6028), CB_GETCURSEL, 0, 0) == 0 && saves == 2 &&
+            current.chord_profile == workbench::LegacyBuiltinChordProfile(),
+        "the unchanged legacy built-in displays the new effective encoding without writing merely on open");
+  SetWindowTextW(GetDlgItem(window, 6012), L"75");
+  SendMessageW(window, WM_TIMER, 12, 0);
+  Check(saves == 3 && current.chord_profile == workbench::BuiltinChordProfile() && current.chord_interval_ms == 75,
+        "the next valid settings save persists the displayed migrated profile and retains the user's pending interval edit");
+  host.Close();
+}
+
 void TestConnectorInteractions() {
   workbench::Settings current;
   int saves = 0, opens = 0, copies = 0, confirms = 0;
@@ -2205,6 +2292,7 @@ int main(int argc, char** argv) {
   run("scrollbar presentation", TestScrollbarPresentation);
   run("native backgrounds", TestNativeControlBackgrounds);
   run("parity drafts", TestParityDraftsAndConnections);
+  run("chord output encoding", TestChordOutputEncoding);
   run("Buffer controls", TestBufferBehaviorControls);
   run("nested hit targets", TestNestedHitTargets);
   run("owned clicks", TestOwnedClicksAndTransientDetails);

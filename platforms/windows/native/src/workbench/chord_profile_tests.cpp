@@ -46,7 +46,7 @@ int main() {
     invalid["nativeSchemeID"] = "custom";
     Reject(invalid);
     invalid = source;
-    invalid["outputEncoding"] = "ziranma";
+    invalid["outputEncoding"] = "unknown";
     Reject(invalid);
     invalid = source;
     invalid["formatVersion"] = 2;
@@ -111,6 +111,67 @@ int main() {
     composer.Key(explicit_profile, 'v', false, 31, 50);
     out = composer.Key(explicit_profile, 'i', false, 32, 50);
     Check(!out.replace, "selection or external edit revokes adjacent rewrite");
+    Check(p.encoding == "ziranma" && p.EngineSchema() == "rimes_windows_chord_ziranma",
+          "maintained Isaac2026 default uses the matching natural double-pinyin engine");
+    Check(p.id == "21616362-5ee0-4833-a32b-f1dd05c589e7",
+          "default export retains the portable Isaac2026 UUID");
+    for (const auto& [pinyin, code] : std::initializer_list<std::pair<const char*, const char*>>{
+             {"qing", "qy"}, {"zhang", "vh"}, {"shui", "uv"}, {"xiong", "xs"},
+             {"lve", "lt"}, {"a", "aa"}, {"e", "ee"}, {"o", "oo"}, {"ang", "ah"}})
+      Check(p.EngineOutput({"", pinyin, "syllable"}) == code,
+            "complete syllables use canonical two-key codes");
+    for (const auto& [pinyin, code] : std::initializer_list<std::pair<const char*, const char*>>{
+             {"zh", "v"}, {"ch", "i"}, {"sh", "u"}, {"ong", "s"}, {"iu", "q"}, {"uan", "r"}, {"a", "a"}})
+      Check(p.EngineOutput({"", pinyin, "fragment"}) == code,
+            "fragments retain one-key natural codes instead of becoming full syllables");
+    for (const auto& m : p.mappings) {
+      const auto code = p.EngineOutput(m);
+      Check(code.size() == (m.kind == "syllable" ? 2U : 1U),
+            "every shipped mapping can be encoded with its declared type");
+    }
+    Check(p.Find("qy")->output == "qing", "editable and learning mappings stay full pinyin");
+    auto settle = [&](const ChordProfile& profile, const std::string& keys, std::uint64_t at) {
+      ChordComposer::Output result;
+      for (char key : keys) composer.Key(profile, key, true, at++, 50);
+      for (char key : keys) result = composer.Key(profile, key, false, at++, 50);
+      return result;
+    };
+    composer.Reset();
+    out = settle(p, "qy", 0);
+    Check(out.text == "qy'", "physical qy chord feeds two encoded letters, not qing");
+    composer.Reset();
+    out = settle(p, "dv", 0);
+    Check(out.text == "n'", "settled left batch preserves the legacy boundary rule");
+    out = settle(p, "km", 20);
+    Check(out.replace && out.raw == "ns'" && out.text == "s'",
+          "left/right recombination re-encodes nong as one syllable and retains fallback");
+    composer.Reset();
+    out = settle(p, "dvkm", 0);
+    Check(!out.replace && out.text == "ns'", "simultaneous and split nong chords encode identically");
+    const auto legacy = LegacyBuiltinChordProfile();
+    Check(EffectiveChordProfile(legacy) == source && EffectiveChordProfile(Json()) == source,
+          "only unchanged maintained defaults advance to Isaac2026 natural encoding");
+    auto custom = legacy;
+    custom["name"] = "My preserved full-pinyin profile";
+    Check(EffectiveChordProfile(custom) == custom && ChordProfile::Parse(custom).encoding == "fullPinyin",
+          "legacy edited keymaps are not silently migrated");
+    custom.erase("outputEncoding");
+    Check(EffectiveChordProfile(custom) == custom && ChordProfile::Parse(custom).encoding == "fullPinyin",
+          "a missing encoding in an old custom keymap still means full pinyin");
+    custom = source; custom["outputEncoding"] = "fullPinyin";
+    Check(EffectiveChordProfile(custom) == custom,
+          "an explicit full-pinyin choice remains stable after restart");
+    composer.Reset();
+    out = settle(ChordProfile::Parse(custom), "qy", 0);
+    Check(out.text == "qing'", "legacy full-pinyin encoding is still executable");
+    invalid = source; invalid["mappings"][0]["output"] = "zhx";
+    Reject(invalid);
+    const auto yaml = NaturalChordSchema();
+    Check(yaml.starts_with("# XSIME Windows generated chord engine schema; do not edit.\n") &&
+              yaml.find("chord_composer") == std::string::npos &&
+              yaml.find("prism: rimes_windows_chord_ziranma") != std::string::npos &&
+              yaml.find("preedit_format:") != std::string::npos,
+          "encoded Windows batches use a matching prism and full-pinyin preedit without a second chord processor");
     std::cout << "isaac2026 keymap validation, physical batches, interval, "
                  "pairing and revocation passed\n";
     return 0;

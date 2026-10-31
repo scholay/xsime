@@ -36,6 +36,11 @@ struct EngineSnapshot {
   std::string composition;
   std::string commit_text;
   std::vector<EngineCandidate> candidates;
+  // Broker-engine authority only: preedit can expand double-pinyin codes to
+  // identical display text. Raw input/caret never enter the TSF wire DTO.
+  bool raw_input_available = false;
+  std::string raw_input;
+  std::size_t raw_caret = 0;
 };
 
 // Non-owning input used by the ABI adapter and by conversion unit tests. Every

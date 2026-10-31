@@ -87,6 +87,20 @@ void LogEngineFailure(std::string_view operation,
   std::clog << '\n';
 }
 
+std::optional<workbench::ChordProfile> NativeChordProfile(
+    const workbench::Settings& config, bool pending_chord) {
+  if (!pending_chord || config.imported_scheme || config.schema != "my_combo" ||
+      !config.chord_enabled) return std::nullopt;
+  return workbench::ChordProfile::Parse(workbench::EffectiveChordProfile(config.chord_profile));
+}
+
+std::string InputSchema(const workbench::Settings& config, bool pending_chord,
+                        const std::optional<workbench::ChordProfile>& profile) {
+  if (!pending_chord || config.imported_scheme || config.schema != "my_combo")
+    return config.schema;
+  return profile ? profile->EngineSchema() : "rime_ice";
+}
+
 }  // namespace
 
 BrokerConnection::BrokerConnection(DWORD broker_session_id,
@@ -329,20 +343,25 @@ ClientAction BrokerConnection::HandleOpenSession(const core::Frame& request,
     state.schema_id = open.schema_id;
     if (settings_) {
       const auto config = settings_->Configuration();
-      if (!engine_->Configure(engine_session, pending_chord_ && config.schema == "my_combo" ? "rime_ice" : config.schema, config.ascii,
+      auto profile = NativeChordProfile(config, pending_chord_);
+      if (!engine_->Configure(engine_session, InputSchema(config, pending_chord_, profile), config.ascii,
                               config.traditional, config.ascii_punctuation,
-                              nullptr, config.candidate_count, config.InputOptionsFor(config.schema)))
-        throw std::runtime_error("Schema unavailable");
+                              &engine_error, config.candidate_count, config.InputOptionsFor(config.schema)))
+        throw std::runtime_error(engine_error.empty() ? "Schema unavailable" : engine_error);
       if (runtime_) state.target =
           runtime_->Register(peer_process_, session_id, open.context_id);
-      if (pending_chord_ && config.schema == "my_combo" && config.chord_enabled) {
-        state.chord_profile = workbench::ChordProfile::Parse(config.chord_profile.is_null() ? workbench::BuiltinChordProfile() : config.chord_profile);
-        state.chord_interval_ms = config.chord_interval_ms;
-      }
+      state.chord_profile = std::move(profile);
+      state.chord_interval_ms = config.chord_interval_ms;
       state.schema_id = config.schema;
       state.settings_revision = config.revision;
     }
     sessions_.emplace(session_id, std::move(state));
+  } catch (const std::exception& failure) {
+    LogEngineFailure("Configure", session_id, failure.what());
+    engine_->DestroySession(engine_session, nullptr);
+    MakeError(request, core::BrokerErrorCode::kInternalError,
+              std::string("input schema unavailable: ") + failure.what(), response);
+    return ClientAction::kCloseAfterResponse;
   } catch (...) {
     engine_->DestroySession(engine_session, nullptr);
     MakeError(request, core::BrokerErrorCode::kInternalError,
@@ -447,20 +466,27 @@ ClientAction BrokerConnection::HandleKeyEvent(const core::Frame& request,
     const auto settings_revision = settings_->ConfigurationRevision();
     const bool capture = runtime_ && runtime_->Capturing(session.target);
     const auto input_route = runtime_ ? runtime_->InputRoute(session.target) : 0;
-    if ((session.settings_revision != settings_revision && !session.composing) ||
-        session.capture != capture || session.input_route != input_route) {
+    if ((session.settings_revision != settings_revision || session.capture != capture ||
+         session.input_route != input_route) && !session.composing && !session.chord.Pending()) {
       const auto config = settings_->Configuration();
-      if (!engine_->Configure(session.engine_session_id, (pending_chord_ && config.schema == "my_combo" ? "rime_ice" : config.schema),
+      std::optional<workbench::ChordProfile> profile;
+      std::string configuration_error;
+      try { profile = NativeChordProfile(config, pending_chord_); }
+      catch (const std::exception& failure) { configuration_error = failure.what(); }
+      if (!configuration_error.empty() ||
+          !engine_->Configure(session.engine_session_id, InputSchema(config, pending_chord_, profile),
                               config.ascii, config.traditional,
-                              config.ascii_punctuation, nullptr, config.candidate_count, config.InputOptionsFor(config.schema)))
-        return RespondPassThrough(request, key, session, response);
-      session.chord.Reset(); session.chord_snapshot = {}; session.chord_profile.reset();
-      if (pending_chord_ && config.schema == "my_combo" && config.chord_enabled) {
-        try { session.chord_profile = workbench::ChordProfile::Parse(config.chord_profile.is_null()
-            ? workbench::BuiltinChordProfile() : config.chord_profile); } catch (...) {}
+                              config.ascii_punctuation, &configuration_error, config.candidate_count, config.InputOptionsFor(config.schema))) {
+        LogEngineFailure("Configure", key.session_id, configuration_error);
+        MakeError(request, core::BrokerErrorCode::kInternalError,
+                  "requested input schema is unavailable", response);
+        return ClientAction::kContinue;
       }
+      session.chord.Reset(); session.chord_snapshot = {}; session.chord_profile.reset();
+      session.chord_profile = std::move(profile);
       session.chord_interval_ms = config.chord_interval_ms;
       session.settings_revision = config.revision;
+      session.schema_id = config.schema;
       session.composing = false;
       session.capture = capture;
       session.input_route = input_route;

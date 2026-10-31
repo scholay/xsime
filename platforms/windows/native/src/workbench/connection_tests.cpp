@@ -104,6 +104,35 @@ int main() {
             restored.chord_profile == s.chord_profile &&
             restored.chord_interval_ms == 70,
         "restart preserves all profile, Buffer, appearance and keymap fields");
+    Check(ChordProfile::Parse(restored.chord_profile).encoding == "ziranma",
+          "new built-in keymaps persist the natural-code output default");
+    auto custom = s;
+    custom.chord_profile["id"] = "48ab2958-9d16-4473-9c22-1183006e41f6";
+    custom.chord_profile["name"] = "Legacy private fragments";
+    custom.chord_profile.erase("outputEncoding");
+    custom.chord_profile["mappings"] =
+        {{{"keys", "dv"}, {"output", "abc"}, {"kind", "fragment"}}};
+    custom.chord_profile["privateMetadata"] = {{"keep", "original"}};
+    Check(SaveSettings(custom, nullptr) && LoadSettings(&restored, nullptr) &&
+              restored.chord_profile == custom.chord_profile &&
+              ChordProfile::Parse(EffectiveChordProfile(restored.chord_profile)).encoding == "fullPinyin",
+          "disk reload preserves legacy custom keymaps, omitted encoding and private metadata without migrating fragments");
+    auto invalid_encoding = custom;
+    invalid_encoding.chord_profile["outputEncoding"] = "ziranma";
+    Check(!SaveSettings(invalid_encoding, nullptr) && LoadSettings(&restored, nullptr) &&
+              restored.chord_profile == custom.chord_profile,
+          "an unconvertible natural-code fragment cannot overwrite the persisted full-pinyin keymap");
+    for (const auto *encoding : {"fullPinyin", "ziranma"}) {
+      custom.chord_profile = BuiltinChordProfile();
+      custom.chord_profile["id"] = "48ab2958-9d16-4473-9c22-1183006e41f6";
+      custom.chord_profile["name"] = "Explicit output encoding";
+      custom.chord_profile["outputEncoding"] = encoding;
+      Check(SaveSettings(custom, nullptr) && LoadSettings(&restored, nullptr) &&
+                restored.chord_profile == custom.chord_profile &&
+                ChordProfile::Parse(EffectiveChordProfile(restored.chord_profile)).encoding == encoding,
+            "disk reload retains each explicit encoding and its full-pinyin source mappings");
+    }
+    Check(SaveSettings(s, nullptr), "restore the connection fixture after encoding persistence checks");
     std::string error;
     Check(SaveConnectionSecrets(s, {{a, L"synthetic-a"}, {b, L"synthetic-b"}},
                                 &error),

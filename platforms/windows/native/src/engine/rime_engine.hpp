@@ -53,6 +53,9 @@ class RimeEngine final {
 
   bool DeploySchema(const std::filesystem::path& schema, std::string* error = nullptr) noexcept;
   bool DeployDefaultConfiguration(std::string* error = nullptr) noexcept;
+  // Only the fixed, product-owned native chord adapter is installed here.
+  // Call before creating input sessions and never against an imported package.
+  bool EnsureChordSchema(const std::string& yaml, std::string* error = nullptr) noexcept;
 
   SessionId CreateSession(std::string* error = nullptr) noexcept;
   bool DestroySession(SessionId session, std::string* error = nullptr) noexcept;

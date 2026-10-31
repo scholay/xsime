@@ -11,9 +11,11 @@
 #include <cstring>
 #include <cwctype>
 #include <functional>
+#include <fstream>
 #include <limits>
 #include <mutex>
 #include <set>
+#include <stdexcept>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
@@ -458,6 +460,8 @@ class RimeEngine::Impl final {
       if (!CollectSnapshotLocked(session, &current, error)) return false;
       std::string input = text;
       if (!replacement.empty() && current.commit_text.empty() && current.composing &&
+          current.raw_input_available && expected.raw_input_available &&
+          current.raw_input == expected.raw_input && current.raw_caret == expected.raw_caret &&
           current.composition == expected.composition && current.caret_utf16 == expected.caret_utf16 &&
           current.selection_start_utf16 == expected.selection_start_utf16 &&
           current.selection_length_utf16 == expected.selection_length_utf16) {
@@ -581,12 +585,138 @@ class RimeEngine::Impl final {
     } catch (...) { SetError(error, "exception while compiling a schema"); return false; }
   }
 
+  bool EnsureChordSchema(const std::string& yaml, std::string* error) noexcept {
+    constexpr std::string_view marker = "# XSIME Windows generated chord engine schema; do not edit.";
+    constexpr wchar_t name[] = L"rimes_windows_chord_ziranma.schema.yaml";
+    constexpr std::wstring_view prefix = L"rimes_windows_chord_ziranma.";
+    std::filesystem::path source, temporary, backup;
+    std::vector<std::pair<std::filesystem::path, std::filesystem::path>> originals;
+    bool changed = false, had_source = false;
+    std::unique_lock<std::mutex> lock(mutex_, std::defer_lock);
+    auto artifacts = [&] {
+      std::vector<std::filesystem::path> result;
+      const auto build = user_data_path_ / L"build";
+      if (std::filesystem::exists(build))
+        for (const auto& item : std::filesystem::directory_iterator(build))
+          if (item.path().filename().wstring().starts_with(prefix)) {
+            if (!item.is_regular_file() || item.is_symlink())
+              throw std::runtime_error("unexpected generated chord build artifact");
+            result.push_back(item.path());
+          }
+      return result;
+    };
+    auto cleanup = [&] {
+      std::error_code ignored;
+      if (!temporary.empty()) std::filesystem::remove(temporary, ignored);
+      for (const auto& original : originals) std::filesystem::remove(original.second, ignored);
+      if (!backup.empty()) std::filesystem::remove(backup, ignored);
+    };
+    auto rollback = [&] {
+      if (!changed) return true;
+      try {
+        for (const auto& item : artifacts()) std::filesystem::remove(item);
+        if (!had_source) std::filesystem::remove(source);
+        for (const auto& original : originals)
+          std::filesystem::copy_file(original.second, original.first,
+                                     std::filesystem::copy_options::overwrite_existing);
+        changed = false;
+        return true;
+      } catch (...) { return false; }
+    };
+    try {
+      lock.lock();
+      if (!healthy_ || !api_ || !api_->deploy_schema || !sessions_.empty()) {
+        SetError(error, "chord schema deployment requires an idle initialized engine"); return false;
+      }
+      // An unsuccessful idle deployment must not make an old cached adapter
+      // selectable. A rejected live-session call above preserves its readiness.
+      chord_schema_ready_ = false;
+      if (!yaml.starts_with(marker) || yaml.size() > 256 * 1024 ||
+          yaml.find('\0') != std::string::npos ||
+          yaml.find("schema_id: rimes_windows_chord_ziranma") == std::string::npos) {
+        SetError(error, "invalid generated chord schema"); return false;
+      }
+      source = user_data_path_ / name;
+      had_source = std::filesystem::exists(source);
+      if (had_source) {
+        if (!std::filesystem::is_regular_file(source) || std::filesystem::is_symlink(source)) {
+          SetError(error, "generated chord schema path is not a regular product file"); return false;
+        }
+        std::ifstream existing(source, std::ios::binary);
+        std::string first_line;
+        if (!std::getline(existing, first_line) || first_line != marker) {
+          SetError(error, "refusing to replace a non-product chord schema"); return false;
+        }
+      }
+      static std::atomic<unsigned long long> serial{0};
+      backup = user_data_path_ / (L".rimes-windows-chord-backup-" +
+          std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(++serial));
+      if (!std::filesystem::create_directory(backup)) {
+        SetError(error, "cannot create chord schema backup"); return false;
+      }
+      auto preserve = [&](const std::filesystem::path& path) {
+        const auto saved = backup / std::to_wstring(originals.size());
+        std::filesystem::copy_file(path, saved);
+        originals.emplace_back(path, saved);
+      };
+      if (had_source) preserve(source);
+      for (const auto& item : artifacts()) preserve(item);
+      temporary = backup / L"new.schema.yaml";
+      {
+        std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+        output.write(yaml.data(), static_cast<std::streamsize>(yaml.size()));
+        output.close();
+        if (!output) throw std::runtime_error("cannot write generated chord schema");
+      }
+      if (!MoveFileExW(temporary.c_str(), source.c_str(),
+                       MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        throw std::runtime_error("cannot install generated chord schema");
+      changed = true;
+      const auto encoded = source.u8string();
+      const std::string filename(encoded.begin(), encoded.end());
+      bool deployed = api_->deploy_schema(filename.c_str()) != 0;
+      abi::Config verified{};
+      if (deployed) {
+        deployed = api_->schema_open && api_->config_close && api_->config_get_string &&
+            api_->schema_open("rimes_windows_chord_ziranma", &verified);
+        if (deployed) {
+          char id[128]{};
+          deployed = api_->config_get_string(&verified, "schema/schema_id", id, sizeof(id)) &&
+              std::memchr(id, '\0', sizeof(id)) &&
+              std::string_view(id) == "rimes_windows_chord_ziranma";
+          api_->config_close(&verified);
+        }
+      }
+      if (!deployed) {
+        const bool restored = rollback();
+        if (restored) cleanup();
+        SetError(error, restored ? "librime could not compile the chord schema; previous files restored"
+                                 : "librime could not compile the chord schema; backup retained for recovery");
+        return false;
+      }
+      changed = false;
+      chord_schema_ready_ = true;
+      cleanup();
+      return true;
+    } catch (...) {
+      const bool restored = rollback();
+      if (restored) cleanup();
+      SetError(error, restored ? "chord schema installation failed; previous files retained"
+                               : "chord schema installation failed; backup retained for recovery");
+      return false;
+    }
+  }
+
   bool Configure(SessionId session, const std::string& schema, bool ascii,
                  bool traditional, bool punctuation,
                  std::string* error, unsigned candidate_count,
                  const std::map<std::string, bool>& input_options) noexcept {
     try {
       std::lock_guard lock(mutex_);
+      if (schema == "rimes_windows_chord_ziranma" && !chord_schema_ready_) {
+        SetError(error, "native natural-code chord schema is unavailable; deployment must succeed first");
+        return false;
+      }
       if (!healthy_ || !sessions_.contains(session) || !api_ ||
           api_->data_size <
               static_cast<int>(offsetof(abi::ApiPrefix, config_set_int) +
@@ -870,11 +1000,13 @@ class RimeEngine::Impl final {
         SetError(error, "log directory must be absolute");
         return false;
       }
-      return WideToUtf8(options.shared_data_dir.native(), &shared_data_dir_,
+      const bool stored = WideToUtf8(options.shared_data_dir.native(), &shared_data_dir_,
                         error) &&
              WideToUtf8(options.user_data_dir.native(), &user_data_dir_,
                         error) &&
              WideToUtf8(options.log_dir.native(), &log_dir_, error);
+      if (stored) user_data_path_ = options.user_data_dir;
+      return stored;
     } catch (...) {
       SetError(error, "exception while validating librime data paths");
       return false;
@@ -1063,11 +1195,25 @@ class RimeEngine::Impl final {
     if (!candidate_views.empty()) raw.candidate_page_keys = CandidatePageKeysLocked(session);
     raw.highlighted_candidate = highlighted_candidate;
     raw.candidates = candidate_views;
-    return BuildEngineSnapshot(raw, output, error);
+    if (!BuildEngineSnapshot(raw, output, error)) return false;
+    if (abi::HasRawInputApi(api_)) {
+      const auto input = api_->get_input(session);
+      if (input) {
+        if (!CopyBoundedCString(input, core::kMaxCompositionBytes, &output->raw_input,
+                                error, "raw input")) return false;
+        output->raw_caret = api_->get_caret_pos(session);
+        if (output->raw_caret > output->raw_input.size()) {
+          SetError(error, "librime raw caret exceeds input"); return false;
+        }
+        output->raw_input_available = true;
+      }
+    }
+    return true;
   }
 
   void StopLocked() noexcept {
     healthy_ = false;
+    chord_schema_ready_ = false;
     if (api_ != nullptr) {
       for (const SessionId session : sessions_) {
         api_->destroy_session(session);
@@ -1085,6 +1231,7 @@ class RimeEngine::Impl final {
     }
     shared_data_dir_.clear();
     user_data_dir_.clear();
+    user_data_path_.clear();
     log_dir_.clear();
     if (owns_runtime_) {
       void* expected = this;
@@ -1098,9 +1245,11 @@ class RimeEngine::Impl final {
   abi::ApiPrefix* api_ = nullptr;
   bool initialized_ = false;
   bool healthy_ = false;
+  bool chord_schema_ready_ = false;
   bool owns_runtime_ = false;
   std::string shared_data_dir_;
   std::string user_data_dir_;
+  std::filesystem::path user_data_path_;
   std::string log_dir_;
   std::unordered_set<SessionId> sessions_;
   std::map<SessionId, xsime::input::SessionOverrides> input_habits_;
@@ -1113,6 +1262,10 @@ RimeEngine::~RimeEngine() { Stop(); }
 
 bool RimeEngine::DeploySchema(const std::filesystem::path& path, std::string* error) noexcept {
   return impl_->DeploySchema(path, error);
+}
+
+bool RimeEngine::EnsureChordSchema(const std::string& yaml, std::string* error) noexcept {
+  return impl_->EnsureChordSchema(yaml, error);
 }
 
 bool RimeEngine::DeployDefaultConfiguration(std::string* error) noexcept {

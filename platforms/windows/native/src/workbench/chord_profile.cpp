@@ -1,9 +1,10 @@
 #include "chord_profile.hpp"
+#include "chord_encoding.generated.hpp"
 
 namespace rimes::windows::workbench {
 // Portable mapping shared with the macOS and Android isaac2026 profile.
-core::Json BuiltinChordProfile() {
-  return core::Json::parse(
+core::Json LegacyBuiltinChordProfile() {
+  static const auto value = core::Json::parse(
     R"CHORD({
   "boundaryPolicy": "legacyBatches",
   "formatVersion": 1,
@@ -2158,5 +2159,28 @@ core::Json BuiltinChordProfile() {
   "outputEncoding": "fullPinyin",
   "rightKeys": "yuiophjklnm,."
 })CHORD");
+  return value;
 }
+core::Json BuiltinChordProfile() {
+  auto value = LegacyBuiltinChordProfile();
+  value["id"] = "21616362-5ee0-4833-a32b-f1dd05c589e7";
+  value["outputEncoding"] = "ziranma";
+  return value;
+}
+core::Json EffectiveChordProfile(const core::Json& value) {
+  // Only advance the exact maintained Windows template. Old custom snapshots,
+  // missing encoding fields and deliberate full-pinyin choices stay untouched.
+  if (value.is_null() || value == LegacyBuiltinChordProfile())
+    return BuiltinChordProfile();
+  return value;
+}
+std::string ChordProfile::EngineOutput(const ChordMapping& mapping) const {
+  if (encoding == "fullPinyin") return mapping.output;
+  static const auto tables = core::Json::parse(generated::kChordEncoding);
+  const auto& table = tables.at(mapping.kind == "syllable" ? "syllables" : "fragments");
+  const auto found = table.find(mapping.output);
+  if (found == table.end()) throw std::runtime_error("拼音不能转为自然码。");
+  return found->get<std::string>();
+}
+std::string NaturalChordSchema() { return generated::kNaturalChordSchema; }
 }

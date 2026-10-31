@@ -109,6 +109,15 @@ stale candidate callback can commit into another field. Never send test drafts.
 - [ ] Product `rime_ice` with full `rime-data` + lua: first-run deploy, Space
       commit, number select (expected gap if lua scripts were not copied)
 - [ ] OpenCC 简↔繁 if the user enables it
+- [ ] Isaac2026: physical chords for `qing`, `zhang` and `nong` display full
+      pinyin while the engine uses `qy`, `vh` and `ns`. Simultaneous `dvkm`
+      and adjacent `dv` then `km` produce the same `nong` syllable and candidate
+- [ ] Change natural/full-pinyin encoding while a chord is held or composing:
+      finish the old syllable once, then use the selected encoding. Reopen and
+      restart to confirm the explicit choice and old custom mappings remain
+- [ ] An invalid natural-code mapping identifies its row and does not replace
+      the applied profile. A generated-schema failure retains source/cache and
+      ordinary typing; imported private schemes are not modified
 - [ ] Disabling the built-in chord extension hides its scheme card and prevents
       stale mouse/keyboard selection. Re-enable and reopen settings to restore
       the card without changing an ordinary selected scheme. If the active

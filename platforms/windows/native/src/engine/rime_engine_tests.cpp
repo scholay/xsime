@@ -1,6 +1,7 @@
 #include "rime_engine.hpp"
 #include "rime_snapshot.hpp"
 #include "candidate_paging.hpp"
+#include "rime_abi.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -19,6 +20,27 @@ void Check(bool condition, const char* message) {
     std::cerr << "FAIL: " << message << '\n';
     ++failures;
   }
+}
+
+void TestOptionalRawInputApi() {
+  abi::ApiPrefix api{};
+  api.get_input = +[](abi::SessionId) -> const char* { return "hk"; };
+  api.get_caret_pos = +[](abi::SessionId) -> std::size_t { return 2; };
+  api.data_size = static_cast<int>(offsetof(abi::ApiPrefix, config_set_item) +
+      sizeof(api.config_set_item) - sizeof(api.data_size));
+  Check(!abi::HasRawInputApi(&api), "old ABI prefix cannot authorize raw chord replacement");
+  api.data_size = static_cast<int>(offsetof(abi::ApiPrefix, get_caret_pos) - sizeof(api.data_size));
+  Check(!abi::HasRawInputApi(&api), "partial optional ABI cannot read the raw caret slot");
+  abi::InitializeVersionedStruct(&api);
+  Check(!abi::HasRawInputApi(&api), "missing raw callbacks cannot authorize replacement");
+  api.get_input = +[](abi::SessionId) -> const char* { return "hk"; };
+  api.get_caret_pos = +[](abi::SessionId) -> std::size_t { return 2; };
+  Check(abi::HasRawInputApi(&api), "complete optional ABI exposes raw input authority");
+  Check(!abi::HasRawInputApi(nullptr), "missing runtime has no optional raw input API");
+  static_assert(offsetof(abi::ApiPrefix, get_input) ==
+      offsetof(abi::ApiPrefix, config_set_item) + 6 * sizeof(api.config_set_item));
+  static_assert(offsetof(abi::ApiPrefix, get_caret_pos) ==
+      offsetof(abi::ApiPrefix, get_input) + sizeof(api.get_input));
 }
 
 void TestUtf8AndSnapshotConversion() {
@@ -259,6 +281,7 @@ void TestDllPathGate() {
 int main() {
   using namespace rimes::windows::engine;
   TestUtf8AndSnapshotConversion();
+  TestOptionalRawInputApi();
   TestCandidatePageKeyBindings();
   TestMalformedUtf8FailsClosed();
   TestMalformedOptionalCommentPreservesCandidate();

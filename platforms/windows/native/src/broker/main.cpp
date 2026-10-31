@@ -221,6 +221,15 @@ int wmain(const int argc, wchar_t** argv) {
                             L"输入引擎无法启动：\n" + workbench::Wide(engine_error));
     return 5;
   }
+  // The generated adapter belongs only to the product's own user-data tree.
+  // Deployment happens before any input session and outside Runtime locks.
+  // A failure leaves ordinary schemas available; requesting the absent chord
+  // adapter reports an explicit schema error instead of interpreting it as pinyin.
+  if (!imported && !engine.EnsureChordSchema(workbench::NaturalChordSchema(), &engine_error)) {
+    std::cerr << "Native chord schema unavailable: " << engine_error << '\n';
+    ReportBackgroundFailure(options, "native chord schema unavailable",
+                            L"自然码并击引擎不可用，其他输入方案仍可使用：\n" + workbench::Wide(engine_error));
+  }
 
   NamedPipeServer server(&security);
   NamedPipeServer input_server(&security, true);

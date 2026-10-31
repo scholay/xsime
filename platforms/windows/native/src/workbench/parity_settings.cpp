@@ -294,6 +294,8 @@ struct ParitySettings::Impl {
     Set(H(6010), Wide(profile.value("name", "isaac2026")));
     Set(H(6014), Wide(profile.at("leftKeys")));
     Set(H(6015), Wide(profile.at("rightKeys")));
+    SendMessageW(H(6028), CB_SETCURSEL,
+                 profile.value("outputEncoding", "fullPinyin") == "ziranma" ? 0 : 1, 0);
   }
   void CaptureProfile() {
     profile["name"] = Utf8(Text(H(6010)));
@@ -362,8 +364,7 @@ void ParitySettings::Create(HWND parent, const Settings &settings, ConnectorUiSe
   for (std::size_t i = 0; i < p.config.connections.size(); ++i)
     if (p.config.connections[i].id == p.config.active_connection)
       p.selected = i;
-  p.profile = settings.chord_profile.is_null() ? BuiltinChordProfile()
-                                               : settings.chord_profile;
+  p.profile = EffectiveChordProfile(settings.chord_profile);
   p.Combo(6000);
   p.Button(6001, L"新建");
   p.Button(6002, L"添加 OpenRouter");
@@ -412,6 +413,7 @@ void ParitySettings::Create(HWND parent, const Settings &settings, ConnectorUiSe
   p.Edit(6010);
   p.Combo(6011, {L"开启并击", L"关闭并击 · 使用全拼"});
   p.Edit(6012);
+  p.Combo(6028, {L"自然码双拼", L"全拼"});
   p.Button(6013, L"恢复 isaac2026");
   p.Edit(6014);
   p.Edit(6015);
@@ -420,6 +422,7 @@ void ParitySettings::Create(HWND parent, const Settings &settings, ConnectorUiSe
   p.Label(6111, L"键位名称");
   p.Label(6112, L"并击开关");
   p.Label(6113, L"组键间隔（10–300 ms）");
+  p.Label(6128, L"输出编码");
   p.Label(6114, L"左手键区");
   p.Label(6115, L"右手键区");
   p.Label(6116, L"选择输入法 → isaac2026 "
@@ -436,7 +439,7 @@ void ParitySettings::Create(HWND parent, const Settings &settings, ConnectorUiSe
   p.Label(6122, L"全拼输出，例如 n");
   p.Edit(6026);
   p.Button(6027, L"检查组合");
-  p.Label(6126, L"组合预览：输入组合键，检查映射输出；不写入宿主或词库。");
+  p.Label(6126, L"组合预览：检查全拼输出与实际引擎编码；不写入宿主或词库。");
   p.Edit(6030);
   p.Edit(6031);
   p.Combo(6032, {L"固定所选主题", L"跟随 Windows 明暗"});
@@ -615,6 +618,8 @@ void ParitySettings::Layout(ui::SettingsPage page, int subpage,
       row(6010, 6111, 0);
       row(6011, 6112, 44, true);
       row(6012, 6113, 88);
+      put(6128, 360, 93, 86, 24);
+      put(6028, 450, 88, w - 466, 150);
       row(6014, 6114, 132);
       row(6015, 6115, 176);
       put(6016, 16, 226, 130, 32);
@@ -746,7 +751,22 @@ bool ParitySettings::Command(unsigned id, unsigned notification) {
        notification == CBN_SELCHANGE))
     ++p.generation;
   try {
-    if (id == 6000 && notification == CBN_SELCHANGE) {
+    if (id == 6028 && notification == CBN_SELCHANGE) {
+      p.CaptureProfile();
+      const auto choice = SendMessageW(p.H(6028), CB_GETCURSEL, 0, 0);
+      if (choice != 0 && choice != 1)
+        throw std::runtime_error("请选择自然码双拼或全拼输出编码。");
+      auto candidate = p.profile;
+      candidate["outputEncoding"] = choice == 0 ? "ziranma" : "fullPinyin";
+      // An explicit encoding choice is a user profile, independent of future
+      // maintained built-in defaults. Keep all mappings and profile metadata.
+      if (candidate.value("id", "") == "builtin.flyyao") candidate["id"] = ID();
+      (void)ChordProfile::Parse(candidate);
+      p.profile = std::move(candidate);
+      p.Status(choice == 0 ? L"已选择自然码双拼；映射表仍使用全拼。"
+                           : L"已选择全拼输出。");
+      return false;  // The settings host immediately persists a valid choice.
+    } else if (id == 6000 && notification == CBN_SELCHANGE) {
       const auto item = SendMessageW(p.H(6000), CB_GETCURSEL, 0, 0);
       auto selected = SendMessageW(p.H(6000), CB_GETITEMDATA, item, 0);
       p.CaptureConnection();
@@ -904,11 +924,16 @@ bool ParitySettings::Command(unsigned id, unsigned notification) {
       p.Status(mapping
                    ? Wide(profile.Canonical(keys) + " → " + mapping->output +
                           (mapping->kind == "syllable" ? " · 完整音节"
-                                                       : " · 拼音片段"))
+                                                       : " · 拼音片段") +
+                          (profile.encoding == "ziranma" ? " · 自然码 " : " · 全拼 ") +
+                          profile.EngineOutput(*mapping))
                    : L"此组合没有映射；检查左右键区或新增映射。");
     } else
       return false;
   } catch (const std::exception &error) {
+    if (id == 6028)
+      SendMessageW(p.H(6028), CB_SETCURSEL,
+                   p.profile.value("outputEncoding", "fullPinyin") == "ziranma" ? 0 : 1, 0);
     p.Status(Wide(error.what()), true);
   }
   return true;

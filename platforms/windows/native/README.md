@@ -276,14 +276,28 @@ installation/login without making a generation request. No Claude connector
 is included in this preview.
 
 Settings → Chording edits the applied **isaac2026** keymap: enable/disable,
-physical key-batch interval, left/right keys, mappings and combination lookup.
-Import/export supports the shared `formatVersion=1`, `fullPinyin` JSON format.
-Native-scheme references and natural-code encoded profiles are rejected.
+physical key-batch interval, output encoding, left/right keys, mappings and
+combination lookup. The maintained Isaac2026 default maps complete syllables
+to two natural double-pinyin codes and fragments to one code; Rime still
+displays full pinyin. The mapping editor and learning data retain full pinyin.
+Import/export supports shared `formatVersion=1` profiles with `fullPinyin` or
+`ziranma` output. Native-scheme references remain unsupported.
 This is separate from importing an ordinary third-party Rime scheme package.
-Changes take effect only on Save; Cancel preserves the applied profile.
+Valid settings apply immediately. Invalid natural-code mappings identify the
+row and leave the applied encoding intact. Only an unchanged legacy Windows
+default snapshot (or no saved keymap) advances to Isaac2026; edited profiles,
+omitted encoding in old custom profiles and explicit full-pinyin choices stay
+unchanged. The default uses Isaac2026's portable UUID, while old `builtin.flyyao`
+profiles remain readable.
 
 The Broker keeps each native chord composer with its TSF session and clears
-pending batches on focus/configuration changes. Pending-key negotiation allows
+pending batches on focus changes. Encoding/profile changes wait until the
+current held batch and composition finish. The internal generated schema is
+deployed only into product-owned user data; failure preserves previous files
+and disables that adapter rather than sending double-pinyin codes to a
+full-pinyin schema. Adjacent-batch replacement checks the original raw input,
+raw caret and visible composition; old engines without raw-input APIs use the
+non-replacing fallback. Pending-key negotiation allows
 Space/Escape and Buffer commands to settle a held batch before it has Rime
 preedit. Older loaded DLLs continue to use the original librime `my_combo`
 implementation until restarted; the custom native keymap requires the new DLL.
