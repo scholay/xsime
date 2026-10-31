@@ -5,6 +5,7 @@
 #include <wrl/client.h>
 
 #include <iostream>
+#include <algorithm>
 #include <atomic>
 #include <thread>
 #include <fstream>
@@ -650,22 +651,33 @@ int Run(const std::filesystem::path& output, bool typing_only = false) {
       Pump(host);
       panel = FindWindowExW(host.hwnd(), nullptr, L"Rimes.ExtensionPages", nullptr);
       editor = GetDlgItem(panel, 7004);
-      const auto prefix = workbench::Wide(config.theme) + L"-typing-";
-      Export(host.hwnd(), output / (prefix + L"ready.png"));
-      PracticeButton(panel, 7001);
-      Pump(host);
-      Check(service->Armed() && GetFocus() == editor,
-            "every skin starts practice in its native editor");
-      service->LocalKey('T', 0, false, GetTickCount(), false);
-      SendMessageW(editor, WM_CHAR, L'天', 0);
-      Pump(host, 120);
-      service->LocalKey('D', 0, false, GetTickCount(), false);
-      SendMessageW(editor, WM_CHAR, L'地', 0);
-      Pump(host);
-      Check(service->Practice()["metrics"]["committed"] == 2,
-            "every skin retains real native committed input");
-      Export(host.hwnd(), output / (prefix + L"live.png"));
-      service->Finish("interrupted");
+      for (const auto language : {"chinese", "english"}) {
+        const auto& articles = metrics::Articles();
+        const auto found = std::find_if(articles.begin(), articles.end(), [&](const auto& a) { return a.language == language; });
+        Check(found != articles.end(), "built-in materials cover both track languages");
+        if (found == articles.end()) continue;
+        const auto selected = static_cast<int>(std::distance(articles.begin(), found));
+        SendMessageW(GetDlgItem(panel, 7000), CB_SETCURSEL, selected, 0);
+        SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7000, CBN_SELCHANGE), 0);
+        Pump(host);
+        const auto prefix = workbench::Wide(config.theme) + L"-typing-" + workbench::Wide(language) + L"-";
+        Export(host.hwnd(), output / (prefix + L"ready.png"));
+        PracticeButton(panel, 7001);
+        Pump(host);
+        Check(service->Armed() && GetFocus() == editor,
+              "every skin starts both languages in the native editor");
+        const auto characters = metrics::Characters(found->text);
+        for (std::size_t i = 0; i < std::min<std::size_t>(2, characters.size()); ++i) {
+          service->LocalKey('A' + static_cast<unsigned>(i), 0, false, GetTickCount(), false);
+          for (const auto unit : characters[i]) SendMessageW(editor, WM_CHAR, unit, 0);
+          Pump(host, 120);
+        }
+        Check(service->Practice()["metrics"]["committed"] == 2 &&
+                  service->Practice()["metrics"]["correct"] == 2,
+              "both languages retain and correctly score native committed text");
+        Export(host.hwnd(), output / (prefix + L"live.png"));
+        service->Finish("interrupted");
+      }
     }
     host.Close();
     service->Save();
