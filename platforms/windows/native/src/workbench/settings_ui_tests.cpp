@@ -996,6 +996,130 @@ void TestPluginManagementAndChordSelection() {
   host.Close();
 }
 
+void TestChordSchemeAvailability() {
+  workbench::Settings current;
+  current.schema = "wubi86";
+  workbench::PluginView chord{"builtin.fly-chord-learning", "并击", "2.1.0", "grant", true, true, true, "extension"};
+  int saves = 0, plugin_changes = 0;
+  workbench::SettingsUiCallbacks callbacks;
+  callbacks.load = [&] { return current; };
+  callbacks.plugins = [&] { return std::vector<workbench::PluginView>{chord}; };
+  callbacks.save = [&](workbench::Settings value, const std::wstring&, bool, std::string*) {
+    current = std::move(value); ++saves; return true;
+  };
+  callbacks.manage_plugin = [&](const std::string& id, const std::string& action, std::string*) {
+    Check(id == chord.id && (action == "enable" || action == "disable"),
+          "scheme visibility follows the existing chord plugin enablement operation");
+    chord.enabled = action == "enable"; ++plugin_changes; return true;
+  };
+  workbench::SettingsUiHost host(callbacks);
+  host.OpenPage(nullptr, ui::SettingsPage::kInput, 0, false);
+  auto window = host.hwnd();
+  ShowWindow(window, SW_SHOWNOACTIVATE);
+  ui::SettingsDraft draft;
+  draft.page = ui::SettingsPage::kInput;
+  draft.schema_index = 3;
+  const auto enabled = Layout(window, draft);
+  Check(enabled.scheme_cards.size() == 7 && ui::SettingsSchemeAvailable(draft, 6),
+        "enabled chord extension exposes its existing scheme identity");
+  const auto chord_card = enabled.scheme_cards[6];
+  SetFocus(window);
+  MSG tab{}; tab.hwnd = window; tab.message = WM_KEYDOWN; tab.wParam = VK_TAB;
+  host.HandleDialogMessage(&tab);  // Selected Wubi card, then the chord card.
+  for (int step = 0; step < 3; ++step) SendMessageW(window, WM_KEYDOWN, VK_RIGHT, 0);
+  chord.enabled = false;  // The plugin store can change before a queued key arrives.
+  SendMessageW(window, WM_KEYDOWN, VK_RETURN, 0);
+  Check(saves == 0 && current.schema == "wubi86",
+        "a stale focused chord card cannot save a scheme after the extension is disabled");
+  draft.extensions_enabled[0] = false;
+  const auto disabled = Layout(window, draft);
+  Check(disabled.scheme_cards.size() == 6 && !ui::SettingsSchemeAvailable(draft, 6) &&
+            ui::HitTestSettings(disabled, (chord_card.left + chord_card.right) / 2,
+                                (chord_card.top + chord_card.bottom) / 2) != 106,
+        "disabled chord has no layout, painted card or mouse target, with ordinary IDs retained");
+  Click(window, chord_card);
+  Check(saves == 0 && current.schema == "wubi86",
+        "clicking the old chord card location cannot reselect its hidden scheme");
+  host.Close();
+  host.OpenPage(nullptr, ui::SettingsPage::kInput, 0, false);
+  window = host.hwnd();
+  Click(window, chord_card);
+  Check(saves == 0 && current.schema == "wubi86",
+        "reopening reads the retained disabled plugin state without changing an ordinary scheme");
+  Click(window, Layout(window, draft).scheme_cards[5]);
+  Check(current.schema == "english", "ordinary scheme indices remain compatible when chord is hidden");
+  SendMessageW(window, WM_KEYDOWN, VK_RIGHT, 0);
+  SendMessageW(window, WM_KEYDOWN, VK_RETURN, 0);
+  Check(current.schema == "rime_ice", "right arrow wraps from English to the first visible scheme");
+  SendMessageW(window, WM_KEYDOWN, VK_LEFT, 0);
+  SendMessageW(window, WM_KEYDOWN, VK_RETURN, 0);
+  Check(current.schema == "english", "left arrow wraps to English without focusing the hidden chord card");
+  const auto ordinary_saves = saves;
+  host.OpenPage(nullptr, ui::SettingsPage::kPlugins, 0, false);
+  SendMessageW(GetDlgItem(window, 5101), BM_CLICK, 0, 0);
+  Check(chord.enabled && plugin_changes == 1 && saves == ordinary_saves && current.schema == "english",
+        "enabling the chord extension changes visibility without replacing the current ordinary scheme");
+  host.Close();
+  host.OpenPage(nullptr, ui::SettingsPage::kInput, 0, false);
+  window = host.hwnd();
+  Click(window, chord_card);
+  Check(current.schema == "my_combo" && saves == ordinary_saves + 1,
+        "reopening retains enabled chord visibility and saves the unchanged my_combo profile identity");
+  chord.enabled = false;
+  current.schema = "rime_ice";  // Fresh Runtime snapshot after its existing safe fallback.
+  host.OpenPage(nullptr, ui::SettingsPage::kInput, 0, false);
+  RECT client{}; GetClientRect(window, &client);
+  const auto dc = CreateCompatibleDC(nullptr);
+  const auto bitmap = CreateBitmap(client.right, client.bottom, 1, 32, nullptr);
+  const auto previous = SelectObject(dc, bitmap);
+  SendMessageW(window, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(dc), PRF_CLIENT);
+  const auto first_card = Layout(window, draft).scheme_cards.front();
+  const auto dpi = static_cast<int>(GetDpiForWindow(window));
+  const auto& palette = ui::Palette(ui::ThemeIdOrDefault(current.theme));
+  Check(GetPixel(dc, MulDiv(static_cast<int>(first_card.left + 10), dpi, 96),
+                         MulDiv(static_cast<int>(first_card.top + 10), dpi, 96)) ==
+            ui::ToColorRef(ui::Blend(palette.surface_secondary, palette.accent, .10f)),
+        "external chord disable paints the fresh Runtime fallback as the selected ordinary card");
+  SelectObject(dc, previous); DeleteObject(bitmap); DeleteDC(dc);
+  chord.enabled = true;
+  host.OpenPage(nullptr, ui::SettingsPage::kInput, 0, false);
+  Click(window, chord_card);
+  SetWindowTextW(GetDlgItem(window, 6033), L"640");  // Pending unrelated appearance edit.
+  chord.enabled = false;
+  current.schema = "private_schema";
+  current.imported_scheme = true;
+  current.input_scope = "private-package";
+  current.ascii = current.traditional = current.ascii_punctuation = true;
+  current.input_options = {{"private-package:private_schema", {{"custom_mode", true}}},
+                           {"builtin:my_combo", {{"custom_mode", false}}}};
+  const auto private_options = current.input_options;
+  const auto before_private_save = saves;
+  SendMessageW(window, WM_TIMER, 12, 0);  // Save can race the extension disable before navigation.
+  host.OpenPage(nullptr, ui::SettingsPage::kAppearance, 0, false);
+  draft.page = ui::SettingsPage::kAppearance;
+  Click(window, Layout(window, draft).theme_cards[1]);
+  Check(saves == before_private_save + 2 && current.schema == "private_schema" &&
+            current.imported_scheme && current.input_scope == "private-package" &&
+            current.ascii && current.traditional && current.ascii_punctuation &&
+            current.input_options == private_options && current.candidate_width == 640,
+        "unrelated appearance autosave preserves the fresh private profile, input modes and scoped options after chord disable");
+  host.Close();
+  current.schema = "english";
+  current.imported_scheme = false;
+  current.input_scope = "builtin";
+  chord.enabled = true;
+  host.OpenPage(nullptr, ui::SettingsPage::kInput, 0, false);
+  draft.page = ui::SettingsPage::kInput;
+  window = host.hwnd();
+  Click(window, enabled.scheme_cards[5]);
+  const auto before_disable = saves;
+  host.OpenPage(nullptr, ui::SettingsPage::kPlugins, 0, false);
+  SendMessageW(GetDlgItem(window, 5101), BM_CLICK, 0, 0);
+  Check(!chord.enabled && plugin_changes == 2 && saves == before_disable && current.schema == "english",
+        "disabling the chord extension preserves the selected ordinary scheme and unrelated preferences");
+  host.Close();
+}
+
 void TestSettingsPreserveRuntimeAndStreaming() {
   std::cerr << "Runtime UI: begin\n";
   const DWORD original_size = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
@@ -1790,6 +1914,10 @@ void TestBrandHome() {
   Check(ui::SettingsTabCount(ui::SettingsPage::kHome) == 3, "home has About, README and License tabs");
   for (int link = 0; link < 5; ++link) {
     const auto button = GetDlgItem(window, 6200 + link);
+    wchar_t title[128]{}; GetWindowTextW(button, title, 128);
+    Check(std::wstring(title).find(L"{brand}") == std::wstring::npos &&
+              (link != 3 || std::wstring(title).find(rimes::branding::Name()) != std::wstring::npos),
+          "home link buttons resolve branding templates to the current product name");
     Check(shown(6200 + link) && opened.size() == static_cast<std::size_t>(link), "all project links are inline without opening on selection");
     SetFocus(button);
     MSG message{}; message.hwnd = button; message.message = WM_KEYDOWN; message.wParam = VK_RETURN;
@@ -2091,6 +2219,7 @@ int main(int argc, char** argv) {
   run("Codex selector", TestCodexConnectorSelector);
   run("hover/resources", TestHoverRepaintScopeAndResources);
   run("plugin management/chords", TestPluginManagementAndChordSelection);
+  run("chord scheme availability", TestChordSchemeAvailability);
   run("runtime/streaming", TestSettingsPreserveRuntimeAndStreaming);
   if (failures) return EXIT_FAILURE;
   std::cout << "Settings details, mouse ownership and Runtime preservation tests passed\n";

@@ -357,8 +357,8 @@ struct Manager {
           library.Activate(selected.first, selected.second);
         else {
           if (MessageBoxW(window,
-                          L"删除整个方案包？学习记录保留。请先退出正在使用该包"
-                          L"的 RIMES。",
+                          rimes::branding::Text(L"删除整个方案包？学习记录保留。请先退出正在使用该包"
+                                                L"的 {brand}。").c_str(),
                           L"方案管理", MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
             return;
           UsageLock unused(library.Root() / "learning" / selected.first, true);
@@ -367,8 +367,8 @@ struct Manager {
       }
       Refresh();
       Message(action == 2 ? L"已删除方案包，学习记录保留。"
-                          : L"选择已保存。请保存 Buffer 内容，从托盘退出 "
-                            L"RIMES，再打开设置或切换输入法使其生效。");
+                          : rimes::branding::Text(L"选择已保存。请从托盘退出 "
+                                                  L"{brand}，再打开设置或切换输入法使其生效。"));
     } catch (const std::exception &e) {
       Message(Wide(e.what()));
     }
@@ -508,8 +508,8 @@ struct Manager {
     remove = button(L"删除方案包", 104);
     status = CreateWindowExW(
         0, L"EDIT",
-        L"导入 Rime ZIP，或带编码的 UTF-8 TXT / TSV 词库。启用或恢复方案后重启 "
-        L"RIMES 生效。",
+        rimes::branding::Text(L"导入 Rime ZIP，或带编码的 UTF-8 TXT / TSV 词库。启用或恢复方案后重启 "
+                              L"{brand} 生效。").c_str(),
         WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_READONLY, 0, 0,
         1, 1, window, nullptr, type.hInstance, nullptr);
     for (auto control :

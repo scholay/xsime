@@ -1,5 +1,7 @@
 #pragma once
 #include "scheme_import.hpp"
+#include "../core/product_brand.hpp"
+#include "../workbench/provider.hpp"
 #include <Windows.h>
 #include <stdexcept>
 
@@ -24,8 +26,8 @@ public:
                           exclusive ? 0 : FILE_SHARE_READ | FILE_SHARE_WRITE,
                           nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_HIDDEN, nullptr);
     if (handle_ == INVALID_HANDLE_VALUE)
-      throw std::runtime_error(
-          "方案仍在使用或正在维护，请先退出 RIMES 后重试。");
+      throw std::runtime_error(workbench::Utf8(rimes::branding::Text(
+          L"方案仍在使用或正在维护，请先退出 {brand} 后重试。")));
   }
   ~UsageLock() { CloseHandle(handle_); }
   UsageLock(const UsageLock &) = delete;

@@ -172,6 +172,13 @@ cd xsime
 ./scripts/release.sh stable            # 创建正式 tag，由 GitHub Actions 构建和发布
 ```
 
+## Windows 卸载
+
+1. 从安装时使用的 Windows 账号打开 **设置 → 应用 → 安装的应用**，搜索 **XSIME** 并选择“卸载”；也可在控制面板的 **程序和功能** 中找到 XSIME。
+2. 按卸载器提示完成操作。后台会自动退出；若提示需要注销，保存其他应用的工作后注销并重新登录。
+
+默认卸载保留词库、学习记录、设置和凭据。旧版安装残留或卸载入口缺失时，参阅[完整卸载、恢复与回退说明](platforms/windows/installer/README.md#升级回退卸载)。
+
 ## 友链
 
 - [<img src=".github/readme/friends/rime.png" width="20" height="20" alt="" align="absmiddle"> RIME 输入法引擎](https://rime.im/) — 本项目的中文编码基于 RIME。

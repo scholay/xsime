@@ -158,6 +158,18 @@ inline bool SettingsPageAvailable(const SettingsDraft& draft, SettingsPage page)
       page == SettingsPage::kStatistics ? draft.extensions_enabled[2] : true;
 }
 
+inline constexpr int kSettingsChordSchemeIndex = 6;
+static_assert(kSettingsChordSchemeIndex + 1 == kSettingsSchemeCount);
+inline bool SettingsSchemeAvailable(const SettingsDraft& draft, int index) {
+  return index >= 0 && index < kSettingsSchemeCount &&
+      (index != kSettingsChordSchemeIndex || draft.extensions_enabled[0]);
+}
+inline int SettingsVisibleSchemeCount(const SettingsDraft& draft) {
+  // Keep the existing scheme identities and hit IDs; the optional chord entry
+  // is last, so omitting it also removes its layout, paint and mouse target.
+  return draft.extensions_enabled[0] ? kSettingsSchemeCount : kSettingsChordSchemeIndex;
+}
+
 struct SettingsLayout {
   float width_dip = 980;
   float height_dip = 680;
@@ -275,8 +287,9 @@ struct SettingsLayout {
     const int columns = 3;
     const float card_h = static_cast<float>(m.choice_card_height_dip);
     const float card_w = (body_w - gap * (columns - 1)) / columns;
-    layout.scheme_cards.resize(kSettingsSchemeCount);
-    for (int i = 0; i < kSettingsSchemeCount; ++i) {
+    const int visible_schemes = SettingsVisibleSchemeCount(draft);
+    layout.scheme_cards.resize(static_cast<std::size_t>(visible_schemes));
+    for (int i = 0; i < visible_schemes; ++i) {
       const int row = i / columns;
       const int col = i % columns;
       const float x = layout.body.left + static_cast<float>(col) * (card_w + gap);

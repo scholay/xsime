@@ -6,7 +6,8 @@ TSF + Broker + pinned `rime.dll` only. It does
 
 Run the sections in this order: ordinary typing with Buffer off, existing
 Buffer interactions, then installation/recovery. Record the exact source,
-package and installed version separately. New features remain deferred.
+package and installed version separately. Mark unavailable features explicitly;
+disabled entries are not evidence that a capability is implemented.
 
 Prerequisites: build x64 and x86 Release, fetch the pinned librime, copy
 `rime.dll` next to `RimesBroker.exe` (or into `%LOCALAPPDATA%\RIMES\runtime`),
@@ -108,6 +109,12 @@ stale candidate callback can commit into another field. Never send test drafts.
 - [ ] Product `rime_ice` with full `rime-data` + lua: first-run deploy, Space
       commit, number select (expected gap if lua scripts were not copied)
 - [ ] OpenCC 简↔繁 if the user enables it
+- [ ] Disabling the built-in chord extension hides its scheme card and prevents
+      stale mouse/keyboard selection. Re-enable and reopen settings to restore
+      the card without changing an ordinary selected scheme. If the active
+      chord scheme is disabled, the visible selection follows the Runtime fallback
+- [ ] Home links and scheme-management messages show the current localized
+      product name, with no literal `{brand}` placeholder or old display name
 
 ## Existing Buffer interactions
 
@@ -135,7 +142,8 @@ stale candidate callback can commit into another field. Never send test drafts.
 - [ ] Alt+Shift+B can be explicitly selected, saved and reopened; its tray
       label matches the real chord, and a conflict/failed save preserves the
       previous working shortcut rather than silently claiming success
-- [ ] Shortcut conflicts are visible; the tray still opens Buffer, and failed
+- [ ] Shortcut conflicts are visible; left-clicking the tray opens settings,
+      the tray menu can still open Buffer, and failed
       shortcut changes or failed settings saves keep the previous chord working
 - [ ] Toggle/bind to a real editable target; type, cancel preedit and deliver
       exactly one block on plain Return with no duplicate release delivery

@@ -7,6 +7,7 @@
 | 需要做什么 | 入口 |
 | --- | --- |
 | 安装与了解产品 | [项目 README](../README.md) |
+| 卸载与恢复（Windows） | [系统卸载入口、用户数据保留与安装恢复](../platforms/windows/installer/README.md#升级回退卸载) |
 | 接手开发 | [系统架构](architecture/system.md) · [维护规则](development/maintenance.md) |
 | 导入方案或修复词库 | [方案导入](portable-scheme-import.md) · [用户词库恢复](user-dictionary-recovery.md) · [五笔输入](wubi.md) |
 | 发布与更新 | [发布流程](release/README.md) · [实现参考](release/reference.md) |

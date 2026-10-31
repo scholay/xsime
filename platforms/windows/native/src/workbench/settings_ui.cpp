@@ -25,6 +25,15 @@ constexpr const wchar_t* kSchemas[] = {L"rime_ice", L"double_pinyin",
                                        L"double_pinyin_flypy", L"wubi86", L"lingxi_wubi",
                                        L"english", L"my_combo"};
 
+void RefreshChordAvailability(ui::SettingsDraft& draft, const SettingsUiCallbacks& callbacks) {
+  if (!callbacks.plugins) return;
+  for (const auto& item : callbacks.plugins())
+    if (item.id == "builtin.fly-chord-learning") {
+      draft.extensions_enabled[0] = item.enabled;
+      return;
+    }
+}
+
 RECT DipToPx(const ui::DipRect& r, unsigned dpi) {
   RECT out{};
   out.left = static_cast<LONG>(r.left * dpi / 96.0f + 0.5f);
@@ -410,7 +419,7 @@ bool SettingsUiHost::HandleDialogMessage(MSG* message) {
       const int sidebar = static_cast<int>(draft_.page);
       int grid = sidebar;
       if (draft_.subpage == 0 && draft_.page == ui::SettingsPage::kInput && draft_.imported_schema.empty())
-        grid = 100 + draft_.schema_index;
+        grid = 100 + (ui::SettingsSchemeAvailable(draft_, draft_.schema_index) ? draft_.schema_index : 0);
       if (draft_.subpage == 0 && draft_.page == ui::SettingsPage::kAppearance)
         grid = 200 + draft_.theme_index;
       auto focus_shell = [&](int next) {
@@ -501,7 +510,7 @@ void SettingsUiHost::CreateOrUpdateChildren() {
     SendMessageW(home_document_, EM_EXLIMITTEXT, 0, 1024 * 1024);
   }
   for (std::size_t i = 0; i < home_links_.size(); ++i)
-    make_button(home_links_[i], ui::kSettingsHomeLinks[i].title, 6200 + static_cast<int>(i));
+    make_button(home_links_[i], rimes::branding::Text(ui::kSettingsHomeLinks[i].title).c_str(), 6200 + static_cast<int>(i));
   EnableWindow(schemes_button_, static_cast<bool>(callbacks_.open_schemes));
   if (!imported_label_) imported_label_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | SS_LEFT,
       0, 0, 1, 1, hwnd_, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -702,7 +711,7 @@ void SettingsUiHost::Relayout() {
   if (!hwnd_) return;
   const bool was_updating = updating_controls_;
   updating_controls_ = true;
-  if (callbacks_.plugins && extensions_) {
+  if (callbacks_.plugins) {
     for (const auto& item : callbacks_.plugins()) {
       if (item.id == "builtin.fly-chord-learning") draft_.extensions_enabled[0] = item.enabled;
       if (item.id == "builtin.typing-speed") draft_.extensions_enabled[1] = item.enabled;
@@ -710,6 +719,34 @@ void SettingsUiHost::Relayout() {
     }
     if (!ui::SettingsPageAvailable(draft_, draft_.page)) { draft_.page = ui::SettingsPage::kPlugins; draft_.subpage = 4; }
   }
+  if (draft_.imported_schema.empty() && !ui::SettingsSchemeAvailable(draft_, draft_.schema_index) && callbacks_.load) {
+    // Runtime owns the safe fallback when an extension is stopped. Refresh
+    // only this unavailable choice, without discarding other in-progress fields.
+    const auto current = callbacks_.load();
+    bool refreshed = false;
+    if (current.imported_scheme) {
+      draft_.imported_schema = Wide(current.schema);
+      SetWindowTextW(imported_label_, (L"当前使用导入方案：" + draft_.imported_schema +
+          rimes::branding::Text(L"\n可在方案管理中启用其他方案或恢复内置方案。重启 {brand} 后生效。")).c_str());
+      refreshed = true;
+    } else {
+      for (int i = 0; i < ui::kSettingsSchemeCount; ++i)
+        if (ui::SettingsSchemeAvailable(draft_, i) && current.schema == Utf8(kSchemas[i])) {
+          draft_.schema_index = i;
+          refreshed = true;
+          break;
+        }
+    }
+    if (refreshed) {
+      draft_.ascii = current.ascii;
+      draft_.traditional = current.traditional;
+      draft_.ascii_punctuation = current.ascii_punctuation;
+    }
+  }
+  if (draft_.focus >= 100 && draft_.focus < 100 + ui::kSettingsSchemeCount &&
+      !ui::SettingsSchemeAvailable(draft_, draft_.focus - 100)) draft_.focus = 100;
+  if (draft_.hover >= 100 && draft_.hover < 100 + ui::kSettingsSchemeCount &&
+      !ui::SettingsSchemeAvailable(draft_, draft_.hover - 100)) draft_.hover = -1;
   draft_.subpage = (std::clamp)(draft_.subpage, 0, ui::SettingsTabCount(draft_.page)-1);
   pressed_hit_ = -2;
   if (GetCapture() == hwnd_) ReleaseCapture();
@@ -924,8 +961,12 @@ bool SettingsUiHost::CommitSave() {
   if (!pending_save_) return true;
   if (!callbacks_.save && !callbacks_.save_connections) { pending_save_ = false; return true; }
   try {
+    if (draft_.imported_schema.empty() && draft_.schema_index == ui::kSettingsChordSchemeIndex) {
+      RefreshChordAvailability(draft_, callbacks_);
+      if (!ui::SettingsSchemeAvailable(draft_, draft_.schema_index)) Relayout();
+    }
     Settings config = callbacks_.load ? callbacks_.load() : Settings{};
-    if (draft_.imported_schema.empty())
+    if (draft_.imported_schema.empty() && ui::SettingsSchemeAvailable(draft_, draft_.schema_index))
       config.schema = Utf8(std::wstring(kSchemas[draft_.schema_index]));
     config.theme = ui::ThemeIdString(
         static_cast<ui::ThemeId>(draft_.theme_index));
@@ -1106,6 +1147,8 @@ void SettingsUiHost::ActivateHit(int hit) {
     Relayout();
   } else if (hit >= 100 && hit < 100 + ui::kSettingsSchemeCount &&
              draft_.page == ui::SettingsPage::kInput && draft_.subpage == 0 && draft_.imported_schema.empty()) {
+    if (hit - 100 == ui::kSettingsChordSchemeIndex) RefreshChordAvailability(draft_, callbacks_);
+    if (!ui::SettingsSchemeAvailable(draft_, hit - 100)) { Relayout(); return; }
     draft_.schema_index = hit - 100;
     draft_.focus = hit;
     QueueSave(true);
@@ -1558,9 +1601,13 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
         }
         if (self->draft_.page == ui::SettingsPage::kInput &&
             self->draft_.subpage == 0 && focus >= 100 && focus < 100 + ui::kSettingsSchemeCount) {
+          RefreshChordAvailability(self->draft_, self->callbacks_);
+          if (self->layout_.scheme_cards.size() != static_cast<std::size_t>(ui::SettingsVisibleSchemeCount(self->draft_)))
+            self->Relayout();
           int idx = focus - 100;
-          if (wparam == VK_RIGHT || wparam == VK_DOWN) idx = (idx + 1) % ui::kSettingsSchemeCount;
-          else idx = (idx + ui::kSettingsSchemeCount - 1) % ui::kSettingsSchemeCount;
+          const int count = ui::SettingsVisibleSchemeCount(self->draft_);
+          if (wparam == VK_RIGHT || wparam == VK_DOWN) idx = (idx + 1) % count;
+          else idx = (idx + count - 1) % count;
           focus = 100 + idx;
           InvalidateRect(hwnd, nullptr, FALSE);
           return 0;
