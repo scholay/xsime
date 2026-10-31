@@ -6,6 +6,8 @@
 
 #include <iostream>
 #include <algorithm>
+#include <exception>
+#include <cstdlib>
 #include <atomic>
 #include <thread>
 #include <fstream>
@@ -302,6 +304,8 @@ void CheckLivePracticeToggles(workbench::SettingsUiHost& host,
     Pump(host);
     Check(service->Armed() && GetFocus() == editor,
           "practice display toggles retain the active editor and its focus");
+    Check(EditorText(GetDlgItem(panel, 7001)) == L"重新开始",
+          "display toggles retain the armed start-button state");
     Check(metrics::Characters(workbench::Utf8(EditorText(editor))) == text &&
               service->Practice()["metrics"]["committed"] == metrics_before["committed"] &&
               service->Practice()["metrics"]["attempts"] == metrics_before["attempts"],
@@ -320,9 +324,24 @@ void CheckCompositionDisplayGuards(workbench::SettingsUiHost& host,
   // candidate window. The text between START/END stands in for uncommitted code.
   const auto committed_text = EditorText(editor);
   const auto scored = service->Practice()["metrics"];
+  CHARRANGE end{static_cast<LONG>(committed_text.size()), static_cast<LONG>(committed_text.size())};
+  SendMessageW(editor, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&end));
   SendMessageW(editor, WM_IME_STARTCOMPOSITION, 0, 0);
-  const auto marked_text = committed_text + L"ni";
-  SetWindowTextW(editor, marked_text.c_str());
+  CHARFORMAT2W insertion{}; insertion.cbSize = sizeof(insertion);
+  SendMessageW(editor, EM_GETCHARFORMAT, SCF_SELECTION, reinterpret_cast<LPARAM>(&insertion));
+  std::cout << "Preedit format: " << workbench::Utf8(insertion.szFaceName) << " spacing=" << insertion.sSpacing
+            << " height=" << insertion.yHeight << " mask=" << insertion.dwMask << '\n';
+  const auto marked_text = committed_text + L"im";
+  SendMessageW(editor, EM_REPLACESEL, FALSE, reinterpret_cast<LPARAM>(L"im"));
+  POINTL first{}, middle{}, last{};
+  SendMessageW(editor, EM_POSFROMCHAR, reinterpret_cast<WPARAM>(&first), end.cpMax);
+  SendMessageW(editor, EM_POSFROMCHAR, reinterpret_cast<WPARAM>(&middle), end.cpMax + 1);
+  SendMessageW(editor, EM_POSFROMCHAR, reinterpret_cast<WPARAM>(&last), end.cpMax + 2);
+  const auto cell = MulDiv(28, GetDpiForWindow(editor), 96);
+  std::cout << "Preedit positions: " << first.x << ',' << first.y << " / " << middle.x << ',' << middle.y
+            << " / " << last.x << ',' << last.y << " cell=" << cell << '\n';
+  Check(std::abs(middle.x - first.x - cell) <= 1 && std::abs(last.x - middle.x - cell) <= 1,
+        "narrow and wide ASCII preedit code both retain one track cell");
   SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7004, EN_CHANGE),
                reinterpret_cast<LPARAM>(editor));
   SendMessageW(panel, WM_APP + 72, 0, 0);
@@ -350,6 +369,27 @@ void CheckCompositionDisplayGuards(workbench::SettingsUiHost& host,
   Check(service->Practice()["metrics"]["committed"] == scored["committed"] &&
             service->Practice()["metrics"]["attempts"] == scored["attempts"],
         "cancelled composition does not create a committed attempt");
+}
+void CheckPracticeCaretNavigation(workbench::SettingsUiHost& host,
+                                  HWND panel, HWND editor) {
+  auto picker = GetDlgItem(panel, 7000);
+  SendMessageW(picker, CB_SETCURSEL, 0, 0);
+  SendMessageW(panel, WM_COMMAND, MAKEWPARAM(7000, CBN_SELCHANGE), 0);
+  PracticeButton(panel, 7001);
+  const auto characters = metrics::Characters(metrics::Articles().front().text);
+  std::wstring text;
+  for (std::size_t i = 0; i < std::min<std::size_t>(250, characters.size() - 1); ++i) text += characters[i];
+  SetWindowTextW(editor, text.c_str());
+  Pump(host);
+  CHARRANGE start{0, 0};
+  SendMessageW(editor, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&start));
+  SendMessageW(panel, WM_VSCROLL, SB_TOP, 0);
+  const auto top = InParent(editor, panel);
+  CHARRANGE end{GetWindowTextLengthW(editor), GetWindowTextLengthW(editor)};
+  SendMessageW(editor, EM_EXSETSEL, 0, reinterpret_cast<LPARAM>(&end));
+  Pump(host);
+  Check(InParent(editor, panel).top < top.top,
+        "selection navigation scrolls the page to keep the active input row visible");
 }
 int CheckHistoryRefresh(const std::filesystem::path& output) {
   std::filesystem::create_directories(output);
@@ -493,7 +533,11 @@ int AuditPages(const std::filesystem::path& output) {
 }
 int Run(const std::filesystem::path& output, bool typing_only = false) {
   std::filesystem::create_directories(output);
-  const auto storage = output / L"fixture-data";
+  // The render directory may be reached through an ASCII workspace junction.
+  // Keep the data fixture outside that alias: production storage deliberately
+  // rejects any reparse-point ancestor.
+  const auto storage = std::filesystem::temp_directory_path() /
+      (L"rimes-typing-practice-" + std::to_wstring(GetCurrentProcessId())) / L"fixture-data";
   auto service = std::make_shared<metrics::Service>(storage);
   Check(service->SetPracticePreferences({{"materialsCollapsed", false},
                                          {"gridHidden", false},
@@ -639,6 +683,7 @@ int Run(const std::filesystem::path& output, bool typing_only = false) {
         "reopening practice restores its collapsed materials and last article");
   for (const int id : {7006, 7015, 7016}) PracticeButton(panel, id);
   Pump(host);
+  CheckPracticeCaretNavigation(host, panel, GetDlgItem(panel, 7004));
   if (typing_only) {
     // Keep the focused CI path independent of connector, gallery and other
     // settings pages. These renders contain only built-in text and fixture data.
@@ -652,6 +697,7 @@ int Run(const std::filesystem::path& output, bool typing_only = false) {
       panel = FindWindowExW(host.hwnd(), nullptr, L"Rimes.ExtensionPages", nullptr);
       editor = GetDlgItem(panel, 7004);
       for (const auto language : {"chinese", "english"}) {
+        std::cout << "Render typing: " << config.theme << ' ' << language << std::endl;
         const auto& articles = metrics::Articles();
         const auto found = std::find_if(articles.begin(), articles.end(), [&](const auto& a) { return a.language == language; });
         Check(found != articles.end(), "built-in materials cover both track languages");
@@ -777,6 +823,14 @@ int Run(const std::filesystem::path& output, bool typing_only = false) {
 }
 }  // namespace
 int wmain(int argc, wchar_t** argv) {
+  std::set_terminate([] {
+    if (const auto error = std::current_exception()) {
+      try { std::rethrow_exception(error); }
+      catch (const std::exception& e) { std::cerr << "Unhandled native UI exception: " << e.what() << std::endl; }
+      catch (...) { std::cerr << "Unhandled native UI exception" << std::endl; }
+    }
+    std::abort();
+  });
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   int result = 1;
